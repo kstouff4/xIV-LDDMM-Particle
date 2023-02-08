@@ -10,7 +10,7 @@ def main():
     N = 10
     d = 3
     labs = 4
-    sigma = 0.005
+    sigma = 0.5
 
     # make test dataset -- translation only 
     S = torch.rand(N,d) # coordinates 
@@ -18,7 +18,8 @@ def main():
     nu_S[np.arange(N),np.random.randint(low=0,high=labs,size=N)] = 1.0 # discrete particles 
     nu_S = torch.tensor(nu_S)
     T = torch.clone(S)
-    T[:,-1] += 2.0 # translate by 2 units in z
+    T[0,-1] += 0.3 # translate first particle in z
+    T[-1,-1] -= 0.2 # translate last particle in z 
     nu_T = torch.clone(nu_S) # same exact features 
     #nu_T = np.zeros((N,labs))
     #nu_T[np.arange(N),np.random.randint(low=0,high=labs,size=N)] = 1.0 

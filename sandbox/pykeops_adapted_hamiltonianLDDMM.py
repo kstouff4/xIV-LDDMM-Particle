@@ -217,7 +217,7 @@ def callOptimize(S,nu_S,T,nu_T,sigma,d,labs):
 
     loss = LDDMMloss(Kg,Kv,sigma,d, dataloss)
 
-    optimizer = torch.optim.LBFGS([p0], max_eval=10, max_iter=10)
+    optimizer = torch.optim.LBFGS([p0], max_eval=10, max_iter=10,line_search_fn = 'strong_wolfe')
     print("performing optimization...")
     start = time.time()
     
