@@ -205,15 +205,15 @@ def makePQ(S,nu_S,T,nu_T):
     q0 = torch.cat((w_S.clone().detach(),S.clone().detach()),1).requires_grad_(True)
     print("q0 shape")
     print(q0.shape)
-    p0 = (torch.zeros_like(q0)+0.5).requires_grad_(True)
+    p0 = (torch.zeros_like(q0)).requires_grad_(True)
     
     return w_S,w_T,zeta_S,zeta_T,q0,p0
 
-def callOptimize(S,nu_S,T,nu_T,sigma,d,labs):
+def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,d,labs):
     w_S, w_T,zeta_S,zeta_T,q0,p0 = makePQ(S,nu_S,T,nu_T)
-    dataloss = lossVarifoldNorm(T,w_T,zeta_T,zeta_S,GaussLinKernel(sigma=sigma,d=d,l=labs),beta=0.1)
-    Kg = GaussKernelHamiltonian(sigma=sigma,d=d)
-    Kv = GaussKernelB(sigma=sigma,d=d)
+    dataloss = lossVarifoldNorm(T,w_T,zeta_T,zeta_S,GaussLinKernel(sigma=sigmaVar,d=d,l=labs),beta=0.1)
+    Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d)
+    Kv = GaussKernelB(sigma=sigmaRKHS,d=d)
 
     loss = LDDMMloss(Kg,Kv,sigma,d, dataloss)
 
