@@ -180,7 +180,7 @@ def lossVarifoldNorm(T,w_T,zeta_T,zeta_S,K,d,numS,beta):
             - 2 * k2.sum())
         )
 
-    return loss
+    return cst.detach().cpu().numpy(), loss
 
 ###################################################################
 # Optimization
@@ -205,7 +205,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,d,labs, savedir, its=100,beta=
     print(T.dtype)
     print(w_T.dtype)
     print(zeta_T.dtype)
-    dataloss = lossVarifoldNorm(T,w_T,zeta_T,zeta_S,GaussLinKernel(sigma=sigmaVar,d=d,l=labs),d,numS,beta=beta)
+    cst, dataloss = lossVarifoldNorm(T,w_T,zeta_T,zeta_S,GaussLinKernel(sigma=sigmaVar,d=d,l=labs),d,numS,beta=beta)
     Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d)
     Kv = GaussKernelB(sigma=sigmaRKHS,d=d)
 
@@ -215,8 +215,10 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,d,labs, savedir, its=100,beta=
     print("performing optimization...")
     start = time.time()
     
+    # keep track of both losses
     lossListH = []
     lossListDA = []
+    relLossList = []
     def closure():
         optimizer.zero_grad()
         LH,LDA = loss(p0, q0)
@@ -224,6 +226,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,d,labs, savedir, its=100,beta=
         print("loss", L.detach().cpu().numpy())
         lossListH.append(np.copy(LH.detach().cpu().numpy()))
         lossListDA.append(np.copy(LDA.detach().cpu().numpy()))
+        relLossList.append(np.copy(LDA.detach().cpu().numpy())/cst)
         L.backward()
         return L
     
@@ -233,13 +236,20 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,d,labs, savedir, its=100,beta=
     print("Optimization (L-BFGS) time: ", round(time.time() - start, 2), " seconds")
 
     f,ax = plt.subplots()
-    ax.plot(np.arange(len(lossListH)),np.asarray(lossListH),label='H($q_0$,$p_0$)')
-    ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA),label='Varifold Norm')
-    ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA)+np.asarray(lossListH),label='Total Cost')
+    ax.plot(np.arange(len(lossListH)),np.asarray(lossListH),label="H($q_0$,$p_0$), Final = {0:.2f}".format(lossListH[-1]))
+    ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA),label="Varifold Norm, Final = {0:.2f}".format(lossListDA[-1]))
+    ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA)+np.asarray(lossListH),label="Total Cost, Final = {0:.2f}".format(lossListDA[-1]+lossListH[-1]))
     ax.set_title("Loss")
     ax.set_xlabel("Iterations")
     ax.legend()
     f.savefig(savedir + 'Cost.png',dpi=300)
+    
+    f,ax = plt.subplots()
+    ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA/cst),label="Varifold Norm, Final = {0:.2f}".format(lossListDA[-1]/cst))
+    ax.set_title("Relative Loss Varifold Norm")
+    ax.set_xlabel("Iterations")
+    ax.legend()
+    f.savefig(savedir + 'RelativeLossVarifoldNorm.png',dpi=300)
     
     # Print out deformed states
     listpq = Shooting(p0, q0, Kg, Kv, sigmaRKHS,d,numS)

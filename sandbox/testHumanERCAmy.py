@@ -2,11 +2,9 @@ import numpy as np
 import matplotlib
 from matplotlib import pyplot as plt
 from sys import path as sys_path
+
 sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
 import vtkFunctions as vtf
-
-sys_path.append('/cis/home/kstouff4/Documents/MeshRegistration/Scripts-KMS/approxCode/')
-import estimateSubsample as ess
 
 from fromScratchHamiltonian import *
 from analyzeOutput import *
@@ -14,40 +12,113 @@ from analyzeOutput import *
 np_dtype = "float32"
 dtype = torch.cuda.FloatTensor 
 
+import nibabel as nib
+
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 def main():
-
     d = 3
     labs = 3
-    sigmaRKHS = 8.0
-    sigmaVar = 2.0
+    sigmaRKHS = 20.0
+    sigmaVar = 20.0
     its = 10
-    alpha = 1.0
+    alpha = 'BEIALE'
     beta = 1.0
+    res=1.0
     
     original = sys.stdout
 
     outpath='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/Human/'
-    imgPref='/cis/home/kstouff4/Documents/datasets/BIOCARD/SubsetFall2022/Segmentations/ABEBER/'
+    imgPref='/cis/home/kstouff4/Documents/datasets/BIOCARD/SubsetFall2022/Segmentations/BEIALE/'
 
     if (not os.path.exists(outpath)):
         os.mkdir(outpath) 
+    '''
+    # undo this comment 
+    imgFile = imgPref+'150428/AMYGDALA+ERC+TEC.img'
+    im = nib.load(imgFile)
+    imageO = np.asanyarray(im.dataobj).astype('float32')
+    
+    x0 = np.arange(imageO.shape[0])*res
+    x1 = np.arange(imageO.shape[1])*res
+    x2 = np.arange(imageO.shape[2])*res
+    
+    x0 -= np.mean(x0)
+    x1 -= np.mean(x1)
+    x2 -= np.mean(x2)
+    
+    uniqueVals = np.unique(imageO)
+    numUniqueMinus0 = len(uniqueVals)-1
+    
+    X,Y,Z = torch.meshgrid(torch.tensor(x0).type(dtype),torch.tensor(x1).type(dtype),torch.tensor(x2).type(dtype),indexing='ij')
+    nu_S = torch.zeros((X.shape[0],X.shape[1],X.shape[2],labs)).type(dtype)
+    S = torch.stack((X.flatten(),Y.flatten(),Z.flatten()),axis=-1).type(dtype)
+    listOfNu = []
+    for u in range(1,len(uniqueVals)):
+        nu_S[...,u-1] = torch.tensor((imageO == uniqueVals[u])).type(dtype)
+        listOfNu.append(nu_S[...,u-1].flatten())
+    nu_S = torch.stack(listOfNu,axis=-1).type(dtype)
 
-    S,nu_XS = ess.makeAllXandZ(imgPref+'150318/AMYGDALA+ERC+TEC.img', outpath+'ABEBER_150318_', thickness=1000, res=1.0,sig=0.1,C=-1,flip=False)
-    T,nu_XT = ess.makeAllXandZ(imgPref+'170831/AMYGDALA+ERC+TEC.img', outpath+'ABEBER_170831_', thickness=1000, res=1.0,sig=0.1,C=-1,flip=False)
+    toKeep = nu_S.sum(axis=-1) > 0
+    S = S[toKeep]
+    nu_S = nu_S[toKeep]
+    N = S.shape[0]
     
-    print("min and max")
-    print(np.min(nu_XS))
-    print(np.max(nu_XS))
+    imgFile = imgPref+'170516/AMYGDALA+ERC+TEC.img'
+    im = nib.load(imgFile)
+    imageO = np.asanyarray(im.dataobj).astype('float32')
     
-    nu_S = torch.zeros((S.shape[0],3)).type(dtype)
-    nu_S[:,nu_XS] = 1.0
-    nu_T = torch.zeros((T.shape[0],3)).type(dtype)
-    nu_T[:,nu_XT] = 1.0
+    x0 = np.arange(imageO.shape[0])*res
+    x1 = np.arange(imageO.shape[1])*res
+    x2 = np.arange(imageO.shape[2])*res
     
-    S = torch.tensor(S).type(dtype)
-    T = torch.tensor(T).type(dtype)
+    x0 -= np.mean(x0)
+    x1 -= np.mean(x1)
+    x2 -= np.mean(x2)
+    
+    uniqueVals = np.unique(imageO)
+    numUniqueMinus0 = len(uniqueVals)-1
+    
+    X,Y,Z = torch.meshgrid(torch.tensor(x0).type(dtype),torch.tensor(x1).type(dtype),torch.tensor(x2).type(dtype),indexing='ij')
+    nu_T = torch.zeros((X.shape[0],X.shape[1],X.shape[2],labs)).type(dtype)
+    T = torch.stack((X.flatten(),Y.flatten(),Z.flatten()),axis=-1).type(dtype)
+    listOfNu = []
+    for u in range(1,len(uniqueVals)):
+        nu_T[...,u-1] = torch.tensor((imageO == uniqueVals[u])).type(dtype)
+        listOfNu.append(nu_T[...,u-1].flatten())
+
+    nu_T = torch.stack(listOfNu,axis=-1).type(dtype)
+    toKeep = nu_T.sum(axis=-1) > 0
+    T = T[toKeep]
+    nu_T = nu_T[toKeep]
+
+
+    #S,nu_XS = ess.makeAllXandZ(imgPref+'150318/AMYGDALA+ERC+TEC.img', outpath+'ABEBER_150318_', thickness=-1, res=1.0,sig=0.1,C=-1,flip=False)
+    #T,nu_XT = ess.makeAllXandZ(imgPref+'170831/AMYGDALA+ERC+TEC.img', outpath+'ABEBER_170831_', thickness=-1, res=1.0,sig=0.1,C=-1,flip=False)
+    
+    
+    #print("min and max")
+    #print(np.min(nu_XS))
+    #print(np.max(nu_XS))
+    
+    #print("sizes are")
+    #print(S.shape)
+    #print(T.shape)
+    
+    #nu_S = torch.zeros((S.shape[0],3)).type(dtype)
+    #nu_S[:,(nu_XS-1).astype(int)] = 1.0
+    #nu_T = torch.zeros((T.shape[0],3)).type(dtype)
+    #nu_T[:,(nu_XT-1).astype(int)] = 1.0
+    
+    #S = torch.tensor(S).type(dtype)
+    #T = torch.tensor(T).type(dtype)
+    '''
+    npz = np.load('/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/output_dl_sig_its_albe_N-' + str(d) + str(labs) + '_' + str(100.0) + str(50.0) + '_' + str(its) + '_' + str(alpha) + str(beta) + '_' + str(1893) + '/' + 'testOutput.npz')
+    S = torch.tensor(npz['D']).type(dtype)
+    nu_S = torch.tensor(npz['nu_S']).type(dtype)
+    T = torch.tensor(npz['T']).type(dtype)
+    nu_T = torch.tensor(npz['nu_T']).type(dtype)
+    N = S.shape[0]
     
     savedir = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/output_dl_sig_its_albe_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(alpha) + str(beta) + '_' + str(N) + '/'
     if (not os.path.exists(savedir)):

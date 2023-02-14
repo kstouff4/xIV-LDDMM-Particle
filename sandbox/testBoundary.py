@@ -1,4 +1,5 @@
 from fromScratchHamiltonian import *
+from analyzeOutput import *
 
 import sys
 from sys import path as sys_path
@@ -14,7 +15,7 @@ def main():
     # create test dataset
     d = 3
     labs = 2
-    sigmaRKHS = 2.0
+    sigmaRKHS = 8.0
     sigmaVar = 2.0
     its = 10
     alpha = 1.0
@@ -25,7 +26,7 @@ def main():
     # make test dataset -- translation only 
     x = torch.arange(-10,11).type(dtype)
     X,Y,Z = torch.meshgrid(x,x,x,indexing='ij')
-    nu_S = np.zeros((X.shape[0],X.shape[1],X.shape[2],labs))
+    nu_S = torch.zeros((X.shape[0],X.shape[1],X.shape[2],labs)).type(dtype)
     nu_S[:,:,0:10,0] = 0.8
     nu_S[:,:,0:10,1] = 0.2
     nu_S[:,:,10:,0] = 0.2
@@ -36,7 +37,7 @@ def main():
     nu_T = (torch.clone(nu_S)*(alpha)**d).type(dtype)
     nu_T[:,:,0:5,0] = 0.8
     nu_T[:,:,0:5,1] = 0.2
-    nu_T[:.:,5:,0] = 0.2
+    nu_T[:,:,5:,0] = 0.2
     nu_T[:,:,5:,1] = 0.8
     
     nu_S = torch.stack((nu_S[...,0].flatten(),nu_S[...,1].flatten()),axis=-1).type(dtype)
@@ -69,10 +70,12 @@ def main():
     imageValsS = [np.sum(nu_S,axis=-1), np.argmax(nu_S,axis=-1)]
     imageValsT = [np.sum(nu_T,axis=-1), np.argmax(nu_T,axis=-1)]
 
+    zeta_S = nu_S/(np.sum(nu_S,axis=-1)[...,None])
+    zeta_T = nu_T/(np.sum(nu_T,axis=-1)[...,None])
     for i in range(labs):
-        imageNames.append('feature' + str(i))
-        imageValsS.append(nu_S[:,i])
-        imageValsT.append(nu_T[:,i])
+        imageNames.append('zeta_' + str(i))
+        imageValsS.append(zeta_S[:,i])
+        imageValsT.append(zeta_T[:,i])
 
     vtf.writeVTK(S,imageValsS,imageNames,savedir+'testOutput_S.vtk',polyData=None)
     vtf.writeVTK(T,imageValsT,imageNames,savedir+'testOutput_T.vtk',polyData=None)
@@ -83,9 +86,10 @@ def main():
     for t in range(len(Dlist)):
         D = Dlist[t]
         nu_D = nu_Dlist[t]
+        zeta_D = nu_D/(np.sum(nu_D,axis=-1)[...,None])
         imageValsD = [np.sum(nu_D,axis=-1), np.argmax(nu_D,axis=-1)]
         for i in range(labs):
-            imageValsD.append(nu_D[:,i])
+            imageValsD.append(zeta_D[:,i])
         vtf.writeVTK(D,imageValsD,imageNames,savedir+'testOutput_D' + str(t) + '.vtk',polyData=None)
         if (t == len(Dlist) - 1):
             np.savez(savedir+'testOutput.npz',S=S, nu_S=nu_S,T=T,nu_T=nu_T,D=D,nu_D=nu_D)
@@ -98,6 +102,10 @@ def main():
     volS = np.prod(np.max(S,axis=(0,1)) - np.min(S,axis=(0,1)))
     volT = np.prod(np.max(T,axis=(0,1)) - np.min(T,axis=(0,1)))
     volD = np.prod(np.max(Dlist[-1],axis=(0,1)) - np.min(Dlist[-1],axis=(0,1)))
+    getLocalDensity(S,nu_S,sigmaVar,savedir+'density_S.vtk')
+    getLocalDensity(T,nu_T,sigmaVar,savedir+'density_T.vtk')
+    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar,savedir+'density_D.vtk')
+    
     print("volumes of source, target, and deformed source")
     print(volS)
     print(volT)
