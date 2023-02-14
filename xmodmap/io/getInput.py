@@ -1,0 +1,108 @@
+import numpy as np
+from sys import path as sys_path
+
+sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
+import vtkFunctions as vtf
+
+#from fromScratchHamiltonian import *
+#from analyzeOutput import *
+
+#np_dtype = "float32"
+dtype = torch.cuda.FloatTensor 
+
+import nibabel as nib
+import pandas as pd
+
+#os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+
+
+def readFromPrevious(npzFile):
+    '''
+    Assumes source deformed to target previously.
+    Initializes new source as deformed source.
+    '''
+    npz = np.load(npzFile)
+    S = torch.tensor(npz['D']).type(dtype)
+    nu_S = torch.tensor(npz['nu_D']).type(dtype)
+    T = torch.tensor(npz['T']).type(dtype)
+    nu_T = torch.tensor(npz['nu_T']).type(dtype)
+    
+    return S,nu_S,T,nu_T
+
+def makeFromSingleChannelImage(imageFile,resXYZ,bg=0):
+    '''
+    Makes discrete particle representation from image file (NIFTI or ANALYZE).
+    Assumes background has value 0 and excluded as no data.
+    
+    Centers particles around the origin based on bounding box of coordinates.
+    '''
+    
+    imInfo = nib.load(imageFile)
+    im = np.squeeze(np.asanyarray(imInfo.dataobj)).astype('float32')
+    dims = im.shape
+    x0 = np.arange(dims[0])*resXYZ
+    x0 -= np.mean(x0)
+    x1 = np.arange(dims[1])*resXYZ
+    x1 -= np.mean(x1)
+    if len(dims) > 2:
+        x2 = np.arange(dims[2])*resXYZ
+        x2 -= np.mean(x2)
+    else:
+        x2 = np.zeros((1,1)) # default to centering 2d image at 0
+    
+    uniqueVals = np.unique(im)
+    if (bg is not None):
+        uniqueVals = uniqueVals[uniqueVals != bg]
+        
+    numUnique = len(uniqueVals)
+    
+    X,Y,Z = torch.meshgrid(torch.tensor(x0).type(dtype),torch.tensor(x1).type(dtype),torch.tensor(x2).type(dtype),indexing='ij')
+    S = torch.stack((X.flatten(),Y.flatten(),Z.flatten()),axis=-1).type(dtype)
+    listOfNu = []
+    for u in range(len(uniqueVals)):
+        n = torch.tensor((im == uniqueVals[u])).type(dtype)
+        listOfNu.append(n.flatten())
+    nu_S = torch.stack(listOfNu,axis=-1).type(dtype)
+
+    toKeep = nu_S.sum(axis=-1) > 0
+    S = S[toKeep]
+    nu_S = nu_S[toKeep]
+
+    return S,nu_S
+
+def readParticleApproximation(particleNPZ):
+    '''
+    If in the form of particle approximation, then spatial coordinates will be saved as "Z" and features as "nu_Z"
+    '''
+    npz = np.load(particleNPZ)
+    S = torch.tensor(npz['Z']).type(dtype)
+    nu_S = torch.tensor(npz['nu_Z']).type(dtype)
+
+    return S,nu_S
+
+def readSpaceFeatureCSV(coordCSV,featCSV,featNames,scale=None):
+    '''
+    For reading in a csv with each row representative of measure (e.g. cell or single mRNA)
+    Scale datapoints to mm if in different coordinates (e.g. microns --> scale = 1e-3)
+    Center data points around 0,0
+    '''
+    df_s = pandas.read_csv(coordCSV)
+    df_f = pandas.read_csv(featCSV)
+    if (len(featNames) > 1):
+        nu_S = torch.tensor(df_f[featNames].values).type(dtype)
+    else:
+        nu_S_single = df_f[featNames].values
+        uVals = np.unique(nu_S_single)
+        listOfNu = []
+        for u in uVals:
+            n = torch.tensor((nu_S_single == u)).type(dtype)
+            listOfNu.append(n.flatten())
+        nu_S = torch.stack(listOfNu,axis=-1).type(dtype)
+        
+    S = torch.tensor(df_s[coordNames].values).type(dtype)
+    
+    if scale is not None:
+        S = torch.tensor(scale*df_s[coordNames].values).type(dtype)
+    S = S - torch.mean(S,axis=0)
+    return S,nu_S
+    
