@@ -38,6 +38,20 @@ def GaussKernelHamiltonian(sigma,d):
     K = (-D2 * 0.5).exp()
     return (K*h).sum_reduction(axis=1) # N x M 
 
+def GaussKernelU(sigma,d):
+    x,qy,py,wpy = Vi(0,d)/sigma, Vj(1,d)/sigma, Vj(2,d),Vj(3,1)/sigma
+    D2 = x.sqdist(qy)
+    K = (-D2 * 0.5).exp() # G x N
+    h = py + wpy*(x-qy) # 1 X N x 3
+    return (K*h).sum_reduction(axis=1) # G x 3
+
+def GaussKernelUdiv(sigma,d):
+    x,qy,py,wpy = Vi(0,d)/sigma, Vj(1,d)/sigma, Vj(2,d), Vj(3,1)/sigma
+    D2 = x.sqdist(qy)
+    K = (-D2 * 0.5).exp()
+    h = d - (1.0/sigma)*((x-qy)*py).sum() - (1.0/sigma)*wpy*D2
+    return (K*h).sum_reduction(axis=1) # G x 1
+
 def GaussLinKernel(sigma,d,l):
     # u and v are the feature vectors 
     x, y, u, v = Vi(0, d), Vj(1, d), Vi(2, l), Vj(3, l)
@@ -120,6 +134,20 @@ def HamiltonianSystem(K0, sigma, d,numS):
 
     return HS
 
+def HamiltonianSystemGrid(K0,sigma,d,numS):
+    H = Hamiltonian(K0,sigma,d,numS)
+    def HS(p,q,qgrid,qgridw):
+        px = p[numS:].view(-1,d)
+        pw = p[:numS].view(-1,1)
+        qx = q[numS:].view(-1,d)
+        qw = q[:numS].view(-1,1) #torch.squeeze(q[:numS])[...,None]
+        Gp,Gq = grad(H(p,q), (p,q), create_graph=True)
+        Gg = GaussKernelU(sigma,d)(qgrid,qx,px,pw*qw)
+        Ggw = GaussKernelUdiv(sigma,d)(qgrid,qx,px,pw*qw)*qgridw
+        return -Gq,Gp,Gg,Ggw
+    
+    return HS
+        
 ##################################################################
 # Shooting
 
@@ -146,6 +174,9 @@ def LDDMMloss(K0, K1, sigma, d, numS,dataloss, gamma=1.0):
         #return dataloss(q)
 
     return loss
+
+def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,nt=10,Integrator=RalstonIntegrator()):
+    return Integrator(HamiltonianSystemPlusGrid(K0,sigma,d,numS), (p0,q0,qGrid,qGridw),nt)
 
 #################################################################
 # Data Attachment Term
@@ -252,9 +283,21 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,d,labs, savedir, its=100,beta=
     f.savefig(savedir + 'RelativeLossVarifoldNorm.png',dpi=300)
     
     # Print out deformed states
-    listpq = Shooting(p0, q0, Kg, Kv, sigmaRKHS,d,numS)
+    #listpq = Shooting(p0, q0, Kg, Kv, sigmaRKHS,d,numS)
+    coords = q0[numS:].detach().view(-1,d)
+    xGrid = np.arange(torch.min(coords[...,0])-0.1,torch.max(coords[...,0])+0.2,0.1)
+    yGrid = torch.arange(torch.min(coords[...,1])-0.1,torch.max(coords[...,1])+0.2,0.1)
+    zGrid = torch.arange(torch.min(coords[...,2])-0.1,torch.max(coords[...,2])+0.2,0.1)
+    XG,YG,ZG = torch.meshgrid((xGrid,yGrid,zGrid),indexing='ij')
+    qGrid = torch.stack((XG.flatten(),YG.flatten(),ZG.flatten()),axis=-1).type(dtype)
+    numG = qGrid.shape[0]
+    qGrid = qGrid.flatten()
+    qGridw = torch.ones((numG)).type(dtype)
+    listpq = ShootingGrid(p0,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS)
     Dlist = []
     nu_Dlist = []
+    Glist = []
+    wGlist = []
     for t in range(10):
         qnp = listpq[t][1]
         D = qnp[numS:].detach().view(-1,d).cpu().numpy()
@@ -262,6 +305,12 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,d,labs, savedir, its=100,beta=
         nu_D = np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
         Dlist.append(D)
         nu_Dlist.append(nu_D)
+        gt = listpq[t][2]
+        G = gt.detach().view(-1,d).cpu().numpy()
+        Glist.append(G)
+        gw = listpq[t][3]
+        W = gw.detach().cpu().numpy()
+        wGlist.append(W)
         # plot p0 as arrows
     listSp0 = np.zeros((numS*2,3))
     polyListSp0 = np.zeros((numS,3))
@@ -273,4 +322,4 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,d,labs, savedir, its=100,beta=
     featsp0 = np.zeros((numS*2,1))
     featsp0[numS:,:] = p0[0:numS].detach().view(-1,1).cpu().numpy()
     vtf.writeVTK(listSp0,[featsp0],['p0_w'],savedir + 'testOutput_p0.vtk',polyData=polyListSp0)
-    return Dlist, nu_Dlist
+    return Dlist, nu_Dlist, Glist, wGlist

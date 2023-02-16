@@ -3,10 +3,14 @@ import matplotlib
 from matplotlib import pyplot as plt
 from sys import path as sys_path
 
+sys_path.append('..')
+sys_path.append('../xmodmap')
+sys_path.append('../xmodmap/io')
+import getInput as gi
 sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
 import vtkFunctions as vtf
-sys_path.append('/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/xmodmap/io/')
-from getInput import *
+
+import torch
 
 from fromScratchHamiltonian import *
 from analyzeOutput import *
@@ -26,7 +30,7 @@ def main():
     sigmaRKHS = 2.0
     sigmaVar = 1.0
     its = 10
-    alpha = 'S1'
+    alpha = 'S1_R1toR2'
     beta = 1.0
     res=1.0
     
@@ -35,16 +39,19 @@ def main():
     outpath='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/FanMERFISH/'
 
     if (not os.path.exists(outpath)):
-        os.mkdir(outpath) 
+        os.mkdir(outpath)
+   
+    if (not os.path.exists(outpath+str(alpha))):
+        os.mkdir(outpath+str(alpha))
 
-    fSf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S1R1.csv"
-    fSs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S1R1.csv"
+    fSf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S2R1.csv"
+    fSs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S2R1.csv"
 
-    fTf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S1R2.csv"
-    fTs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S1R2.csv"
+    fTf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S2R2.csv"
+    fTs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S2R2.csv"
 
-    S,nu_S = readSpaceFeatureCSV(fSs,fSf,['celllabels'],scale=1e-3)
-    T,nu_T = readSpaceFeatureCSV(fTs,fTf,['celllabels'],scale=1e-3)
+    S,nu_S = gi.readSpaceFeatureCSV(fSs,['center_x','center_y'],fSf,['celllabels'],scale=1e-3,labs=labs)
+    T,nu_T = gi.readSpaceFeatureCSV(fTs,['center_x','center_y'],fTf,['celllabels'],scale=1e-3,labs=labs)
 
     N = S.shape[0]
     
@@ -62,7 +69,7 @@ def main():
     print("beta: " + str(beta))
     print("N " + str(N))
     
-    Dlist, nu_Dlist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),d,labs,savedir,its=its,beta=beta)
+    Dlist, nu_Dlist, Glist nu_Glist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),d,labs,savedir,its=its,beta=beta)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
@@ -86,9 +93,17 @@ def main():
     polyList = np.zeros((S.shape[0]*(len(Dlist)-1),3))
     polyList[:,0] = 2
     
+    pointListG = np.zeros((Glist[0].shape[0]*len(Glist),d))
+    polyListG = np.zeros((Glist[0].shape[0]*(len(Glist)-1),3))
+    polyListG[:,0] = 2
+    featList = np.zeros((S.shape[0]*len(Dlist),1))
+    featListG = np.zeros((Glist[0].shape[0]*len(Glist),1))
+    
     for t in range(len(Dlist)):
         D = Dlist[t]
+        G = Glist[t]
         nu_D = nu_Dlist[t]
+        nu_G = nu_Glist[t]
         zeta_D = nu_D/(np.sum(nu_D,axis=-1)[...,None])
         imageValsD = [np.sum(nu_D,axis=-1), np.argmax(nu_D,axis=-1)]
         for i in range(labs):
@@ -96,12 +111,24 @@ def main():
         vtf.writeVTK(D,imageValsD,imageNames,savedir+'testOutput_D' + str(t) + '.vtk',polyData=None)
         if (t == len(Dlist) - 1):
             np.savez(savedir+'testOutput.npz',S=S, nu_S=nu_S,T=T,nu_T=nu_T,D=D,nu_D=nu_D)
+            pointList[int(t*len(D)):int((t+1)*len(D))] = D
+            pointListG[int(t*len(G)):int((t+1)*len(G))] = G
+            featList[int(t*len(D)):int((t+1)*len(D))] = np.sum(nu_D,axis=-1)
+            featListG[int(t*len(G)):int((t+1)*len(G))] = np.squeeze(nu_G)
         else:
             pointList[int(t*len(D)):int((t+1)*len(D))] = D
+            pointListG[int(t*len(G)):int((t+1)*len(G))] = G
+            featList[int(t*len(D)):int((t+1)*len(D))] = np.sum(nu_D,axis=-1)
+            featListG[int(t*len(G)):int((t+1)*len(G))] = np.squeeze(nu_G)
             polyList[int(t*len(D)):int((t+1)*len(D)),1] = np.arange(t*len(D),(t+1)*len(D))
             polyList[int(t*len(D)):int((t+1)*len(D)),2] = np.arange((t+1)*len(D),(t+2)*len(D))
+            polyListG[int(t*len(G)):int((t+1)*len(G)),1] = np.arange(t*len(G),(t+1)*len(G))
+            polyListG[int(t*len(G)):int((t+1)*len(G)),2] = np.arange((t+1)*len(G),(t+2)*len(G))
 
-    vtf.writeVTK(pointList,[],[],savedir+'testOutput_curves.vtk',polyData=polyList)
+
+
+    vtf.writeVTK(pointList,[featList],['Weights'],savedir+'testOutput_curves.vtk',polyData=polyList)
+    vtf.writeVTK(pointListG,[featListG],['Weights'],savedir+'testOutput_grid.vtk',polyData=polyListG)
     volS = np.prod(np.max(S,axis=(0,1)) - np.min(S,axis=(0,1)))
     volT = np.prod(np.max(T,axis=(0,1)) - np.min(T,axis=(0,1)))
     volD = np.prod(np.max(Dlist[-1],axis=(0,1)) - np.min(Dlist[-1],axis=(0,1)))

@@ -42,5 +42,3 @@ def getLocalDensity(Z,nu_Z,sigma,savename,coef=3):
     vtf.writeVTK(centroidsPlot,imageDensity,imageNames,savename,polyData=None)
     return
    
-
-    

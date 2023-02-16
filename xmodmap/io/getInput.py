@@ -4,16 +4,13 @@ from sys import path as sys_path
 sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
 import vtkFunctions as vtf
 
-#from fromScratchHamiltonian import *
-#from analyzeOutput import *
-
-#np_dtype = "float32"
+import torch
 dtype = torch.cuda.FloatTensor 
 
 import nibabel as nib
 import pandas as pd
-
-#os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 
 def readFromPrevious(npzFile):
@@ -80,16 +77,25 @@ def readParticleApproximation(particleNPZ):
 
     return S,nu_S
 
-def readSpaceFeatureCSV(coordCSV,featCSV,featNames,scale=None):
+def readSpaceFeatureCSV(coordCSV,coordNames,featCSV,featNames,scale=None,labs=None):
     '''
     For reading in a csv with each row representative of measure (e.g. cell or single mRNA)
     Scale datapoints to mm if in different coordinates (e.g. microns --> scale = 1e-3)
     Center data points around 0,0
     '''
-    df_s = pandas.read_csv(coordCSV)
-    df_f = pandas.read_csv(featCSV)
+    df_s = pd.read_csv(coordCSV)
+    df_f = pd.read_csv(featCSV)
     if (len(featNames) > 1):
         nu_S = torch.tensor(df_f[featNames].values).type(dtype)
+    elif labs is not None:
+        listOfNu = []
+        nu_S_single = df_f[featNames].values
+        if (np.min(nu_S_single) == 1):
+            nu_S_single -= 1
+        for u in range(labs):
+            n = torch.tensor((nu_S_single == u)).type(dtype)
+            listOfNu.append(n.flatten())
+        nu_S = torch.stack(listOfNu,axis=-1).type(dtype)
     else:
         nu_S_single = df_f[featNames].values
         uVals = np.unique(nu_S_single)
@@ -104,5 +110,7 @@ def readSpaceFeatureCSV(coordCSV,featCSV,featNames,scale=None):
     if scale is not None:
         S = torch.tensor(scale*df_s[coordNames].values).type(dtype)
     S = S - torch.mean(S,axis=0)
+    if (S.shape[-1] < 3):
+        S = torch.cat((S,S[...,0][...,None]*0),-1).type(dtype)
     return S,nu_S
     
