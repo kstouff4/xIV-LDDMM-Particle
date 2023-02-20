@@ -12,7 +12,7 @@ import vtkFunctions as vtf
 
 import torch
 
-from fromScratchHamiltonian import *
+from fromScratchHamiltonianAT import *
 from analyzeOutput import *
 
 np_dtype = "float32"
@@ -27,12 +27,14 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 def main():
     d = 3
     labs = 33
-    sigmaRKHS = 2.0
+    sigmaRKHS = 1.0
     sigmaVar = 1.0
-    its = 10
-    alpha = 'S1_R1toR2'
+    its = 1
+    alphaSt = 'S1_R1toR3'
     beta = 1.0
     res=1.0
+    alpha = 0.1
+    gamma = 0.1
     
     original = sys.stdout
 
@@ -41,21 +43,25 @@ def main():
     if (not os.path.exists(outpath)):
         os.mkdir(outpath)
    
-    if (not os.path.exists(outpath+str(alpha))):
-        os.mkdir(outpath+str(alpha))
+    if (not os.path.exists(outpath+str(alphaSt))):
+        os.mkdir(outpath+str(alphaSt))
 
-    fSf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S2R1.csv"
-    fSs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S2R1.csv"
+    fSf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S1R1.csv"
+    fSs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S1R1.csv"
 
-    fTf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S2R2.csv"
-    fTs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S2R2.csv"
+    fTf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S1R3.csv"
+    fTs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S1R3.csv"
 
     S,nu_S = gi.readSpaceFeatureCSV(fSs,['center_x','center_y'],fSf,['celllabels'],scale=1e-3,labs=labs)
+    #Rot = torch.zeros((2,2)).type(dtype)
+    #Rot[0,1] = -1
+    #Rot[1,0] = 1
+    #S[...,0:2] = S[...,0:2]@Rot.T
     T,nu_T = gi.readSpaceFeatureCSV(fTs,['center_x','center_y'],fTf,['celllabels'],scale=1e-3,labs=labs)
 
     N = S.shape[0]
     
-    savedir = outpath + str(alpha) + '/output_dl_sig_its_be_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(beta) + '_' + str(N) + '/'
+    savedir = outpath + str(alphaSt) + '/output_dl_sig_its_be_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(beta) + '_' + str(N) + '/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
     
@@ -69,7 +75,7 @@ def main():
     print("beta: " + str(beta))
     print("N " + str(N))
     
-    Dlist, nu_Dlist, Glist nu_Glist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),d,labs,savedir,its=its,beta=beta)
+    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),torch.tensor(alpha).type(dtype),torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,beta=beta)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
@@ -109,17 +115,18 @@ def main():
         for i in range(labs):
             imageValsD.append(zeta_D[:,i])
         vtf.writeVTK(D,imageValsD,imageNames,savedir+'testOutput_D' + str(t) + '.vtk',polyData=None)
+        vtf.writeVTK(G,[nu_G],['Weights'],savedir+'testOutput_G' + str(t) + '.vtk',polyData=None)
         if (t == len(Dlist) - 1):
             np.savez(savedir+'testOutput.npz',S=S, nu_S=nu_S,T=T,nu_T=nu_T,D=D,nu_D=nu_D)
             pointList[int(t*len(D)):int((t+1)*len(D))] = D
             pointListG[int(t*len(G)):int((t+1)*len(G))] = G
-            featList[int(t*len(D)):int((t+1)*len(D))] = np.sum(nu_D,axis=-1)
-            featListG[int(t*len(G)):int((t+1)*len(G))] = np.squeeze(nu_G)
+            featList[int(t*len(D)):int((t+1)*len(D))] = np.squeeze(np.sum(nu_D,axis=-1))[...,None]
+            featListG[int(t*len(G)):int((t+1)*len(G))] = np.squeeze(nu_G)[...,None]
         else:
             pointList[int(t*len(D)):int((t+1)*len(D))] = D
             pointListG[int(t*len(G)):int((t+1)*len(G))] = G
-            featList[int(t*len(D)):int((t+1)*len(D))] = np.sum(nu_D,axis=-1)
-            featListG[int(t*len(G)):int((t+1)*len(G))] = np.squeeze(nu_G)
+            featList[int(t*len(D)):int((t+1)*len(D))] = np.squeeze(np.sum(nu_D,axis=-1))[...,None]
+            featListG[int(t*len(G)):int((t+1)*len(G))] = np.squeeze(nu_G)[...,None]
             polyList[int(t*len(D)):int((t+1)*len(D)),1] = np.arange(t*len(D),(t+1)*len(D))
             polyList[int(t*len(D)):int((t+1)*len(D)),2] = np.arange((t+1)*len(D),(t+2)*len(D))
             polyListG[int(t*len(G)):int((t+1)*len(G)),1] = np.arange(t*len(G),(t+1)*len(G))

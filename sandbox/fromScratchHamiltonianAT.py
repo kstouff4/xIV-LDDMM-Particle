@@ -32,18 +32,23 @@ import vtkFunctions as vtf
 
 # Kernels
 def GaussKernelHamiltonian(sigma,d):
-    qx,qy,px,py,wpx,wpy = Vi(0,d)/sigma, Vj(1,d)/sigma, Vi(2,d), Vj(3,d),Vi(4,1)/sigma,Vj(5,1)/sigma
+    qx,qy,px,py,wpx,wpy = Vi(0,d)/sigma, Vj(1,d)/sigma, Vi(2,d), Vj(3,d), Vi(4,1)/sigma, Vj(5,1)/sigma
     h = 0.5*(px*py).sum() + wpy*((qx - qy)*px).sum() - (0.5) * wpx*wpy*(qx.sqdist(qy) - d)
     D2 = qx.sqdist(qy)
     K = (-D2 * 0.5).exp()
-    return (K*h).sum_reduction(axis=1) # N x M 
+    return (K*h).sum_reduction(axis=1) #,  h2, h3.sum_reduction(axis=1) 
 
-def GaussKernelHamiltonianAT(sigma,d):
-    qx,qy,px,py,wpx,wpy = Vi(0,d)/sigma, Vj(1,d)/sigma, Vi(2,d), Vj(3,d),Vi(4,1)/sigma,Vj(5,1)/sigma
-    h = 0.5*(px*py).sum() + wpy*((qx - qy)*px).sum() - (0.5) * wpx*wpy*(qx.sqdist(qy) - d)
-    D2 = qx.sqdist(qy)
-    K = (-D2 * 0.5).exp()
-    return (K*h).sum_reduction(axis=1) # N x M 
+def GaussKernelHamiltonianExtra(sigma,d,gamma):
+    qx,px,py,wpx,qc,pc = Vi(0,d)/sigma,Vi(1,d),Vj(2,d),Vi(3,1)/sigma,Vj(4,d)/sigma,Vj(5,d)
+    print("qc, ", qc)
+    DC = qx.sqdist(qc)
+    K2 = (-DC * 0.5).exp()
+    print("K2 ", K2)
+    h2 = (0.5*(px*pc).sum() + wpx*((qc-qx)*pc).sum())*K2 #Nx1
+    print("h2, ", h2)
+    h3 = ((1.0/(2*gamma))*(px*py)).sum() # NxN
+    print("h3, ", h3)
+    return h3.sum_reduction() + h2.sum()
 
 def GaussKernelU(sigma,d):
     x,qy,py,wpy = Vi(0,d)/sigma, Vj(1,d)/sigma, Vj(2,d), Vj(3,1)/sigma
@@ -101,13 +106,15 @@ def RalstonIntegrator():
 
 #################################################################
 # Hamiltonian 
-def Hamiltonian(K0, sigma, d,numS):
+def Hamiltonian(K0, sigma, d,numS,alpha,gamma):
     # K0 = GaussKernelHamiltonian(x,x,px,px,w*pw,w*pw)
     def H(p, q):
         px = p[numS:].view(-1,d)
         pw = p[:numS].view(-1,1)
         qx = q[numS:].view(-1,d)
         qw = q[:numS].view(-1,1) #torch.squeeze(q[:numS])[...,None]
+        #pc = p[-d:].view(1,d) # 1 x d
+        #qc = q[-d:].view(1,d) # 1 x d
         
         #h = 0.5*Vi(px)*Vj(px).sum() - (1.0/sigma) * Vj(pw)*Vj(qw)*((Vi(qx) - Vj(qx))*Vi(px)).sum() - (1.0/(2*sigma**2)) * Vi(pw*qw)*Vj(pw*qw)*(Vi(px).sqdist(Vj(px)) - d)
         #print(h)
@@ -119,18 +126,41 @@ def Hamiltonian(K0, sigma, d,numS):
         '''
         #return ((h*K0(qx,qx)).sum_reduction(axis=1)).sum()
         wpq = pw*qw
-        print("wpq shape")
-        print(wpq.detach().shape)
-        k = K0(qx,qx,px,px,wpq,wpq)
+        k = K0(qx,qx,px,px,wpq,wpq) # k shape should be N x 1
+        '''
+        qxI,pxI,pyJ,wpxI,qcJ,pcJ = Vi(qx)/sigma,Vi(px),Vj(px),Vi(wpq)/sigma,Vj(qc)/sigma,Vj(pc)
+        DC = qxI.sqdist(qcJ)
+        K2 = (-DC * 0.5).exp()
+        h2 = (0.5*(pxI*pcJ).sum() + wpxI*((qcJ-qxI)*pcJ).sum())*K2 #Nx1
+        h3 = ((1.0/(2*gamma))*(pxI*pyJ)).sum() # NxN
+        h = h3.sum(dim=1)
+        hh = h2.sum(dim=0)
+        h = h.sum(dim=0) + hh
+        '''
+        #h = GaussKernelHamiltonianExtra(sigma=sigma,d=d,gamma=gamma)(qx,px,px,wpq,qc,pc)
         print("k is ")
         print(k.detach().cpu().numpy())
-        return k.sum()
+        print("h is, ", h.detach())
+        #print("h2 is, ", h2.detach())
+        A,tau = getATau(px,qx,qw,alpha,gamma) #getAtau( = (1.0/(2*alpha))*(px.T@(qx-qc) - (qx-qc).T@px) # should be d x d
+        Anorm = (A*A).sum()
+
+        #print("Anorm, ", Anorm)
+        #h2 = (px*((qx-qc)@A.T)).sum()
+        #print("h2, ", h2)
+        
+        return k.sum() + (alpha/2.0)*Anorm + (gamma/2.0)*(tau*tau).sum() #h.sum() + 0.5*torch.sum(pc*pc) + torch.sum(h2) 
 
     return H
 
+def getATau(px,qx,qw,alpha,gamma):
+    xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0)) # moving barycenters
+    A = (1.0/(2*alpha))*(px.T@(qx-xc) - (qx-xc).T@px) # should be d x d
+    tau = (1.0/gamma)*(px.sum(dim=0))
+    return A,tau
 
-def HamiltonianSystem(K0, sigma, d,numS):
-    H = Hamiltonian(K0, sigma, d, numS)
+def HamiltonianSystem(K0, sigma, d,numS,alpha,gamma):
+    H = Hamiltonian(K0, sigma, d, numS,alpha,gamma)
 
     def HS(p, q):
         Gp, Gq = grad(H(p, q), (p, q), create_graph=True)
@@ -141,21 +171,38 @@ def HamiltonianSystem(K0, sigma, d,numS):
 
     return HS
 
-def HamiltonianSystemGrid(K0,sigma,d,numS):
-    H = Hamiltonian(K0,sigma,d,numS)
+# Katie change this to include A and T for the grid 
+def HamiltonianSystemGrid(K0,sigma,d,numS,alpha,gamma):
+    H = Hamiltonian(K0,sigma,d,numS,alpha,gamma)
     def HS(p,q,qgrid,qgridw):
         px = p[numS:].view(-1,d)
         pw = p[:numS].view(-1,1)
         qx = q[numS:].view(-1,d)
         qw = q[:numS].view(-1,1) #torch.squeeze(q[:numS])[...,None]
+        #pc = p[-d:].view(1,d)
+        #qc = q[-d:].view(1,d)
         gx = qgrid.view(-1,d)
         gw = qgridw.view(-1,1)
         Gp,Gq = grad(H(p,q), (p,q), create_graph=True)
         print("Gp, Gq shape")
         print(Gp.detach().shape)
         print(Gq.detach().shape)
-        Gg = GaussKernelU(sigma,d)(gx,qx,px,pw*qw).flatten()
-        Ggw = (GaussKernelUdiv(sigma,d)(gx,qx,px,pw*qw)*gw).flatten()
+        A,tau = getATau(px,qx,qc,alpha,gamma)
+        '''                                              
+        gxt = Vi(gx)/sigma
+        qct = Vj(qc)/sigma
+        pct = Vj(pc)
+        K2 = (-gxt.sqdist(qct)*0.5).exp()
+        print("K2, ", K2)
+
+        Dc = (((gxt-qct)/sigma)*pct).sum()
+        print("Dc, ", Dc)
+        Gg = (GaussKernelU(sigma,d)(gx,qx,px,pw*qw) + (K2.sum()*pct).sum(dim=1) + gx@A.T + tau).flatten() # + A(qgrid-x_c) + tau
+        Ggw = ((GaussKernelUdiv(sigma,d)(gx,qx,px,pw*qw) - (K2.sum()*Dc).sum(dim=1))*gw).flatten()
+        '''
+        Gg = (GaussKernelU(sigma,d)(gx,qx,px,pw*qw) + gx@A.T + tau).flatten()
+        Ggw = ((GaussKernelUdiv(sigma,d)(gx,qx,px,pw*qw)*gw).flatten()
+                                                   
         print("qgrid and qgridw shape")
         print(qgrid.detach().shape)
         print(qgridw.detach().shape)
@@ -170,32 +217,23 @@ def HamiltonianSystemGrid(K0,sigma,d,numS):
 ##################################################################
 # Shooting
 
-def Shooting(p0, q0, K0, K1, sigma,d, numS,nt=10, Integrator=RalstonIntegrator()):
-    return Integrator(HamiltonianSystem(K0,sigma,d,numS), (p0, q0), nt)
+def Shooting(p0, q0, K0, K1, sigma,d, numS,alpha,gamma,nt=10, Integrator=RalstonIntegrator()):
+    return Integrator(HamiltonianSystem(K0,sigma,d,numS,alpha,gamma), (p0, q0), nt)
 
 
-def Flow(x0, p0, q0, K0, K1, sigma, d, deltat=1.0, Integrator=RalstonIntegrator()):
-    HS = HamiltonianSystem(K0,sigma,d,numS)
-
-    def FlowEq(x, p, q):
-        return (K1(x, q, p),) + HS(p, q)
-
-    return Integrator(FlowEq, (x0, p0, q0), deltat)[0]
-
-
-def LDDMMloss(K0, K1, sigma, d, numS,dataloss, gamma=1.0):
+def LDDMMloss(K0, K1, sigma, d, numS,alpha,gamma,dataloss, c=1.0):
     def loss(p0, q0):
-        p, q = Shooting(p0, q0, K0, K1, sigma, d,numS)[-1]
+        p, q = Shooting(p0, q0, K0, K1, sigma, d,numS,alpha,gamma)[-1]
         print("p,q after shooting ") 
         print(p.detach().cpu().numpy())
         print(q.detach().cpu().numpy())
-        return gamma * Hamiltonian(K0, sigma, d,numS)(p0, q0), dataloss(q)
+        return c * Hamiltonian(K0, sigma, d,numS,alpha,gamma)(p0, q0), dataloss(q)
         #return dataloss(q)
 
     return loss
 
-def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,nt=10,Integrator=RalstonIntegrator()):
-    return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS), (p0,q0,qGrid,qGridw),nt)
+def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,alpha,gamma,nt=10,Integrator=RalstonIntegrator()):
+    return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS,alpha,gamma), (p0,q0,qGrid,qGridw),nt)
 
 #################################################################
 # Data Attachment Term
@@ -207,16 +245,9 @@ def lossVarifoldNorm(T,w_T,zeta_T,zeta_S,K,d,numS,beta):
     print(cst.detach().cpu().numpy())
 
     def loss(sS):
-        # sS will be in the form of q (w_S,S)
-        sSx = sS[numS:].view(-1,d)
+        # sS will be in the form of q (w_S,S,x_c)
+        sSx = sS[numS:-d].view(-1,d)
         sSw = sS[:numS].view(-1,1)
-        print("shapes of variables")
-        print(sSx.shape)
-        print(sSw.shape)
-        print(zeta_S.shape)
-        print(zeta_T.shape)
-        print(T.shape)
-        print(w_T.shape)
      
         k1 = K(sSx, sSx, sSw*zeta_S, sSw*zeta_S) 
         print("ks")
@@ -242,14 +273,14 @@ def makePQ(S,nu_S,T,nu_T):
     zeta_S = (nu_S/w_S).type(dtype)
     zeta_T = (nu_T/w_T).type(dtype)
     numS = w_S.shape[0]
-    q0 = torch.cat((w_S.clone().detach().flatten(),S.clone().detach().flatten()),0).requires_grad_(True).type(dtype)
+    q0 = torch.cat((w_S.clone().detach().flatten(),S.clone().detach().flatten()),0).requires_grad_(True).type(dtype) # adding extra element for xc
     print("q0 shape")
     print(q0.shape)
     p0 = (torch.zeros_like(q0)).requires_grad_(True).type(dtype)
     
     return w_S,w_T,zeta_S,zeta_T,q0,p0,numS
 
-def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,d,labs, savedir, its=100,beta=0.1):
+def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, its=100,beta=0.1):
     w_S, w_T,zeta_S,zeta_T,q0,p0,numS = makePQ(S,nu_S,T,nu_T)
     print("data types")
     print(T.dtype)
@@ -259,7 +290,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,d,labs, savedir, its=100,beta=
     Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d)
     Kv = GaussKernelB(sigma=sigmaRKHS,d=d)
 
-    loss = LDDMMloss(Kg,Kv,sigmaRKHS,d, numS, dataloss)
+    loss = LDDMMloss(Kg,Kv,sigmaRKHS,d, numS, alpha,gamma, dataloss)
 
     optimizer = torch.optim.LBFGS([p0], max_eval=10, max_iter=10,line_search_fn = 'strong_wolfe')
     print("performing optimization...")
@@ -312,7 +343,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,d,labs, savedir, its=100,beta=
     numG = qGrid.shape[0]
     qGrid = qGrid.flatten()
     qGridw = torch.ones((numG)).type(dtype)
-    listpq = ShootingGrid(p0,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS)
+    listpq = ShootingGrid(p0,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,alpha,gamma)
     Dlist = []
     nu_Dlist = []
     Glist = []
