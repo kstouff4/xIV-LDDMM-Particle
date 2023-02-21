@@ -1,4 +1,4 @@
-from fromScratchHamiltonian import *
+from fromScratchHamiltonianAT import *
 from analyzeOutput import *
 
 import sys
@@ -17,9 +17,11 @@ def main():
     labs = 2
     sigmaRKHS = 8.0
     sigmaVar = 2.0
-    its = 10
+    its = 5
     alpha = 1.0
     beta = 1.0
+    alphaA = 0.5
+    gamma = 0.5
     
     original = sys.stdout
 
@@ -43,7 +45,7 @@ def main():
     nu_S = torch.stack((nu_S[...,0].flatten(),nu_S[...,1].flatten()),axis=-1).type(dtype)
     nu_T = torch.stack((nu_T[...,0].flatten(),nu_T[...,1].flatten()),axis=-1).type(dtype)
     
-    savedir = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/output_dl_sig_its_albe_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(alpha) + str(beta) + '_' + str(N) + '/'
+    savedir = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/output_dl_sig_its_albe_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(alpha) + str(beta) + '_' + str(N) + str(alphaA) + str(gamma) + '/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
     
@@ -56,10 +58,12 @@ def main():
     print("its: " + str(its))
     print("alpha: " + str(alpha))
     print("beta: " + str(beta))
+    print("alphaA: ", alphaA)
+    print("gamma: ", gamma)
     
     print("N " + str(N))
     
-    Dlist, nu_Dlist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),d,labs,savedir,its=its,beta=beta)
+    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),torch.tensor(alphaA).type(dtype),torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,beta=beta)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
@@ -83,22 +87,43 @@ def main():
     polyList = np.zeros((S.shape[0]*(len(Dlist)-1),3))
     polyList[:,0] = 2
     
+    pointListG = np.zeros((Glist[0].shape[0]*len(Glist),d))
+    polyListG = np.zeros((Glist[0].shape[0]*(len(Glist)-1),3))
+    polyListG[:,0] = 2
+    featList = np.zeros((S.shape[0]*len(Dlist),1))
+    featListG = np.zeros((Glist[0].shape[0]*len(Glist),1))
+    
     for t in range(len(Dlist)):
         D = Dlist[t]
+        G = Glist[t]
         nu_D = nu_Dlist[t]
+        nu_G = nu_Glist[t]
         zeta_D = nu_D/(np.sum(nu_D,axis=-1)[...,None])
         imageValsD = [np.sum(nu_D,axis=-1), np.argmax(nu_D,axis=-1)]
         for i in range(labs):
             imageValsD.append(zeta_D[:,i])
         vtf.writeVTK(D,imageValsD,imageNames,savedir+'testOutput_D' + str(t) + '.vtk',polyData=None)
+        vtf.writeVTK(G,[nu_G],['Weights'],savedir+'testOutput_G' + str(t) + '.vtk',polyData=None)
         if (t == len(Dlist) - 1):
             np.savez(savedir+'testOutput.npz',S=S, nu_S=nu_S,T=T,nu_T=nu_T,D=D,nu_D=nu_D)
+            pointList[int(t*len(D)):int((t+1)*len(D))] = D
+            pointListG[int(t*len(G)):int((t+1)*len(G))] = G
+            featList[int(t*len(D)):int((t+1)*len(D))] = np.squeeze(np.sum(nu_D,axis=-1))[...,None]
+            featListG[int(t*len(G)):int((t+1)*len(G))] = np.squeeze(nu_G)[...,None]
         else:
             pointList[int(t*len(D)):int((t+1)*len(D))] = D
+            pointListG[int(t*len(G)):int((t+1)*len(G))] = G
+            featList[int(t*len(D)):int((t+1)*len(D))] = np.squeeze(np.sum(nu_D,axis=-1))[...,None]
+            featListG[int(t*len(G)):int((t+1)*len(G))] = np.squeeze(nu_G)[...,None]
             polyList[int(t*len(D)):int((t+1)*len(D)),1] = np.arange(t*len(D),(t+1)*len(D))
             polyList[int(t*len(D)):int((t+1)*len(D)),2] = np.arange((t+1)*len(D),(t+2)*len(D))
+            polyListG[int(t*len(G)):int((t+1)*len(G)),1] = np.arange(t*len(G),(t+1)*len(G))
+            polyListG[int(t*len(G)):int((t+1)*len(G)),2] = np.arange((t+1)*len(G),(t+2)*len(G))
 
-    vtf.writeVTK(pointList,[],[],savedir+'testOutput_curves.vtk',polyData=polyList)
+
+
+    vtf.writeVTK(pointList,[featList],['Weights'],savedir+'testOutput_curves.vtk',polyData=polyList)
+    vtf.writeVTK(pointListG,[featListG],['Weights'],savedir+'testOutput_grid.vtk',polyData=polyListG)
     volS = np.prod(np.max(S,axis=(0,1)) - np.min(S,axis=(0,1)))
     volT = np.prod(np.max(T,axis=(0,1)) - np.min(T,axis=(0,1)))
     volD = np.prod(np.max(Dlist[-1],axis=(0,1)) - np.min(Dlist[-1],axis=(0,1)))
