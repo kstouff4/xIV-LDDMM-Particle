@@ -27,14 +27,14 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 def main():
     d = 3
     labs = 33
-    sigmaRKHS = 1.0
+    sigmaRKHS = 2.0
     sigmaVar = 1.0
-    its = 1
-    alphaSt = 'S1_R1toR3'
+    its = 9
+    alphaSt = 'S1_R1toR2'
     beta = 1.0
     res=1.0
-    alpha = 0.1
-    gamma = 0.1
+    alpha = 0.5
+    gamma = 0.5
     
     original = sys.stdout
 
@@ -49,8 +49,8 @@ def main():
     fSf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S1R1.csv"
     fSs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S1R1.csv"
 
-    fTf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S1R3.csv"
-    fTs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S1R3.csv"
+    fTf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S1R2.csv"
+    fTs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S1R2.csv"
 
     S,nu_S = gi.readSpaceFeatureCSV(fSs,['center_x','center_y'],fSf,['celllabels'],scale=1e-3,labs=labs)
     #Rot = torch.zeros((2,2)).type(dtype)
@@ -61,7 +61,7 @@ def main():
 
     N = S.shape[0]
     
-    savedir = outpath + str(alphaSt) + '/output_dl_sig_its_be_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(beta) + '_' + str(N) + '/'
+    savedir = outpath + str(alphaSt) + '/output_dl_sig_its_be_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(beta) + '_' + str(N) + str(alpha)+str(gamma)+'/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
     

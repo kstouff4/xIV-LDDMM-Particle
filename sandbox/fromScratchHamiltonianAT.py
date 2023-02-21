@@ -33,9 +33,9 @@ import vtkFunctions as vtf
 # Kernels
 def GaussKernelHamiltonian(sigma,d):
     qx,qy,px,py,wpx,wpy = Vi(0,d)/sigma, Vj(1,d)/sigma, Vi(2,d), Vj(3,d), Vi(4,1)/sigma, Vj(5,1)/sigma
-    h = 0.5*(px*py).sum() + wpy*((qx - qy)*px).sum() - (0.5) * wpx*wpy*(qx.sqdist(qy) - d)
     D2 = qx.sqdist(qy)
     K = (-D2 * 0.5).exp()
+    h = 0.5*(px*py).sum() + wpy*((qx - qy)*px).sum() - (0.5) * wpx*wpy*(D2 - d)
     return (K*h).sum_reduction(axis=1) #,  h2, h3.sum_reduction(axis=1) 
 
 def GaussKernelHamiltonianExtra(sigma,d,gamma):
@@ -61,7 +61,7 @@ def GaussKernelUdiv(sigma,d):
     x,qy,py,wpy = Vi(0,d)/sigma, Vj(1,d)/sigma, Vj(2,d), Vj(3,1)/sigma
     D2 = x.sqdist(qy)
     K = (-D2 * 0.5).exp()
-    h = d - (1.0/sigma)*((x-qy)*py).sum() - (1.0/sigma)*wpy*D2
+    h = d*wpy - (1.0/sigma)*((x-qy)*py).sum() - (1.0/sigma)*wpy*D2
     return (K*h).sum_reduction(axis=1) # G x 1
 
 def GaussLinKernel(sigma,d,l):
@@ -140,7 +140,7 @@ def Hamiltonian(K0, sigma, d,numS,alpha,gamma):
         #h = GaussKernelHamiltonianExtra(sigma=sigma,d=d,gamma=gamma)(qx,px,px,wpq,qc,pc)
         print("k is ")
         print(k.detach().cpu().numpy())
-        print("h is, ", h.detach())
+        #print("h is, ", h.detach())
         #print("h2 is, ", h2.detach())
         A,tau = getATau(px,qx,qw,alpha,gamma) #getAtau( = (1.0/(2*alpha))*(px.T@(qx-qc) - (qx-qc).T@px) # should be d x d
         Anorm = (A*A).sum()
@@ -155,8 +155,10 @@ def Hamiltonian(K0, sigma, d,numS,alpha,gamma):
 
 def getATau(px,qx,qw,alpha,gamma):
     xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0)) # moving barycenters
-    A = (1.0/(2*alpha))*(px.T@(qx-xc) - (qx-xc).T@px) # should be d x d
-    tau = (1.0/gamma)*(px.sum(dim=0))
+    A = ((1.0/(2.0*alpha))*(px.T@(qx-xc) - (qx-xc).T@px)).type(dtype) # should be d x d
+    print("A is, ", A.detach().cpu().numpy())
+    tau = ((1.0/gamma)*(px.sum(dim=0))).type(dtype)
+    print("tau is, ", tau.detach().cpu().numpy())
     return A,tau
 
 def HamiltonianSystem(K0, sigma, d,numS,alpha,gamma):
@@ -187,7 +189,8 @@ def HamiltonianSystemGrid(K0,sigma,d,numS,alpha,gamma):
         print("Gp, Gq shape")
         print(Gp.detach().shape)
         print(Gq.detach().shape)
-        A,tau = getATau(px,qx,qc,alpha,gamma)
+        A,tau = getATau(px,qx,qw,alpha,gamma)
+        xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0))
         '''                                              
         gxt = Vi(gx)/sigma
         qct = Vj(qc)/sigma
@@ -200,8 +203,8 @@ def HamiltonianSystemGrid(K0,sigma,d,numS,alpha,gamma):
         Gg = (GaussKernelU(sigma,d)(gx,qx,px,pw*qw) + (K2.sum()*pct).sum(dim=1) + gx@A.T + tau).flatten() # + A(qgrid-x_c) + tau
         Ggw = ((GaussKernelUdiv(sigma,d)(gx,qx,px,pw*qw) - (K2.sum()*Dc).sum(dim=1))*gw).flatten()
         '''
-        Gg = (GaussKernelU(sigma,d)(gx,qx,px,pw*qw) + gx@A.T + tau).flatten()
-        Ggw = ((GaussKernelUdiv(sigma,d)(gx,qx,px,pw*qw)*gw).flatten()
+        Gg = (GaussKernelU(sigma,d)(gx,qx,px,pw*qw) + (gx-xc)@A.T + tau).flatten()
+        Ggw = (GaussKernelUdiv(sigma,d)(gx,qx,px,pw*qw)*gw).flatten()
                                                    
         print("qgrid and qgridw shape")
         print(qgrid.detach().shape)
@@ -227,6 +230,9 @@ def LDDMMloss(K0, K1, sigma, d, numS,alpha,gamma,dataloss, c=1.0):
         print("p,q after shooting ") 
         print(p.detach().cpu().numpy())
         print(q.detach().cpu().numpy())
+        print("conservation of momentum")
+        ptemp = np.copy(p.detach().cpu().numpy())
+        print(np.sum(np.sqrt(np.sum((ptemp)**2,axis=-1))))
         return c * Hamiltonian(K0, sigma, d,numS,alpha,gamma)(p0, q0), dataloss(q)
         #return dataloss(q)
 
@@ -246,7 +252,7 @@ def lossVarifoldNorm(T,w_T,zeta_T,zeta_S,K,d,numS,beta):
 
     def loss(sS):
         # sS will be in the form of q (w_S,S,x_c)
-        sSx = sS[numS:-d].view(-1,d)
+        sSx = sS[numS:].view(-1,d)
         sSw = sS[:numS].view(-1,1)
      
         k1 = K(sSx, sSx, sSw*zeta_S, sSw*zeta_S) 
@@ -275,7 +281,7 @@ def makePQ(S,nu_S,T,nu_T):
     numS = w_S.shape[0]
     q0 = torch.cat((w_S.clone().detach().flatten(),S.clone().detach().flatten()),0).requires_grad_(True).type(dtype) # adding extra element for xc
     print("q0 shape")
-    print(q0.shape)
+    print(q0.detach().shape)
     p0 = (torch.zeros_like(q0)).requires_grad_(True).type(dtype)
     
     return w_S,w_T,zeta_S,zeta_T,q0,p0,numS
