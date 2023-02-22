@@ -32,11 +32,15 @@ import vtkFunctions as vtf
 
 # Kernels
 def GaussKernelHamiltonian(sigma,d):
-    qx,qy,px,py,wpx,wpy = Vi(0,d)/sigma, Vj(1,d)/sigma, Vi(2,d), Vj(3,d), Vi(4,1)/sigma, Vj(5,1)/sigma
-    D2 = qx.sqdist(qy)
-    K = (-D2 * 0.5).exp()
-    h = 0.5*(px*py).sum() + wpy*((qx - qy)*px).sum() - (0.5) * wpx*wpy*(D2 - d)
-    return (K*h).sum_reduction(axis=1) #,  h2, h3.sum_reduction(axis=1) 
+    qxO,qyO,px,py,wpxO,wpyO = Vi(0,d), Vj(1,d), Vi(2,d), Vj(3,d), Vi(4,1), Vj(5,1)
+    retVal = torch.tensor(0).type(dtype)
+    for sig in sigma:
+        qx,qy,wpx,wpy = qxO/sig, qyO/sig, wpxO/sig, wpyO/sig
+        D2 = qx.sqdist(qy)
+        K = (-D2 * 0.5).exp()
+        h = 0.5*(px*py).sum() + wpy*((qx - qy)*px).sum() - (0.5) * wpx*wpy*(D2 - d)
+        retVal += (K*h).sum_reduction(axis=1)
+    return retVal #(K*h).sum_reduction(axis=1) #,  h2, h3.sum_reduction(axis=1) 
 
 def GaussKernelHamiltonianExtra(sigma,d,gamma):
     qx,px,py,wpx,qc,pc = Vi(0,d)/sigma,Vi(1,d),Vj(2,d),Vi(3,1)/sigma,Vj(4,d)/sigma,Vj(5,d)
@@ -51,18 +55,26 @@ def GaussKernelHamiltonianExtra(sigma,d,gamma):
     return h3.sum_reduction() + h2.sum()
 
 def GaussKernelU(sigma,d):
-    x,qy,py,wpy = Vi(0,d)/sigma, Vj(1,d)/sigma, Vj(2,d), Vj(3,1)/sigma
-    D2 = x.sqdist(qy)
-    K = (-D2 * 0.5).exp() # G x N
-    h = py + wpy*(x-qy) # 1 X N x 3
-    return (K*h).sum_reduction(axis=1) # G x 3
+    xO,qyO,py,wpyO = Vi(0,d), Vj(1,d), Vj(2,d), Vj(3,1)
+    retVal = torch.tensor(0).type(dtype)
+    for sig in sigma:
+        x,qy,wpy = xO/sig, qyO/sig, wpyO/sig
+        D2 = x.sqdist(qy)
+        K = (-D2 * 0.5).exp() # G x N
+        h = py + wpy*(x-qy) # 1 X N x 3
+        retVal += (K*h).sum_reduction(axis=1)
+    return retVal #(K*h).sum_reduction(axis=1) # G x 3
 
 def GaussKernelUdiv(sigma,d):
-    x,qy,py,wpy = Vi(0,d)/sigma, Vj(1,d)/sigma, Vj(2,d), Vj(3,1)/sigma
-    D2 = x.sqdist(qy)
-    K = (-D2 * 0.5).exp()
-    h = d*wpy - (1.0/sigma)*((x-qy)*py).sum() - (1.0/sigma)*wpy*D2
-    return (K*h).sum_reduction(axis=1) # G x 1
+    xO,qyO,py,wpyO = Vi(0,d), Vj(1,d), Vj(2,d), Vj(3,1)
+    retVal = torch.tensor(0).type(dtype)
+    for sig in sigma:
+        x,qy,wpy = xO/sig, qyO/sig, wpyO/sig
+        D2 = x.sqdist(qy)
+        K = (-D2 * 0.5).exp()
+        h = d*wpy - (1.0/sigma)*((x-qy)*py).sum() - (1.0/sigma)*wpy*D2
+        retVal += (K*h).sum_reduction(axis=1)
+    return retVal #(K*h).sum_reduction(axis=1) # G x 1
 
 def GaussLinKernel(sigma,d,l):
     # u and v are the feature vectors 
@@ -230,9 +242,9 @@ def LDDMMloss(K0, K1, sigma, d, numS,alpha,gamma,dataloss, c=1.0):
         print("p,q after shooting ") 
         print(p.detach().cpu().numpy())
         print(q.detach().cpu().numpy())
-        print("conservation of momentum")
-        ptemp = np.copy(p.detach().cpu().numpy())
-        print(np.sum(np.sqrt(np.sum((ptemp)**2,axis=-1))))
+        #print("conservation of momentum")
+        #ptemp = np.copy(p.detach().cpu().numpy())
+        #print(np.sum(np.sqrt(np.sum((ptemp)**2,axis=-1))))
         return c * Hamiltonian(K0, sigma, d,numS,alpha,gamma)(p0, q0), dataloss(q)
         #return dataloss(q)
 
@@ -378,4 +390,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, i
     featsp0 = np.zeros((numS*2,1))
     featsp0[numS:,:] = p0[0:numS].detach().view(-1,1).cpu().numpy()
     vtf.writeVTK(listSp0,[featsp0],['p0_w'],savedir + 'testOutput_p0.vtk',polyData=polyListSp0)
+    A,tau = getATau(p0[numS:].view(-1,d),q0[numS:].view(-1,d),q0[:numS].view(-1,1),alpha,gamma)
+    np.savez(savedir + 'testOutput_values.npz',A0=A.detach().cpu().numpy(),tau0=tau.detach().cpu().numpy(),p0=p0.detach().cpu().numpy(),q0=q0.detach().cpu().numpy())
+    
     return Dlist, nu_Dlist, Glist, wGlist

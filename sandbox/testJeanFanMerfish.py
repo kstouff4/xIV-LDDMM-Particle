@@ -29,9 +29,9 @@ def main():
     labs = 33
     sigmaRKHS = 2.0
     sigmaVar = 1.0
-    its = 9
+    its = 6
     alphaSt = 'S1_R1toR2'
-    beta = 1.0
+    beta = 0.05
     res=1.0
     alpha = 0.5
     gamma = 0.5
@@ -75,7 +75,7 @@ def main():
     print("beta: " + str(beta))
     print("N " + str(N))
     
-    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),torch.tensor(alpha).type(dtype),torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,beta=beta)
+    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,[torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaRKHS/10.0).type(dtype)],torch.tensor(sigmaVar).type(dtype),torch.tensor(alpha).type(dtype),torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,beta=beta)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
@@ -139,9 +139,9 @@ def main():
     volS = np.prod(np.max(S,axis=(0,1)) - np.min(S,axis=(0,1)))
     volT = np.prod(np.max(T,axis=(0,1)) - np.min(T,axis=(0,1)))
     volD = np.prod(np.max(Dlist[-1],axis=(0,1)) - np.min(Dlist[-1],axis=(0,1)))
-    getLocalDensity(S,nu_S,sigmaVar,savedir+'density_S.vtk')
-    getLocalDensity(T,nu_T,sigmaVar,savedir+'density_T.vtk')
-    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar,savedir+'density_D.vtk')
+    getLocalDensity(S,nu_S,sigmaVar,savedir+'density_S.vtk',coef=0.25)
+    getLocalDensity(T,nu_T,sigmaVar,savedir+'density_T.vtk',coef=0.25)
+    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar,savedir+'density_D.vtk',coef=0.25)
     
     print("volumes of source, target, and deformed source")
     print(volS)
@@ -158,6 +158,18 @@ def main():
     print(wS/volS)
     print(wT/volT)
     print(wD/volD)
+    
+    optimalParams = np.load(savedir + 'testOutput_values.npz')
+    A0 = optimalParams['A0']
+    q0 = optimalParams['q0']
+    tau0 = optimalParams['tau0']
+    
+    qx0 = np.reshape(q0[N:],(N,d))
+    qw0 = np.reshape(q0[:N],(N,1))
+    
+    x = applyAandTau(qx0,qw0,A0,tau0)
+    vtf.writeVTK(x,[qw0],['weights'],savedir+'testOutput_D_ATau.vtk',polyData=None)
+    getLocalDensity(x,nu_S,sigmaVar,savedir+'density_D_ATau.vtk',coef=0.25)
     
     sys.stdout = original
     return
