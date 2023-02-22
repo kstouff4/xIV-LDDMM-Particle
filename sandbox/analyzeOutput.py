@@ -5,6 +5,9 @@ from sys import path as sys_path
 sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
 import vtkFunctions as vtf
 
+import scipy as sp
+from scipy import linalg
+
 def getLocalDensity(Z,nu_Z,sigma,savename,coef=3):
     '''
     Compute local density in cube of size 2sigma x 2sigma x 2sigma
@@ -41,4 +44,14 @@ def getLocalDensity(Z,nu_Z,sigma,savename,coef=3):
         imageDensity.append(cubes_mrna[:,f])
     vtf.writeVTK(centroidsPlot,imageDensity,imageNames,savename,polyData=None)
     return
+
+def applyAandTau(q_x,q_w,A,tau):
+    '''
+    q_x indicates the original positions of the source and q_w the original weights 
+    arguments are numpy arrays 
+    '''
+    x_c0 = np.sum(q_w*q_x,axis=0)/np.sum(q_w)
+    x = (q_x-x_c0)@((sp.linalg.expm(A)).T) + tau
+    
+    return x
    
