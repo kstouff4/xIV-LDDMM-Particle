@@ -26,7 +26,7 @@ def readFromPrevious(npzFile):
     
     return S,nu_S,T,nu_T
 
-def makeFromSingleChannelImage(imageFile,resXYZ,bg=0):
+def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None):
     '''
     Makes discrete particle representation from image file (NIFTI or ANALYZE).
     Assumes background has value 0 and excluded as no data.
@@ -47,15 +47,19 @@ def makeFromSingleChannelImage(imageFile,resXYZ,bg=0):
     else:
         x2 = np.zeros((1,1)) # default to centering 2d image at 0
     
-    uniqueVals = np.unique(im)
-    if (bg is not None):
-        uniqueVals = uniqueVals[uniqueVals != bg]
-        
-    numUnique = len(uniqueVals)
-    
     X,Y,Z = torch.meshgrid(torch.tensor(x0).type(dtype),torch.tensor(x1).type(dtype),torch.tensor(x2).type(dtype),indexing='ij')
     S = torch.stack((X.flatten(),Y.flatten(),Z.flatten()),axis=-1).type(dtype)
     listOfNu = []
+    
+    if (ordering is not None):
+        uniqueVals = ordering
+    else:
+        uniqueVals = np.unique(im)
+        if (bg is not None):
+            uniqueVals = uniqueVals[uniqueVals != bg]
+        
+    numUnique = len(uniqueVals)
+
     for u in range(len(uniqueVals)):
         n = torch.tensor((im == uniqueVals[u])).type(dtype)
         listOfNu.append(n.flatten())
