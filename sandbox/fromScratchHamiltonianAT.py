@@ -33,14 +33,14 @@ import vtkFunctions as vtf
 # Kernels
 def GaussKernelHamiltonian(sigma,d):
     qxO,qyO,px,py,wpxO,wpyO = Vi(0,d), Vj(1,d), Vi(2,d), Vj(3,d), Vi(4,1), Vj(5,1)
-    retVal = torch.tensor(0).type(dtype)
+    retVal = qxO.sqdist(qyO)*torch.tensor(0).type(dtype)
     for sig in sigma:
         qx,qy,wpx,wpy = qxO/sig, qyO/sig, wpxO/sig, wpyO/sig
         D2 = qx.sqdist(qy)
         K = (-D2 * 0.5).exp()
         h = 0.5*(px*py).sum() + wpy*((qx - qy)*px).sum() - (0.5) * wpx*wpy*(D2 - d)
-        retVal += (K*h).sum_reduction(axis=1)
-    return retVal #(K*h).sum_reduction(axis=1) #,  h2, h3.sum_reduction(axis=1) 
+        retVal += K*h
+    return retVal.sum_reduction(axis=1) #(K*h).sum_reduction(axis=1) #,  h2, h3.sum_reduction(axis=1) 
 
 def GaussKernelHamiltonianExtra(sigma,d,gamma):
     qx,px,py,wpx,qc,pc = Vi(0,d)/sigma,Vi(1,d),Vj(2,d),Vi(3,1)/sigma,Vj(4,d)/sigma,Vj(5,d)
@@ -56,25 +56,25 @@ def GaussKernelHamiltonianExtra(sigma,d,gamma):
 
 def GaussKernelU(sigma,d):
     xO,qyO,py,wpyO = Vi(0,d), Vj(1,d), Vj(2,d), Vj(3,1)
-    retVal = torch.tensor(0).type(dtype)
+    retVal = xO.sqdist(qyO)*torch.tensor(0).type(dtype)
     for sig in sigma:
         x,qy,wpy = xO/sig, qyO/sig, wpyO/sig
         D2 = x.sqdist(qy)
         K = (-D2 * 0.5).exp() # G x N
         h = py + wpy*(x-qy) # 1 X N x 3
-        retVal += (K*h).sum_reduction(axis=1)
-    return retVal #(K*h).sum_reduction(axis=1) # G x 3
+        retVal += (K*h) #.sum_reduction(axis=1)
+    return retVal.sum_reduction(axis=1) # G x 3
 
 def GaussKernelUdiv(sigma,d):
     xO,qyO,py,wpyO = Vi(0,d), Vj(1,d), Vj(2,d), Vj(3,1)
-    retVal = torch.tensor(0).type(dtype)
+    retVal = xO.sqdist(qyO)*torch.tensor(0).type(dtype)
     for sig in sigma:
         x,qy,wpy = xO/sig, qyO/sig, wpyO/sig
         D2 = x.sqdist(qy)
         K = (-D2 * 0.5).exp()
-        h = d*wpy - (1.0/sigma)*((x-qy)*py).sum() - (1.0/sigma)*wpy*D2
-        retVal += (K*h).sum_reduction(axis=1)
-    return retVal #(K*h).sum_reduction(axis=1) # G x 1
+        h = d*wpy - (1.0/sig)*((x-qy)*py).sum() - (1.0/sig)*wpy*D2
+        retVal += (K*h) #.sum_reduction(axis=1)
+    return retVal.sum_reduction(axis=1) # G x 1
 
 def GaussLinKernel(sigma,d,l):
     # u and v are the feature vectors 
@@ -85,10 +85,14 @@ def GaussLinKernel(sigma,d,l):
 
 def GaussKernelB(sigma,d):
     # b is px (spatial momentum)
-    x, y, b = Vi(0, d)/sigma, Vj(1, d)/sigma, Vj(2,d)
-    D2 = x.sqdist(y)
-    K = (-D2 * 0.5).exp()
-    return (K*b).sum_reduction(axis=1)
+    xO, yO, b = Vi(0, d), Vj(1, d), Vj(2,d)
+    retVal = xO.sqdist(yO)*torch.tensor(0).type(dtype)
+    for sig in sigma:
+        x,y = xO/sig, yO/sig
+        D2 = x.sqdist(y)
+        K = (-D2 * 0.5).exp()
+        retVal += K*b
+    return retVal.sum_reduction(axis=1)
 
 
 ###################################################################
@@ -349,6 +353,30 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, i
     ax.set_xlabel("Iterations")
     ax.legend()
     f.savefig(savedir + 'RelativeLossVarifoldNorm.png',dpi=300)
+    
+    lossListHdiff = []
+    lossListDAdiff = []
+    lossListTotdiff = []
+    for i in range(len(lossListH)-1):
+        lossListHdiff.append(lossListH[i+1]-lossListH[i])
+        lossListDAdiff.append(lossListDA[i+1]-lossListDA[i])
+        lossListTotdiff.append(lossListHdiff[i]+lossListDAdiff[i])
+    f,ax = plt.subplots()
+    ax.plot(np.arange(len(lossListHdiff)),np.asarray(lossListHdiff),label="H($q_0$,$p_0$), Final = {0:.2f}".format(lossListHdiff[-1]))
+    ax.plot(np.arange(len(lossListHdiff)),np.asarray(lossListDAdiff),label="Varifold Norm, Final = {0:.2f}".format(lossListDAdiff[-1]))
+    ax.plot(np.arange(len(lossListHdiff)),np.asarray(lossListTotdiff),label="Total Cost, Final = {0:.2f}".format(lossListTotdiff[-1]))
+    ax.set_title("Difference in Loss")
+    ax.set_xlabel("Iterations")
+    ax.legend()
+    f.savefig(savedir + 'CostDifferences.png',dpi=300)
+
+    print("loss differencesH")
+    print(lossListHdiff)
+    print("loss differences DA")
+    print(lossListDAdiff)
+    print("loss differences Tot")
+    print(lossListTotdiff)
+    
     
     # Print out deformed states
     #listpq = Shooting(p0, q0, Kg, Kv, sigmaRKHS,d,numS)

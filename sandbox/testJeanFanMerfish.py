@@ -30,7 +30,7 @@ def main():
     sigmaRKHS = 2.0
     sigmaVar = 1.0
     its = 6
-    alphaSt = 'S1_R1toR2'
+    alphaSt = 'S2_R1toR2'
     beta = 0.05
     res=1.0
     alpha = 0.5
@@ -46,11 +46,11 @@ def main():
     if (not os.path.exists(outpath+str(alphaSt))):
         os.mkdir(outpath+str(alphaSt))
 
-    fSf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S1R1.csv"
-    fSs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S1R1.csv"
+    fSf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S2R1.csv"
+    fSs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S2R1.csv"
 
-    fTf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S1R2.csv"
-    fTs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S1R2.csv"
+    fTf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S2R2.csv"
+    fTs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S2R2.csv"
 
     S,nu_S = gi.readSpaceFeatureCSV(fSs,['center_x','center_y'],fSf,['celllabels'],scale=1e-3,labs=labs)
     #Rot = torch.zeros((2,2)).type(dtype)
@@ -75,7 +75,9 @@ def main():
     print("beta: " + str(beta))
     print("N " + str(N))
     
-    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,[torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaRKHS/10.0).type(dtype)],torch.tensor(sigmaVar).type(dtype),torch.tensor(alpha).type(dtype),torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,beta=beta)
+    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,[torch.tensor(sigmaRKHS).type(dtype)],torch.tensor(sigmaVar).type(dtype),torch.tensor(alpha).type(dtype),torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,beta=beta)
+    
+    #Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,[torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaRKHS/2.0).type(dtype)],torch.tensor(sigmaVar).type(dtype),torch.tensor(alpha).type(dtype),torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,beta=beta)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
