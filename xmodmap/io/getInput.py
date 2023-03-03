@@ -26,7 +26,7 @@ def readFromPrevious(npzFile):
     
     return S,nu_S,T,nu_T
 
-def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None):
+def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None,ds=1):
     '''
     Makes discrete particle representation from image file (NIFTI or ANALYZE).
     Assumes background has value 0 and excluded as no data.
@@ -37,6 +37,13 @@ def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None):
     imInfo = nib.load(imageFile)
     im = np.squeeze(np.asanyarray(imInfo.dataobj)).astype('float32')
     dims = im.shape
+    if (ds > 1):
+        if len(dims) == 2:
+            im = im[0::ds,0::ds]
+        elif len(dims) == 3:
+            im = im[0::ds,0::ds,0::ds]
+    dims = im.shape
+    print("dims is ", dims)
     x0 = np.arange(dims[0])*resXYZ
     x0 -= np.mean(x0)
     x1 = np.arange(dims[1])*resXYZ
@@ -49,6 +56,7 @@ def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None):
     
     X,Y,Z = torch.meshgrid(torch.tensor(x0).type(dtype),torch.tensor(x1).type(dtype),torch.tensor(x2).type(dtype),indexing='ij')
     S = torch.stack((X.flatten(),Y.flatten(),Z.flatten()),axis=-1).type(dtype)
+    print("size of S:", S.shape)
     listOfNu = []
     
     if (ordering is not None):
@@ -60,14 +68,24 @@ def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None):
         
     numUnique = len(uniqueVals)
 
+    keepSum = torch.zeros((S.shape[0],1)).type(dtype)
     for u in range(len(uniqueVals)):
         n = torch.tensor((im == uniqueVals[u])).type(dtype)
         listOfNu.append(n.flatten())
-    nu_S = torch.stack(listOfNu,axis=-1).type(dtype)
+        print("n flatten shape ", n.flatten().shape)
+        keepSum += n.flatten()[...,None]
+    toKeep = torch.squeeze(keepSum > 0)
+    print("toKeep shape ", toKeep.shape)
+    listOfNewNu = []
+    print("length of list ", len(listOfNu))
+    for l in listOfNu:
+        print("l shape ", l.shape)
+        listOfNewNu.append(l[toKeep])
+    nu_S = torch.stack(listOfNewNu,axis=-1).type(dtype)
 
-    toKeep = nu_S.sum(axis=-1) > 0
+    #toKeep = nu_S.sum(axis=-1) > 0
     S = S[toKeep]
-    nu_S = nu_S[toKeep]
+    #nu_S = nu_S[toKeep]
 
     return S,nu_S
 

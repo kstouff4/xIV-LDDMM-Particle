@@ -50,8 +50,8 @@ def main():
     b5 = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain5/3DSegmentations/Brain5_allMerge_smoothe.nii.gz'
     
     # amygdala, CA1, CA2, CA3, DG-granular, DG-hilus, DG-molecular, ERC, ERC ext, Presubiculum, Parasubiculum, Subiculum
-    S,nu_S = makeFromSingleChannelImage(b2,0.125,bg=0,ordering=[3,4,5,6,9,10,11,7,8,12,13,14])
-    T,nu_T = makeFromSingleChannelImage(b5,0.125,bg=0,ordering=[15,2,3,4,7,9,10,6,14,11,12,13])
+    S,nu_S = gi.makeFromSingleChannelImage(b2,0.125,bg=0,ordering=[3,4,5,6,9,10,11,7,8,12,13,14],ds=2)
+    T,nu_T = gi.makeFromSingleChannelImage(b5,0.125,bg=0,ordering=[15,2,3,4,7,9,10,6,14,11,12,13],ds=2)
     
     N = S.shape[0]
     
@@ -69,6 +69,25 @@ def main():
     print("beta: " + str(beta))
     print("N " + str(N))
     
+    Sp=S.clone().detach().cpu().numpy()
+    Tp=T.clone().detach().cpu().numpy()
+    nu_Sp = nu_S.clone().detach().cpu().numpy()
+    nu_Tp = nu_T.clone().detach().cpu().numpy()
+
+    imageNames = ['weights', 'maxImageVal']
+    imageValsS = [np.sum(nu_Sp,axis=-1), np.argmax(nu_Sp,axis=-1)]
+    imageValsT = [np.sum(nu_Tp,axis=-1), np.argmax(nu_Tp,axis=-1)]
+
+    zeta_Sp = nu_Sp/(np.sum(nu_Sp,axis=-1)[...,None])
+    zeta_Tp = nu_Tp/(np.sum(nu_Tp,axis=-1)[...,None])
+    for i in range(labs):
+        imageNames.append('zeta_' + str(i))
+        imageValsS.append(zeta_Sp[:,i])
+        imageValsT.append(zeta_Tp[:,i])
+
+    vtf.writeVTK(Sp,imageValsS,imageNames,savedir+'testOutput_S.vtk',polyData=None)
+    vtf.writeVTK(Tp,imageValsT,imageNames,savedir+'testOutput_T.vtk',polyData=None)
+    
     Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,[torch.tensor(sigmaRKHS).type(dtype)],torch.tensor(sigmaVar).type(dtype),torch.tensor(alpha).type(dtype),torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,beta=beta)
     
     S=S.detach().cpu().numpy()
@@ -76,19 +95,6 @@ def main():
     nu_S = nu_S.detach().cpu().numpy()
     nu_T = nu_T.detach().cpu().numpy()
 
-    imageNames = ['weights', 'maxImageVal']
-    imageValsS = [np.sum(nu_S,axis=-1), np.argmax(nu_S,axis=-1)]
-    imageValsT = [np.sum(nu_T,axis=-1), np.argmax(nu_T,axis=-1)]
-
-    zeta_S = nu_S/(np.sum(nu_S,axis=-1)[...,None])
-    zeta_T = nu_T/(np.sum(nu_T,axis=-1)[...,None])
-    for i in range(labs):
-        imageNames.append('zeta_' + str(i))
-        imageValsS.append(zeta_S[:,i])
-        imageValsT.append(zeta_T[:,i])
-
-    vtf.writeVTK(S,imageValsS,imageNames,savedir+'testOutput_S.vtk',polyData=None)
-    vtf.writeVTK(T,imageValsT,imageNames,savedir+'testOutput_T.vtk',polyData=None)
     pointList = np.zeros((S.shape[0]*len(Dlist),d))
     polyList = np.zeros((S.shape[0]*(len(Dlist)-1),3))
     polyList[:,0] = 2
