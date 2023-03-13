@@ -12,8 +12,8 @@ pykeops.set_build_folder("~/.cache/keop" + pykeops.__version__ + "_" + (socket.g
 
 from pykeops.torch import Vi, Vj
 
-np_dtype = "float32"
-dtype = torch.cuda.FloatTensor 
+np_dtype = "float64" #"float32"
+dtype = torch.cuda.DoubleTensor #FloatTensor 
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
@@ -33,13 +33,17 @@ import vtkFunctions as vtf
 # Kernels
 def GaussKernelHamiltonian(sigma,d):
     qxO,qyO,px,py,wpxO,wpyO = Vi(0,d), Vj(1,d), Vi(2,d), Vj(3,d), Vi(4,1), Vj(5,1)
-    retVal = qxO.sqdist(qyO)*torch.tensor(0).type(dtype)
-    for sig in sigma:
+    #retVal = qxO.sqdist(qyO)*torch.tensor(0).type(dtype)
+    for sInd in range(len(sigma)):
+        sig = sigma[sInd]
         qx,qy,wpx,wpy = qxO/sig, qyO/sig, wpxO/sig, wpyO/sig
         D2 = qx.sqdist(qy)
         K = (-D2 * 0.5).exp()
         h = 0.5*(px*py).sum() + wpy*((qx - qy)*px).sum() - (0.5) * wpx*wpy*(D2 - d)
-        retVal += K*h
+        if sInd == 0:
+            retVal = K*h
+        else:
+            retVal += K*h
     return retVal.sum_reduction(axis=1) #(K*h).sum_reduction(axis=1) #,  h2, h3.sum_reduction(axis=1) 
 
 def GaussKernelHamiltonianExtra(sigma,d,gamma):
@@ -295,7 +299,7 @@ def makePQ(S,nu_S,T,nu_T):
     zeta_S = (nu_S/w_S).type(dtype)
     zeta_T = (nu_T/w_T).type(dtype)
     numS = w_S.shape[0]
-    q0 = torch.cat((w_S.clone().detach().flatten(),S.clone().detach().flatten()),0).requires_grad_(True).type(dtype) # adding extra element for xc
+    q0 = torch.cat((w_S.clone().detach().flatten(),S.clone().detach().flatten()),0).requires_grad_(True).type(dtype) # not adding extra element for xc
     print("q0 shape")
     print(q0.detach().shape)
     p0 = (torch.zeros_like(q0)).requires_grad_(True).type(dtype)
@@ -314,7 +318,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, i
 
     loss = LDDMMloss(Kg,Kv,sigmaRKHS,d, numS, alpha,gamma, dataloss)
 
-    optimizer = torch.optim.LBFGS([p0], max_eval=10, max_iter=10,line_search_fn = 'strong_wolfe')
+    optimizer = torch.optim.LBFGS([p0], max_eval=11, max_iter=10,line_search_fn = 'strong_wolfe',history_size=10)
     print("performing optimization...")
     start = time.time()
     
@@ -322,11 +326,15 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, i
     lossListH = []
     lossListDA = []
     relLossList = []
+    lossOnlyH = []
+    lossOnlyDA = []
     def closure():
         optimizer.zero_grad()
         LH,LDA = loss(p0, q0)
         L = LH+LDA
         print("loss", L.detach().cpu().numpy())
+        print("loss H ", LH.detach().cpu().numpy())
+        print("loss LDA ", LDA.detach().cpu().numpy())
         lossListH.append(np.copy(LH.detach().cpu().numpy()))
         lossListDA.append(np.copy(LDA.detach().cpu().numpy()))
         relLossList.append(np.copy(LDA.detach().cpu().numpy())/cst)
@@ -336,6 +344,9 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, i
     for i in range(its):
         print("it ", i, ": ", end="")
         optimizer.step(closure)
+        LH,LDA = loss(p0,q0)
+        lossOnlyH.append(np.copy(LH.detach().cpu().numpy()))
+        lossOnlyDA.append(np.copy(LDA.detach().cpu().numpy()))
     print("Optimization (L-BFGS) time: ", round(time.time() - start, 2), " seconds")
 
     f,ax = plt.subplots()
@@ -353,6 +364,15 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, i
     ax.set_xlabel("Iterations")
     ax.legend()
     f.savefig(savedir + 'RelativeLossVarifoldNorm.png',dpi=300)
+    
+    f,ax = plt.subplots()
+    ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyH),label="H($q_0$,$p_0$), Final = {0:.2f}".format(lossOnlyH[-1]))
+    ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyDA),label="Varifold Norm, Final = {0:.2f}".format(lossOnlyDA[-1]))
+    ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyDA)+np.asarray(lossOnlyH),label="Total Cost, Final = {0:.2f}".format(lossOnlyDA[-1]+lossOnlyH[-1]))
+    ax.set_title("Loss")
+    ax.set_xlabel("Iterations")
+    ax.legend()
+    f.savefig(savedir + 'CostOuterIter.png',dpi=300)
     
     lossListHdiff = []
     lossListDAdiff = []
@@ -381,9 +401,13 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, i
     # Print out deformed states
     #listpq = Shooting(p0, q0, Kg, Kv, sigmaRKHS,d,numS)
     coords = q0[numS:].detach().view(-1,d)
-    xGrid = torch.arange(torch.min(coords[...,0])-0.1,torch.max(coords[...,0])+0.2,0.1)
-    yGrid = torch.arange(torch.min(coords[...,1])-0.1,torch.max(coords[...,1])+0.2,0.1)
-    zGrid = torch.arange(torch.min(coords[...,2])-0.1,torch.max(coords[...,2])+0.2,0.1)
+    rangesX = (torch.max(coords[...,0]) - torch.min(coords[...,0]))/100.0
+    rangesY = (torch.max(coords[...,1]) - torch.min(coords[...,1]))/100.0
+    rangesZ = (torch.max(coords[...,2]) - torch.min(coords[...,2]))/100.0
+                               
+    xGrid = torch.arange(torch.min(coords[...,0])-rangesX,torch.max(coords[...,0])+rangesX*2,rangesX)
+    yGrid = torch.arange(torch.min(coords[...,1])-rangesY,torch.max(coords[...,1])+rangesY*2,rangesY)
+    zGrid = torch.arange(torch.min(coords[...,2])-rangesZ,torch.max(coords[...,2])+rangesZ*2,rangesZ)
     XG,YG,ZG = torch.meshgrid((xGrid,yGrid,zGrid),indexing='ij')
     qGrid = torch.stack((XG.flatten(),YG.flatten(),ZG.flatten()),axis=-1).type(dtype)
     numG = qGrid.shape[0]
