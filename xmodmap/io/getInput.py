@@ -79,7 +79,7 @@ def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None,ds=1):
     listOfNewNu = []
     print("length of list ", len(listOfNu))
     for l in listOfNu:
-        print("l shape ", l.shape)
+        print("l shape ", l[toKeep].shape)
         listOfNewNu.append(l[toKeep])
     nu_S = torch.stack(listOfNewNu,axis=-1).type(dtype)
 

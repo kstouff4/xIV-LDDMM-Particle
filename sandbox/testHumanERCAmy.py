@@ -6,11 +6,13 @@ from sys import path as sys_path
 sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
 import vtkFunctions as vtf
 
-from fromScratchHamiltonian import *
+import torch
+
+from fromScratchHamiltonianAT import *
 from analyzeOutput import *
 
-np_dtype = "float32"
-dtype = torch.cuda.FloatTensor 
+np_dtype = "float64" # "float32"
+dtype = torch.cuda.DoubleTensor #FloatTensor 
 
 import nibabel as nib
 
@@ -22,9 +24,11 @@ def main():
     sigmaRKHS = 20.0
     sigmaVar = 20.0
     its = 10
-    alpha = 'BEIALE'
+    alphaSt = 'BEIALE'
     beta = 1.0
     res=1.0
+    alpha = 1000.0
+    gamma = 0.25
     
     original = sys.stdout
 
@@ -33,8 +37,7 @@ def main():
 
     if (not os.path.exists(outpath)):
         os.mkdir(outpath) 
-    '''
-    # undo this comment 
+
     imgFile = imgPref+'150428/AMYGDALA+ERC+TEC.img'
     im = nib.load(imgFile)
     imageO = np.asanyarray(im.dataobj).astype('float32')
@@ -118,9 +121,11 @@ def main():
     nu_S = torch.tensor(npz['nu_S']).type(dtype)
     T = torch.tensor(npz['T']).type(dtype)
     nu_T = torch.tensor(npz['nu_T']).type(dtype)
+    '''
+    
     N = S.shape[0]
     
-    savedir = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/output_dl_sig_its_albe_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(alpha) + str(beta) + '_' + str(N) + '/'
+    savedir = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/Human/BEIALE/output_dl_sig_its_albega_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(alpha) + str(beta) + str(gamma) + '_' + str(N) + '/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
     
@@ -136,7 +141,8 @@ def main():
     
     print("N " + str(N))
     
-    Dlist, nu_Dlist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),d,labs,savedir,its=its,beta=beta)
+    #Dlist, nu_Dlist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),d,labs,savedir,its=its,beta=beta)
+    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,[torch.tensor(sigmaRKHS).type(dtype)],torch.tensor(sigmaVar).type(dtype),torch.tensor(alpha).type(dtype),torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,beta=beta)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
@@ -156,32 +162,54 @@ def main():
 
     vtf.writeVTK(S,imageValsS,imageNames,savedir+'testOutput_S.vtk',polyData=None)
     vtf.writeVTK(T,imageValsT,imageNames,savedir+'testOutput_T.vtk',polyData=None)
+    
     pointList = np.zeros((S.shape[0]*len(Dlist),d))
     polyList = np.zeros((S.shape[0]*(len(Dlist)-1),3))
     polyList[:,0] = 2
     
+    pointListG = np.zeros((Glist[0].shape[0]*len(Glist),d))
+    polyListG = np.zeros((Glist[0].shape[0]*(len(Glist)-1),3))
+    polyListG[:,0] = 2
+    featList = np.zeros((S.shape[0]*len(Dlist),1))
+    featListG = np.zeros((Glist[0].shape[0]*len(Glist),1))
+    
     for t in range(len(Dlist)):
         D = Dlist[t]
+        G = Glist[t]
         nu_D = nu_Dlist[t]
+        nu_G = nu_Glist[t]
         zeta_D = nu_D/(np.sum(nu_D,axis=-1)[...,None])
         imageValsD = [np.sum(nu_D,axis=-1), np.argmax(nu_D,axis=-1)]
         for i in range(labs):
             imageValsD.append(zeta_D[:,i])
         vtf.writeVTK(D,imageValsD,imageNames,savedir+'testOutput_D' + str(t) + '.vtk',polyData=None)
+        vtf.writeVTK(G,[nu_G],['Weights'],savedir+'testOutput_G' + str(t) + '.vtk',polyData=None)
         if (t == len(Dlist) - 1):
             np.savez(savedir+'testOutput.npz',S=S, nu_S=nu_S,T=T,nu_T=nu_T,D=D,nu_D=nu_D)
+            pointList[int(t*len(D)):int((t+1)*len(D))] = D
+            pointListG[int(t*len(G)):int((t+1)*len(G))] = G
+            featList[int(t*len(D)):int((t+1)*len(D))] = np.squeeze(np.sum(nu_D,axis=-1))[...,None]
+            featListG[int(t*len(G)):int((t+1)*len(G))] = np.squeeze(nu_G)[...,None]
         else:
             pointList[int(t*len(D)):int((t+1)*len(D))] = D
+            pointListG[int(t*len(G)):int((t+1)*len(G))] = G
+            featList[int(t*len(D)):int((t+1)*len(D))] = np.squeeze(np.sum(nu_D,axis=-1))[...,None]
+            featListG[int(t*len(G)):int((t+1)*len(G))] = np.squeeze(nu_G)[...,None]
             polyList[int(t*len(D)):int((t+1)*len(D)),1] = np.arange(t*len(D),(t+1)*len(D))
             polyList[int(t*len(D)):int((t+1)*len(D)),2] = np.arange((t+1)*len(D),(t+2)*len(D))
+            polyListG[int(t*len(G)):int((t+1)*len(G)),1] = np.arange(t*len(G),(t+1)*len(G))
+            polyListG[int(t*len(G)):int((t+1)*len(G)),2] = np.arange((t+1)*len(G),(t+2)*len(G))
 
-    vtf.writeVTK(pointList,[],[],savedir+'testOutput_curves.vtk',polyData=polyList)
+
+
+    vtf.writeVTK(pointList,[featList],['Weights'],savedir+'testOutput_curves.vtk',polyData=polyList)
+    vtf.writeVTK(pointListG,[featListG],['Weights'],savedir+'testOutput_grid.vtk',polyData=polyListG)
     volS = np.prod(np.max(S,axis=(0,1)) - np.min(S,axis=(0,1)))
     volT = np.prod(np.max(T,axis=(0,1)) - np.min(T,axis=(0,1)))
     volD = np.prod(np.max(Dlist[-1],axis=(0,1)) - np.min(Dlist[-1],axis=(0,1)))
-    getLocalDensity(S,nu_S,sigmaVar,savedir+'density_S.vtk')
-    getLocalDensity(T,nu_T,sigmaVar,savedir+'density_T.vtk')
-    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar,savedir+'density_D.vtk')
+    getLocalDensity(S,nu_S,sigmaVar,savedir+'density_S.vtk',coef=2.0)
+    getLocalDensity(T,nu_T,sigmaVar,savedir+'density_T.vtk',coef=2.0)
+    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar,savedir+'density_D.vtk',coef=2.0)
     
     print("volumes of source, target, and deformed source")
     print(volS)
@@ -198,6 +226,18 @@ def main():
     print(wS/volS)
     print(wT/volT)
     print(wD/volD)
+    
+    optimalParams = np.load(savedir + 'testOutput_values.npz')
+    A0 = optimalParams['A0']
+    q0 = optimalParams['q0']
+    tau0 = optimalParams['tau0']
+    
+    qx0 = np.reshape(q0[N:],(N,d))
+    qw0 = np.reshape(q0[:N],(N,1))
+    
+    x = applyAandTau(qx0,qw0,A0,tau0)
+    vtf.writeVTK(x,[qw0],['weights'],savedir+'testOutput_D_ATau.vtk',polyData=None)
+    getLocalDensity(x,nu_S,sigmaVar,savedir+'density_D_ATau.vtk',coef=0.25)
     
     sys.stdout = original
     return
