@@ -61,23 +61,31 @@ def GaussKernelHamiltonianExtra(sigma,d,gamma):
 def GaussKernelU(sigma,d):
     xO,qyO,py,wpyO = Vi(0,d), Vj(1,d), Vj(2,d), Vj(3,1)
     retVal = xO.sqdist(qyO)*torch.tensor(0).type(dtype)
-    for sig in sigma:
+    for sInd in range(len(sigma)):
+        sig = sigma[sInd]
         x,qy,wpy = xO/sig, qyO/sig, wpyO/sig
         D2 = x.sqdist(qy)
         K = (-D2 * 0.5).exp() # G x N
         h = py + wpy*(x-qy) # 1 X N x 3
-        retVal += (K*h) #.sum_reduction(axis=1)
+        if sInd == 0:
+            retVal = K*h
+        else:
+            retVal += (K*h) #.sum_reduction(axis=1)
     return retVal.sum_reduction(axis=1) # G x 3
 
 def GaussKernelUdiv(sigma,d):
     xO,qyO,py,wpyO = Vi(0,d), Vj(1,d), Vj(2,d), Vj(3,1)
     retVal = xO.sqdist(qyO)*torch.tensor(0).type(dtype)
-    for sig in sigma:
+    for sInd in range(len(sigma)):
+        sig = sigma[sInd]
         x,qy,wpy = xO/sig, qyO/sig, wpyO/sig
         D2 = x.sqdist(qy)
         K = (-D2 * 0.5).exp()
         h = d*wpy - (1.0/sig)*((x-qy)*py).sum() - (1.0/sig)*wpy*D2
-        retVal += (K*h) #.sum_reduction(axis=1)
+        if sInd == 0:
+            retVal = K*h
+        else:
+            retVal += (K*h) #.sum_reduction(axis=1)
     return retVal.sum_reduction(axis=1) # G x 1
 
 def GaussLinKernel(sigma,d,l):
@@ -91,11 +99,15 @@ def GaussKernelB(sigma,d):
     # b is px (spatial momentum)
     xO, yO, b = Vi(0, d), Vj(1, d), Vj(2,d)
     retVal = xO.sqdist(yO)*torch.tensor(0).type(dtype)
-    for sig in sigma:
+    for sInd in range(len(sigma)):
+        sig = sigma[sInd]
         x,y = xO/sig, yO/sig
         D2 = x.sqdist(y)
         K = (-D2 * 0.5).exp()
-        retVal += K*b
+        if sInd == 0:
+            retVal = K*b
+        else:
+            retVal += K*b
     return retVal.sum_reduction(axis=1)
 
 
@@ -186,9 +198,6 @@ def HamiltonianSystem(K0, sigma, d,numS,alpha,gamma):
 
     def HS(p, q):
         Gp, Gq = grad(H(p, q), (p, q), create_graph=True)
-        print("Gp and Gq are ")
-        print(Gp.detach().cpu().numpy())
-        print(Gq.detach().cpu().numpy())
         return -Gq, Gp
 
     return HS
@@ -206,9 +215,6 @@ def HamiltonianSystemGrid(K0,sigma,d,numS,alpha,gamma):
         gx = qgrid.view(-1,d)
         gw = qgridw.view(-1,1)
         Gp,Gq = grad(H(p,q), (p,q), create_graph=True)
-        print("Gp, Gq shape")
-        print(Gp.detach().shape)
-        print(Gq.detach().shape)
         A,tau = getATau(px,qx,qw,alpha,gamma)
         xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0))
         '''                                              
@@ -226,12 +232,6 @@ def HamiltonianSystemGrid(K0,sigma,d,numS,alpha,gamma):
         Gg = (GaussKernelU(sigma,d)(gx,qx,px,pw*qw) + (gx-xc)@A.T + tau).flatten()
         Ggw = (GaussKernelUdiv(sigma,d)(gx,qx,px,pw*qw)*gw).flatten()
                                                    
-        print("qgrid and qgridw shape")
-        print(qgrid.detach().shape)
-        print(qgridw.detach().shape)
-        print("Gg and Ggw shape")
-        print(Gg.detach().shape)
-        print(Ggw.detach().shape)
         return -Gq,Gp,Gg,Ggw
     
     return HS
@@ -247,12 +247,6 @@ def Shooting(p0, q0, K0, K1, sigma,d, numS,alpha,gamma,nt=10, Integrator=Ralston
 def LDDMMloss(K0, K1, sigma, d, numS,alpha,gamma,dataloss, c=1.0):
     def loss(p0, q0):
         p, q = Shooting(p0, q0, K0, K1, sigma, d,numS,alpha,gamma)[-1]
-        print("p,q after shooting ") 
-        print(p.detach().cpu().numpy())
-        print(q.detach().cpu().numpy())
-        #print("conservation of momentum")
-        #ptemp = np.copy(p.detach().cpu().numpy())
-        #print(np.sum(np.sqrt(np.sum((ptemp)**2,axis=-1))))
         return c * Hamiltonian(K0, sigma, d,numS,alpha,gamma)(p0, q0), dataloss(q)
         #return dataloss(q)
 
@@ -300,25 +294,19 @@ def makePQ(S,nu_S,T,nu_T):
     zeta_T = (nu_T/w_T).type(dtype)
     numS = w_S.shape[0]
     q0 = torch.cat((w_S.clone().detach().flatten(),S.clone().detach().flatten()),0).requires_grad_(True).type(dtype) # not adding extra element for xc
-    print("q0 shape")
-    print(q0.detach().shape)
     p0 = (torch.zeros_like(q0)).requires_grad_(True).type(dtype)
     
     return w_S,w_T,zeta_S,zeta_T,q0,p0,numS
 
 def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, its=100,beta=0.1):
     w_S, w_T,zeta_S,zeta_T,q0,p0,numS = makePQ(S,nu_S,T,nu_T)
-    print("data types")
-    print(T.dtype)
-    print(w_T.dtype)
-    print(zeta_T.dtype)
     cst, dataloss = lossVarifoldNorm(T,w_T,zeta_T,zeta_S,GaussLinKernel(sigma=sigmaVar,d=d,l=labs),d,numS,beta=beta)
     Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d)
     Kv = GaussKernelB(sigma=sigmaRKHS,d=d)
 
     loss = LDDMMloss(Kg,Kv,sigmaRKHS,d, numS, alpha,gamma, dataloss)
 
-    optimizer = torch.optim.LBFGS([p0], max_eval=11, max_iter=10,line_search_fn = 'strong_wolfe',history_size=10)
+    optimizer = torch.optim.LBFGS([p0], max_eval=15, max_iter=10,line_search_fn = 'strong_wolfe',history_size=10)
     print("performing optimization...")
     start = time.time()
     
@@ -343,8 +331,11 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, i
     
     for i in range(its):
         print("it ", i, ": ", end="")
-        optimizer.step(closure)
-        LH,LDA = loss(p0,q0)
+        optimizer.step(closure) # default of 25 iterations in strong wolfe line search; will compute evals and iters until 25 unless reaches an optimum 
+        print("state of optimizer")
+        print(optimizer.state_dict())
+        with torch.no_grad():
+            LH,LDA = loss(p0,q0)
         lossOnlyH.append(np.copy(LH.detach().cpu().numpy()))
         lossOnlyDA.append(np.copy(LDA.detach().cpu().numpy()))
     print("Optimization (L-BFGS) time: ", round(time.time() - start, 2), " seconds")

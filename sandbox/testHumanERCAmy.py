@@ -23,7 +23,7 @@ def main():
     labs = 3
     sigmaRKHS = 20.0
     sigmaVar = 20.0
-    its = 10
+    its = 5
     alphaSt = 'BEIALE'
     beta = 1.0
     res=1.0
