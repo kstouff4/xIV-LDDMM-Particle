@@ -13,6 +13,15 @@ import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 
+def applyAffine(Z, nu_Z, A, tau):
+    '''
+    Makes a new set of particles based on an input set and applying the affine transformation given by matrix A and translation, tau
+    '''
+    R = torch.clone(Z)
+    nu_R = torch.clone(nu_Z)
+    R = R@A.T + tau
+    return R,nu_R
+
 def readFromPrevious(npzFile):
     '''
     Assumes source deformed to target previously.

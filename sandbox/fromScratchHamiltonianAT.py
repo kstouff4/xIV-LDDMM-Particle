@@ -176,6 +176,8 @@ def Hamiltonian(K0, sigma, d,numS,alpha,gamma):
         #print("h2 is, ", h2.detach())
         A,tau = getATau(px,qx,qw,alpha,gamma) #getAtau( = (1.0/(2*alpha))*(px.T@(qx-qc) - (qx-qc).T@px) # should be d x d
         Anorm = (A*A).sum()
+        print("Anorm is, ", (torch.clone(alpha).cpu().numpy()/2.0)*torch.clone(Anorm).detach().cpu().numpy())
+        print("tauNorm is, ", (torch.clone(gamma).cpu().numpy()/2.0)*(np.sum(torch.clone(tau).detach().cpu().numpy()*torch.clone(tau).detach().cpu().numpy())))
 
         #print("Anorm, ", Anorm)
         #h2 = (px*((qx-qc)@A.T)).sum()
@@ -333,11 +335,15 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, i
         print("it ", i, ": ", end="")
         optimizer.step(closure) # default of 25 iterations in strong wolfe line search; will compute evals and iters until 25 unless reaches an optimum 
         print("state of optimizer")
-        print(optimizer.state_dict())
+        osd = optimizer.state_dict()
+        print(osd)
+        '''
         with torch.no_grad():
             LH,LDA = loss(p0,q0)
         lossOnlyH.append(np.copy(LH.detach().cpu().numpy()))
         lossOnlyDA.append(np.copy(LDA.detach().cpu().numpy()))
+        '''
+        lossOnlyH.append(np.copy(osd['state'][0]['prev_loss']))
     print("Optimization (L-BFGS) time: ", round(time.time() - start, 2), " seconds")
 
     f,ax = plt.subplots()
@@ -357,9 +363,9 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, i
     f.savefig(savedir + 'RelativeLossVarifoldNorm.png',dpi=300)
     
     f,ax = plt.subplots()
-    ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyH),label="H($q_0$,$p_0$), Final = {0:.2f}".format(lossOnlyH[-1]))
-    ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyDA),label="Varifold Norm, Final = {0:.2f}".format(lossOnlyDA[-1]))
-    ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyDA)+np.asarray(lossOnlyH),label="Total Cost, Final = {0:.2f}".format(lossOnlyDA[-1]+lossOnlyH[-1]))
+    ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyH),label="TotLoss, Final = {0:.2f}".format(lossOnlyH[-1]))
+    #ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyDA),label="Varifold Norm, Final = {0:.2f}".format(lossOnlyDA[-1]))
+    #ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyDA)+np.asarray(lossOnlyH),label="Total Cost, Final = {0:.2f}".format(lossOnlyDA[-1]+lossOnlyH[-1]))
     ax.set_title("Loss")
     ax.set_xlabel("Iterations")
     ax.legend()
