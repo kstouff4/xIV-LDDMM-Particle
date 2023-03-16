@@ -12,6 +12,11 @@ def getLocalDensity(Z,nu_Z,sigma,savename,coef=3):
     '''
     Compute local density in cube of size 2sigma x 2sigma x 2sigma
     '''
+    if (len(nu_Z.shape) < 2):
+        nu_Z = nu_Z[...,None]
+    if (nu_Z.shape[-1] == 1):
+        nu_Z = np.zeros_like(nu_Z) + 1.0
+        print("nu_Z shape is, ", nu_Z.shape)
     cSize = coef*sigma
     bbSize = np.round(1+np.max(Z,axis=(0,1)) - np.min(Z,axis=(0,1))-1)
     
@@ -39,9 +44,10 @@ def getLocalDensity(Z,nu_Z,sigma,savename,coef=3):
     imageDensity = []
     imageNames.append('TotalDensity')
     imageDensity.append(np.sum(cubes_mrna,axis=-1))
-    for f in range(nu_Z.shape[-1]):
-        imageNames.append('Feature' + str(f) + '_Density')
-        imageDensity.append(cubes_mrna[:,f])
+    if (nu_Z.shape[-1] > 1):
+        for f in range(nu_Z.shape[-1]):
+            imageNames.append('Feature' + str(f) + '_Density')
+            imageDensity.append(cubes_mrna[:,f])
     vtf.writeVTK(centroidsPlot,imageDensity,imageNames,savename,polyData=None)
     return
 

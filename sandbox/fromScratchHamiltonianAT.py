@@ -12,8 +12,8 @@ pykeops.set_build_folder("~/.cache/keop" + pykeops.__version__ + "_" + (socket.g
 
 from pykeops.torch import Vi, Vj
 
-np_dtype = "float64" #"float32"
-dtype = torch.cuda.DoubleTensor #FloatTensor 
+np_dtype = "float32" #"float32"
+dtype = torch.cuda.FloatTensor #FloatTensor 
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
@@ -28,6 +28,10 @@ import sys
 from sys import path as sys_path
 sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
 import vtkFunctions as vtf
+sys_path.append('..')
+sys_path.append('../xmodmap')
+sys_path.append('../xmodmap/io')
+import initialize as gi
 
 
 # Kernels
@@ -60,7 +64,7 @@ def GaussKernelHamiltonianExtra(sigma,d,gamma):
 
 def GaussKernelU(sigma,d):
     xO,qyO,py,wpyO = Vi(0,d), Vj(1,d), Vj(2,d), Vj(3,1)
-    retVal = xO.sqdist(qyO)*torch.tensor(0).type(dtype)
+    #retVal = xO.sqdist(qyO)*torch.tensor(0).type(dtype)
     for sInd in range(len(sigma)):
         sig = sigma[sInd]
         x,qy,wpy = xO/sig, qyO/sig, wpyO/sig
@@ -75,7 +79,7 @@ def GaussKernelU(sigma,d):
 
 def GaussKernelUdiv(sigma,d):
     xO,qyO,py,wpyO = Vi(0,d), Vj(1,d), Vj(2,d), Vj(3,1)
-    retVal = xO.sqdist(qyO)*torch.tensor(0).type(dtype)
+    #retVal = xO.sqdist(qyO)*torch.tensor(0).type(dtype)
     for sInd in range(len(sigma)):
         sig = sigma[sInd]
         x,qy,wpy = xO/sig, qyO/sig, wpyO/sig
@@ -98,7 +102,7 @@ def GaussLinKernel(sigma,d,l):
 def GaussKernelB(sigma,d):
     # b is px (spatial momentum)
     xO, yO, b = Vi(0, d), Vj(1, d), Vj(2,d)
-    retVal = xO.sqdist(yO)*torch.tensor(0).type(dtype)
+    #retVal = xO.sqdist(yO)*torch.tensor(0).type(dtype)
     for sInd in range(len(sigma)):
         sig = sigma[sInd]
         x,y = xO/sig, yO/sig
@@ -138,7 +142,7 @@ def RalstonIntegrator():
 
 #################################################################
 # Hamiltonian 
-def Hamiltonian(K0, sigma, d,numS,alpha,gamma):
+def Hamiltonian(K0, sigma, d,numS,gammaA,gammaT,gammaU):
     # K0 = GaussKernelHamiltonian(x,x,px,px,w*pw,w*pw)
     def H(p, q):
         px = p[numS:].view(-1,d)
@@ -174,16 +178,16 @@ def Hamiltonian(K0, sigma, d,numS,alpha,gamma):
         print(k.detach().cpu().numpy())
         #print("h is, ", h.detach())
         #print("h2 is, ", h2.detach())
-        A,tau = getATau(px,qx,qw,alpha,gamma) #getAtau( = (1.0/(2*alpha))*(px.T@(qx-qc) - (qx-qc).T@px) # should be d x d
+        A,tau = getATau(px,qx,qw,gammaA,gammaT) #getAtau( = (1.0/(2*alpha))*(px.T@(qx-qc) - (qx-qc).T@px) # should be d x d
         Anorm = (A*A).sum()
-        print("Anorm is, ", (torch.clone(alpha).cpu().numpy()/2.0)*torch.clone(Anorm).detach().cpu().numpy())
-        print("tauNorm is, ", (torch.clone(gamma).cpu().numpy()/2.0)*(np.sum(torch.clone(tau).detach().cpu().numpy()*torch.clone(tau).detach().cpu().numpy())))
+        print("Anorm is, ", (torch.clone(gammaA).cpu().numpy()/2.0)*torch.clone(Anorm).detach().cpu().numpy())
+        print("tauNorm is, ", (torch.clone(gammaT).cpu().numpy()/2.0)*(np.sum(torch.clone(tau).detach().cpu().numpy()*torch.clone(tau).detach().cpu().numpy())))
 
         #print("Anorm, ", Anorm)
         #h2 = (px*((qx-qc)@A.T)).sum()
         #print("h2, ", h2)
         
-        return k.sum() + (alpha/2.0)*Anorm + (gamma/2.0)*(tau*tau).sum() #h.sum() + 0.5*torch.sum(pc*pc) + torch.sum(h2) 
+        return (gammaU)*k.sum() + (gammaA/2.0)*Anorm + (gamma/2.0)*(tau*tau).sum() #h.sum() + 0.5*torch.sum(pc*pc) + torch.sum(h2) 
 
     return H
 
@@ -195,8 +199,8 @@ def getATau(px,qx,qw,alpha,gamma):
     print("tau is, ", tau.detach().cpu().numpy())
     return A,tau
 
-def HamiltonianSystem(K0, sigma, d,numS,alpha,gamma):
-    H = Hamiltonian(K0, sigma, d, numS,alpha,gamma)
+def HamiltonianSystem(K0, sigma, d,numS,gammaA,gammaT,gammaU):
+    H = Hamiltonian(K0, sigma, d, numS,gammaA,gammaT,gammaU)
 
     def HS(p, q):
         Gp, Gq = grad(H(p, q), (p, q), create_graph=True)
@@ -205,8 +209,8 @@ def HamiltonianSystem(K0, sigma, d,numS,alpha,gamma):
     return HS
 
 # Katie change this to include A and T for the grid 
-def HamiltonianSystemGrid(K0,sigma,d,numS,alpha,gamma):
-    H = Hamiltonian(K0,sigma,d,numS,alpha,gamma)
+def HamiltonianSystemGrid(K0,sigma,d,numS,gammaA,gammaT,gammaU):
+    H = Hamiltonian(K0,sigma,d,numS,gammaA,gammaT,gammaU)
     def HS(p,q,qgrid,qgridw):
         px = p[numS:].view(-1,d)
         pw = p[:numS].view(-1,1)
@@ -217,7 +221,7 @@ def HamiltonianSystemGrid(K0,sigma,d,numS,alpha,gamma):
         gx = qgrid.view(-1,d)
         gw = qgridw.view(-1,1)
         Gp,Gq = grad(H(p,q), (p,q), create_graph=True)
-        A,tau = getATau(px,qx,qw,alpha,gamma)
+        A,tau = getATau(px,qx,qw,gammaA,gammaT)
         xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0))
         '''                                              
         gxt = Vi(gx)/sigma
@@ -242,20 +246,20 @@ def HamiltonianSystemGrid(K0,sigma,d,numS,alpha,gamma):
 ##################################################################
 # Shooting
 
-def Shooting(p0, q0, K0, K1, sigma,d, numS,alpha,gamma,nt=10, Integrator=RalstonIntegrator()):
-    return Integrator(HamiltonianSystem(K0,sigma,d,numS,alpha,gamma), (p0, q0), nt)
+def Shooting(p0, q0, K0, K1, sigma,d, numS,gammaA,gammaT,gammaU,nt=10, Integrator=RalstonIntegrator()):
+    return Integrator(HamiltonianSystem(K0,sigma,d,numS,gammaA,gammaT,gammaU), (p0, q0), nt)
 
 
-def LDDMMloss(K0, K1, sigma, d, numS,alpha,gamma,dataloss, c=1.0):
+def LDDMMloss(K0, K1, sigma, d, numS,gammaA,gammaT,gammaU,dataloss, c=1.0):
     def loss(p0, q0):
-        p, q = Shooting(p0, q0, K0, K1, sigma, d,numS,alpha,gamma)[-1]
-        return c * Hamiltonian(K0, sigma, d,numS,alpha,gamma)(p0, q0), dataloss(q)
+        p, q = Shooting(p0, q0, K0, K1, sigma, d,numS,gammaA,gammaT,gammaU)[-1]
+        return c * Hamiltonian(K0, sigma, d,numS,gammaA,gammaT,gammaU)(p0, q0), dataloss(q)
         #return dataloss(q)
 
     return loss
 
-def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,alpha,gamma,nt=10,Integrator=RalstonIntegrator()):
-    return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS,alpha,gamma), (p0,q0,qGrid,qGridw),nt)
+def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,gammaA,gammaT,gammaU,nt=10,Integrator=RalstonIntegrator()):
+    return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS,gammaA,gammaT,gammaU), (p0,q0,qGrid,qGridw),nt)
 
 #################################################################
 # Data Attachment Term
@@ -295,18 +299,33 @@ def makePQ(S,nu_S,T,nu_T):
     zeta_S = (nu_S/w_S).type(dtype)
     zeta_T = (nu_T/w_T).type(dtype)
     numS = w_S.shape[0]
-    q0 = torch.cat((w_S.clone().detach().flatten(),S.clone().detach().flatten()),0).requires_grad_(True).type(dtype) # not adding extra element for xc
+    
+    Stilde, Ttilde, s, m = gi.rescaleData(S,T)
+    
+    q0 = torch.cat((w_S.clone().detach().flatten(),Stilde.clone().detach().flatten()),0).requires_grad_(True).type(dtype) # not adding extra element for xc
     p0 = (torch.zeros_like(q0)).requires_grad_(True).type(dtype)
     
-    return w_S,w_T,zeta_S,zeta_T,q0,p0,numS
+    return w_S,w_T,zeta_S,zeta_T,q0,p0,numS, Stilde, Ttilde, s, m
 
-def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, its=100,beta=0.1):
-    w_S, w_T,zeta_S,zeta_T,q0,p0,numS = makePQ(S,nu_S,T,nu_T)
-    cst, dataloss = lossVarifoldNorm(T,w_T,zeta_T,zeta_S,GaussLinKernel(sigma=sigmaVar,d=d,l=labs),d,numS,beta=beta)
+def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, savedir, its=100,beta=None):
+    w_S, w_T,zeta_S,zeta_T,q0,p0,numS,Stilde,Ttilde,s,m = makePQ(S,nu_S,T,nu_T)
+    N = torch.tensor(S.shape[0]).type(dtype)
+    print("sigmaRKHS, ", sigmaRKHS)
+    print("sigmaVar, ", sigmaVar)
+    
+    if (beta is None):
+        # set beta to make ||mu_S - mu_T||^2 = 1
+        Kinit = GaussLinKernel(sigma=sigmaVar,d=d,l=labs)
+        cinit = Kinit(Ttilde,Ttilde,w_T*zeta_T,w_T*zeta_T).sum()
+        k1 = Kinit(Stilde, Stilde, w_S*zeta_S, w_S*zeta_S)
+        k2 = Kinit(Stilde, Ttilde, w_S*zeta_S, w_T*zeta_T)
+        beta = 2.0/(cinit + k1.sum() - 2*k2.sum())
+    
+    cst, dataloss = lossVarifoldNorm(Ttilde,w_T,zeta_T,zeta_S,GaussLinKernel(sigma=sigmaVar,d=d,l=labs),d,numS,beta=beta)
     Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d)
     Kv = GaussKernelB(sigma=sigmaRKHS,d=d)
 
-    loss = LDDMMloss(Kg,Kv,sigmaRKHS,d, numS, alpha,gamma, dataloss)
+    loss = LDDMMloss(Kg,Kv,sigmaRKHS,d, numS, gammaA,gammaT,gammaU, dataloss)
 
     optimizer = torch.optim.LBFGS([p0], max_eval=15, max_iter=10,line_search_fn = 'strong_wolfe',history_size=10)
     print("performing optimization...")
@@ -320,7 +339,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, i
     lossOnlyDA = []
     def closure():
         optimizer.zero_grad()
-        LH,LDA = loss(p0, q0)
+        LH,LDA = loss(p0/torch.sqrt(N), q0)
         L = LH+LDA
         print("loss", L.detach().cpu().numpy())
         print("loss H ", LH.detach().cpu().numpy())
@@ -410,21 +429,22 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, i
     numG = qGrid.shape[0]
     qGrid = qGrid.flatten()
     qGridw = torch.ones((numG)).type(dtype)
-    listpq = ShootingGrid(p0,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,alpha,gamma)
+    listpq = ShootingGrid(p0,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,gammaA,gammaT,gammaU)
+    print("length of pq list is, ", len(listpq))
     Dlist = []
     nu_Dlist = []
     Glist = []
     wGlist = []
-    for t in range(10):
+    for t in range(len(listpq)):
         qnp = listpq[t][1]
         D = qnp[numS:].detach().view(-1,d).cpu().numpy()
         muD = qnp.detach().cpu().numpy()
         nu_D = np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
-        Dlist.append(D)
+        Dlist.append(gi.resizeData(D,s,m))
         nu_Dlist.append(nu_D)
         gt = listpq[t][2]
         G = gt.detach().view(-1,d).cpu().numpy()
-        Glist.append(G)
+        Glist.append(gi.resizeData(G,s,m))
         gw = listpq[t][3]
         W = gw.detach().cpu().numpy()
         wGlist.append(W)
@@ -439,7 +459,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,alpha,gamma,d,labs, savedir, i
     featsp0 = np.zeros((numS*2,1))
     featsp0[numS:,:] = p0[0:numS].detach().view(-1,1).cpu().numpy()
     vtf.writeVTK(listSp0,[featsp0],['p0_w'],savedir + 'testOutput_p0.vtk',polyData=polyListSp0)
-    A,tau = getATau(p0[numS:].view(-1,d),q0[numS:].view(-1,d),q0[:numS].view(-1,1),alpha,gamma)
-    np.savez(savedir + 'testOutput_values.npz',A0=A.detach().cpu().numpy(),tau0=tau.detach().cpu().numpy(),p0=p0.detach().cpu().numpy(),q0=q0.detach().cpu().numpy())
+    A,tau = getATau(p0[numS:].view(-1,d),q0[numS:].view(-1,d),q0[:numS].view(-1,1),gammaA,gammaT)
+    np.savez(savedir + 'testOutput_values.npz',A0=A.detach().cpu().numpy(),tau0=tau.detach().cpu().numpy(),p0=p0.detach().cpu().numpy(),q0=q0.detach().cpu().numpy())    
     
     return Dlist, nu_Dlist, Glist, wGlist

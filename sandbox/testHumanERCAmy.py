@@ -15,8 +15,8 @@ import torch
 from fromScratchHamiltonianAT import *
 from analyzeOutput import *
 
-np_dtype = "float64" # "float32"
-dtype = torch.cuda.DoubleTensor #FloatTensor 
+np_dtype = "float32" # "float64"
+dtype = torch.cuda.FloatTensor #DoubleTensor 
 
 import nibabel as nib
 
@@ -25,14 +25,17 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 def main():
     d = 3
     labs = 3
-    sigmaRKHS = 10.0
-    sigmaVar = 20.0
+    sigmaRKHS = [0.25] # as of 3/16, should be fraction of total domain of S+T #[10.0]
+    sigmaVar = 0.25 # as of 3/16, should be fraction of total domain of S+T #10.0
     its = 25
-    alphaSt = 'BEIALE-SAME'
-    beta = 1.0
+    alphaSt = 'BEIALE-ROT'
+    beta = None
     res=1.0
-    alpha = 1000.0
-    gamma = 0.01
+    
+    # Set these parameters according to relative decrease you expect in data attachment term
+    gammaA = 0.01 #10.0
+    gammaT = 0.01 #0.1
+    gammaU = 0.01*2.0*sigmaRKHS[0]**3
     
     original = sys.stdout
 
@@ -71,13 +74,16 @@ def main():
     nu_S = nu_S[toKeep]
     N = S.shape[0]
     
+    # Debugging
+    '''
     tauStart = torch.zeros((1,d)).type(dtype)
     tauStart[:,0] = -5.5
     tauStart[:,1] = 25.0
     tauStart[:,2] = -15.5
     T,nu_T = gi.applyAffine(S,nu_S,torch.eye(d).type(dtype),tauStart)
-    
     '''
+    
+    
     imgFile = imgPref+'170516/AMYGDALA+ERC+TEC.img'
     im = nib.load(imgFile)
     imageO = np.asanyarray(im.dataobj).astype('float32')
@@ -105,7 +111,10 @@ def main():
     toKeep = nu_T.sum(axis=-1) > 0
     T = T[toKeep]
     nu_T = nu_T[toKeep]
-    '''
+    
+    # Trying Rotation manually 
+    Arot = gi.get3DRotMatrix(torch.tensor(np.pi/4.0),torch.tensor(np.pi/2.0),torch.tensor(3.0*np.pi/2.0))
+    T,nu_T = gi.applyAffine(T,nu_T,Arot,torch.zeros((1,d)).type(dtype))
 
     #S,nu_XS = ess.makeAllXandZ(imgPref+'150318/AMYGDALA+ERC+TEC.img', outpath+'ABEBER_150318_', thickness=-1, res=1.0,sig=0.1,C=-1,flip=False)
     #T,nu_XT = ess.makeAllXandZ(imgPref+'170831/AMYGDALA+ERC+TEC.img', outpath+'ABEBER_170831_', thickness=-1, res=1.0,sig=0.1,C=-1,flip=False)
@@ -135,8 +144,12 @@ def main():
     '''
     
     N = S.shape[0]
+    if (alpha is None):
+        alpha = np.sqrt(N)
+    if (gamma is None):
+        gamma = np.sqrt(N)
     
-    savedir = outpath + '/output_dl_sig_its_albega_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(alpha) + str(beta) + str(gamma) + '_' + str(N) + '/'
+    savedir = outpath + '/output_dl_sig_its_albega_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(gammaA) + str(beta) + str(gammaT) + str(gammaU) + '_' + str(N) + '/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
     
@@ -154,10 +167,10 @@ def main():
     
     #Dlist, nu_Dlist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),d,labs,savedir,its=its,beta=beta)
     sigmaRKHSlist = []
-    for sigg in sigmaRKHSlist:
+    for sigg in sigmaRKHS:
         sigmaRKHSlist.append(torch.tensor(sigg).type(dtype))
         
-    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,torch.tensor(sigmaVar).type(dtype),torch.tensor(alpha).type(dtype),torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,beta=beta)
+    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,torch.tensor(sigmaVar).type(dtype),torch.tensor(gammaA).type(dtype),torch.tensor(gammaT).type(dtype),torch.tensor(gammaU).type(dtype),d,labs,savedir,its=its)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
