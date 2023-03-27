@@ -12,8 +12,8 @@ pykeops.set_build_folder("~/.cache/keop" + pykeops.__version__ + "_" + (socket.g
 
 from pykeops.torch import Vi, Vj
 
-np_dtype = "float32" #"float32"
-dtype = torch.cuda.FloatTensor #FloatTensor 
+np_dtype = "float64" #"float32"
+dtype = torch.cuda.DoubleTensor #FloatTensor 
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
@@ -45,9 +45,9 @@ def GaussKernelHamiltonian(sigma,d):
         K = (-D2 * 0.5).exp()
         h = 0.5*(px*py).sum() + wpy*((qx - qy)*px).sum() - (0.5) * wpx*wpy*(D2 - d)
         if sInd == 0:
-            retVal = K*h
+            retVal = sig*K*h # normalize by sig
         else:
-            retVal += K*h
+            retVal += sig*K*h # normalize by sig 
     return retVal.sum_reduction(axis=1) #(K*h).sum_reduction(axis=1) #,  h2, h3.sum_reduction(axis=1) 
 
 def GaussKernelHamiltonianExtra(sigma,d,gamma):
@@ -92,12 +92,18 @@ def GaussKernelUdiv(sigma,d):
             retVal += (K*h) #.sum_reduction(axis=1)
     return retVal.sum_reduction(axis=1) # G x 1
 
-def GaussLinKernel(sigma,d,l):
+def GaussLinKernel(sigma,d,l,beta):
     # u and v are the feature vectors 
     x, y, u, v = Vi(0, d), Vj(1, d), Vi(2, l), Vj(3, l)
     D2 = x.sqdist(y)
-    K = (-D2 / (2.0*sigma*sigma)).exp() * (u * v).sum() 
-    return (K).sum_reduction(axis=1)
+    for sInd in range(len(sigma)):
+        sig = sigma[sInd]
+        K = (-D2 / (2.0*sig*sig)).exp() * (u * v).sum()
+        if sInd == 0:
+            retVal = beta[sInd]*K 
+        else:
+            retVal += beta[sInd]*K
+    return (retVal).sum_reduction(axis=1)
 
 def GaussKernelB(sigma,d):
     # b is px (spatial momentum)
@@ -181,13 +187,14 @@ def Hamiltonian(K0, sigma, d,numS,gammaA,gammaT,gammaU):
         A,tau = getATau(px,qx,qw,gammaA,gammaT) #getAtau( = (1.0/(2*alpha))*(px.T@(qx-qc) - (qx-qc).T@px) # should be d x d
         Anorm = (A*A).sum()
         print("Anorm is, ", (torch.clone(gammaA).cpu().numpy()/2.0)*torch.clone(Anorm).detach().cpu().numpy())
+        print("tau is, ", torch.clone(tau).detach().cpu().numpy())
         print("tauNorm is, ", (torch.clone(gammaT).cpu().numpy()/2.0)*(np.sum(torch.clone(tau).detach().cpu().numpy()*torch.clone(tau).detach().cpu().numpy())))
 
         #print("Anorm, ", Anorm)
         #h2 = (px*((qx-qc)@A.T)).sum()
         #print("h2, ", h2)
         
-        return (gammaU)*k.sum() + (gammaA/2.0)*Anorm + (gamma/2.0)*(tau*tau).sum() #h.sum() + 0.5*torch.sum(pc*pc) + torch.sum(h2) 
+        return (gammaU)*k.sum() + (gammaA/2.0)*Anorm + (gammaT/2.0)*(tau*tau).sum() #h.sum() + 0.5*torch.sum(pc*pc) + torch.sum(h2) 
 
     return H
 
@@ -282,7 +289,7 @@ def lossVarifoldNorm(T,w_T,zeta_T,zeta_S,K,d,numS,beta):
         print(k2.detach().cpu().numpy())
               
         return (
-            (beta/2.0)*(cst
+            (1.0/2.0)*(cst
             + k1.sum()
             - 2 * k2.sum())
         )
@@ -307,27 +314,67 @@ def makePQ(S,nu_S,T,nu_T):
     
     return w_S,w_T,zeta_S,zeta_T,q0,p0,numS, Stilde, Ttilde, s, m
 
-def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, savedir, its=100,beta=None):
+def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, savedir, its=100,kScale = torch.tensor(1.0).type(dtype),cScale=torch.tensor(10.0).type(dtype),beta=None):
+    '''
+    Parameters:
+        S, nu_S = source image varifold
+        T, nu_T = target image varifold
+        sigmaRKHS = list of sigmas for RKHS of velocity vector field (assumed Gaussian)
+        sigmaVar = list of sigmas for varifold norm (assumed Gaussian)
+        gammaA = weight on norm of infinitesimal rotation A (should be based on varifold norm in end decreasing to 0.01)
+        gammaT = weight on norm of infinitesimal translation tau (should be based on varifold norm in end decreasing to 0.01)
+        gammaU = weight on norm of velocity vector field (should be based on varifold norm in end decreasing to 0.01)
+        d = dimensions of space
+        labs = dimensions of feature space
+        savedir = location to save cost graphs and p0 in
+        its = iterations of LBFGS steps (each step has max 10 iterations and 15 evaluations of objective function)
+        kScale = multiplicative factor of particles if applying parameter settings for one set of particles to another (larger), with assumption that mass has been conserved
+        cScale = factor to divide p_xi by to ensure initial guess for tau and A are not too big 
+        beta = computed to scale the varifold norm initially to 1; overridden with desired value if not None
+    '''
     w_S, w_T,zeta_S,zeta_T,q0,p0,numS,Stilde,Ttilde,s,m = makePQ(S,nu_S,T,nu_T)
     N = torch.tensor(S.shape[0]).type(dtype)
+    s = s.cpu().numpy()
+    m = m.cpu().numpy()
     print("sigmaRKHS, ", sigmaRKHS)
     print("sigmaVar, ", sigmaVar)
+    pTilde = torch.zeros_like(p0).type(dtype)
+    pTilde[0:numS] = kScale #torch.sqrt(kScale)*torch.sqrt(kScale)
+    pTilde[numS:] = torch.tensor(1.0).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
+
     
     if (beta is None):
         # set beta to make ||mu_S - mu_T||^2 = 1
-        Kinit = GaussLinKernel(sigma=sigmaVar,d=d,l=labs)
-        cinit = Kinit(Ttilde,Ttilde,w_T*zeta_T,w_T*zeta_T).sum()
-        k1 = Kinit(Stilde, Stilde, w_S*zeta_S, w_S*zeta_S)
-        k2 = Kinit(Stilde, Ttilde, w_S*zeta_S, w_T*zeta_T)
-        beta = 2.0/(cinit + k1.sum() - 2*k2.sum())
-    
-    cst, dataloss = lossVarifoldNorm(Ttilde,w_T,zeta_T,zeta_S,GaussLinKernel(sigma=sigmaVar,d=d,l=labs),d,numS,beta=beta)
+        if len(sigmaVar) == 1:
+            Kinit = GaussLinKernel(sigma=sigmaVar,d=d,l=labs,beta=[torch.tensor(1.0).type(dtype)])
+            cinit = Kinit(Ttilde,Ttilde,w_T*zeta_T,w_T*zeta_T).sum()
+            k1 = Kinit(Stilde, Stilde, w_S*zeta_S, w_S*zeta_S)
+            k2 = Kinit(Stilde, Ttilde, w_S*zeta_S, w_T*zeta_T)
+            beta = torch.tensor(2.0/(cinit + k1.sum() - 2*k2.sum())).type(dtype)
+        
+        # print out indiviual costs
+        else:
+            print("different varifold norm at beginning")
+            beta = []
+            for sig in sigmaVar:
+                print("sig is ", sig.detach().cpu().numpy())
+                Kinit = GaussLinKernel(sigma=[sig],d=d,l=labs,beta=[torch.tensor(1.0).type(dtype)])
+                cinit = Kinit(Ttilde,Ttilde,w_T*zeta_T,w_T*zeta_T).sum()
+                k1 = Kinit(Stilde, Stilde, w_S*zeta_S, w_S*zeta_S).sum()
+                k2 = -2*Kinit(Stilde, Ttilde, w_S*zeta_S, w_T*zeta_T).sum()
+                beta.append(torch.tensor(2.0/(cinit + k1 + k2)).type(dtype))
+                print("mu source norm ", k1.detach().cpu().numpy())
+                print("mu target norm ", cinit.detach().cpu().numpy())
+                print("total norm ", (cinit + k1 + k2).detach().cpu().numpy())
+            
+    print("beta is ", beta.detach().cpu().numpy())
+    cst, dataloss = lossVarifoldNorm(Ttilde,w_T,zeta_T,zeta_S,GaussLinKernel(sigma=sigmaVar,d=d,l=labs,beta=beta),d,numS,beta=beta)
     Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d)
     Kv = GaussKernelB(sigma=sigmaRKHS,d=d)
 
     loss = LDDMMloss(Kg,Kv,sigmaRKHS,d, numS, gammaA,gammaT,gammaU, dataloss)
 
-    optimizer = torch.optim.LBFGS([p0], max_eval=15, max_iter=10,line_search_fn = 'strong_wolfe',history_size=10)
+    optimizer = torch.optim.LBFGS([p0], max_eval=15, max_iter=10,line_search_fn = 'strong_wolfe',history_size=10,tolerance_grad=1e-8,tolerance_change=1e-10)
     print("performing optimization...")
     start = time.time()
     
@@ -339,7 +386,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, s
     lossOnlyDA = []
     def closure():
         optimizer.zero_grad()
-        LH,LDA = loss(p0/torch.sqrt(N), q0)
+        LH,LDA = loss(p0*pTilde, q0)
         L = LH+LDA
         print("loss", L.detach().cpu().numpy())
         print("loss H ", LH.detach().cpu().numpy())
@@ -366,9 +413,9 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, s
     print("Optimization (L-BFGS) time: ", round(time.time() - start, 2), " seconds")
 
     f,ax = plt.subplots()
-    ax.plot(np.arange(len(lossListH)),np.asarray(lossListH),label="H($q_0$,$p_0$), Final = {0:.2f}".format(lossListH[-1]))
-    ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA),label="Varifold Norm, Final = {0:.2f}".format(lossListDA[-1]))
-    ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA)+np.asarray(lossListH),label="Total Cost, Final = {0:.2f}".format(lossListDA[-1]+lossListH[-1]))
+    ax.plot(np.arange(len(lossListH)),np.asarray(lossListH),label="H($q_0$,$p_0$), Final = {0:.6f}".format(lossListH[-1]))
+    ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA),label="Varifold Norm, Final = {0:.6f}".format(lossListDA[-1]))
+    ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA)+np.asarray(lossListH),label="Total Cost, Final = {0:.6f}".format(lossListDA[-1]+lossListH[-1]))
     ax.set_title("Loss")
     ax.set_xlabel("Iterations")
     ax.legend()
@@ -382,7 +429,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, s
     f.savefig(savedir + 'RelativeLossVarifoldNorm.png',dpi=300)
     
     f,ax = plt.subplots()
-    ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyH),label="TotLoss, Final = {0:.2f}".format(lossOnlyH[-1]))
+    ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyH),label="TotLoss, Final = {0:.6f}".format(lossOnlyH[-1]))
     #ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyDA),label="Varifold Norm, Final = {0:.2f}".format(lossOnlyDA[-1]))
     #ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyDA)+np.asarray(lossOnlyH),label="Total Cost, Final = {0:.2f}".format(lossOnlyDA[-1]+lossOnlyH[-1]))
     ax.set_title("Loss")
@@ -398,9 +445,9 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, s
         lossListDAdiff.append(lossListDA[i+1]-lossListDA[i])
         lossListTotdiff.append(lossListHdiff[i]+lossListDAdiff[i])
     f,ax = plt.subplots()
-    ax.plot(np.arange(len(lossListHdiff)),np.asarray(lossListHdiff),label="H($q_0$,$p_0$), Final = {0:.2f}".format(lossListHdiff[-1]))
-    ax.plot(np.arange(len(lossListHdiff)),np.asarray(lossListDAdiff),label="Varifold Norm, Final = {0:.2f}".format(lossListDAdiff[-1]))
-    ax.plot(np.arange(len(lossListHdiff)),np.asarray(lossListTotdiff),label="Total Cost, Final = {0:.2f}".format(lossListTotdiff[-1]))
+    ax.plot(np.arange(len(lossListHdiff)),np.asarray(lossListHdiff),label="H($q_0$,$p_0$), Final = {0:.6f}".format(lossListHdiff[-1]))
+    ax.plot(np.arange(len(lossListHdiff)),np.asarray(lossListDAdiff),label="Varifold Norm, Final = {0:.6f}".format(lossListDAdiff[-1]))
+    ax.plot(np.arange(len(lossListHdiff)),np.asarray(lossListTotdiff),label="Total Cost, Final = {0:.6f}".format(lossListTotdiff[-1]))
     ax.set_title("Difference in Loss")
     ax.set_xlabel("Iterations")
     ax.legend()
@@ -429,7 +476,8 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, s
     numG = qGrid.shape[0]
     qGrid = qGrid.flatten()
     qGridw = torch.ones((numG)).type(dtype)
-    listpq = ShootingGrid(p0,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,gammaA,gammaT,gammaU)
+
+    listpq = ShootingGrid(p0*pTilde,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,gammaA,gammaT,gammaU)
     print("length of pq list is, ", len(listpq))
     Dlist = []
     nu_Dlist = []
@@ -459,7 +507,8 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, s
     featsp0 = np.zeros((numS*2,1))
     featsp0[numS:,:] = p0[0:numS].detach().view(-1,1).cpu().numpy()
     vtf.writeVTK(listSp0,[featsp0],['p0_w'],savedir + 'testOutput_p0.vtk',polyData=polyListSp0)
-    A,tau = getATau(p0[numS:].view(-1,d),q0[numS:].view(-1,d),q0[:numS].view(-1,1),gammaA,gammaT)
+    pNew = pTilde*p0
+    A,tau = getATau(pNew[numS:].view(-1,d),q0[numS:].view(-1,d),q0[:numS].view(-1,1),gammaA,gammaT)
     np.savez(savedir + 'testOutput_values.npz',A0=A.detach().cpu().numpy(),tau0=tau.detach().cpu().numpy(),p0=p0.detach().cpu().numpy(),q0=q0.detach().cpu().numpy())    
     
     return Dlist, nu_Dlist, Glist, wGlist
