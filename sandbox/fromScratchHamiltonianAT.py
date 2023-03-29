@@ -31,11 +31,11 @@ import vtkFunctions as vtf
 sys_path.append('..')
 sys_path.append('../xmodmap')
 sys_path.append('../xmodmap/io')
-import initialize as gi
+import initialize as init
 
 
 # Kernels
-def GaussKernelHamiltonian(sigma,d):
+def GaussKernelHamiltonian(sigma,d,uCoeff):
     qxO,qyO,px,py,wpxO,wpyO = Vi(0,d), Vj(1,d), Vi(2,d), Vj(3,d), Vi(4,1), Vj(5,1)
     #retVal = qxO.sqdist(qyO)*torch.tensor(0).type(dtype)
     for sInd in range(len(sigma)):
@@ -43,11 +43,11 @@ def GaussKernelHamiltonian(sigma,d):
         qx,qy,wpx,wpy = qxO/sig, qyO/sig, wpxO/sig, wpyO/sig
         D2 = qx.sqdist(qy)
         K = (-D2 * 0.5).exp()
-        h = 0.5*(px*py).sum() + wpy*((qx - qy)*px).sum() - (0.5) * wpx*wpy*(D2 - d)
+        h = 0.5*(px*py).sum() + wpy*((qx - qy)*px).sum() - (0.5) * wpx*wpy*(D2 - d) # 1/2 factor included here
         if sInd == 0:
-            retVal = sig*K*h # normalize by sig
+            retVal = uCoeff[sInd]*K*h # normalize by N_sigma/(N sigma**2)
         else:
-            retVal += sig*K*h # normalize by sig 
+            retVal += uCoeff[sInd]*K*h 
     return retVal.sum_reduction(axis=1) #(K*h).sum_reduction(axis=1) #,  h2, h3.sum_reduction(axis=1) 
 
 def GaussKernelHamiltonianExtra(sigma,d,gamma):
@@ -118,6 +118,19 @@ def GaussKernelB(sigma,d):
             retVal = K*b
         else:
             retVal += K*b
+    return retVal.sum_reduction(axis=1)
+
+def GaussKernelSpace(sigma,d):
+    xi,xj = Vi(0,d), Vj(1,d)
+    for sInd in range(len(sigma)):
+        sig = sigma[sInd]
+        x,y = xi/sig, xj/sig
+        D2 = x.sqdist(y)
+        K = (-D2 * 0.5).exp()
+        if sInd == 0:
+            retVal = K
+        else:
+            retVal += K
     return retVal.sum_reduction(axis=1)
 
 
@@ -307,7 +320,7 @@ def makePQ(S,nu_S,T,nu_T):
     zeta_T = (nu_T/w_T).type(dtype)
     numS = w_S.shape[0]
     
-    Stilde, Ttilde, s, m = gi.rescaleData(S,T)
+    Stilde, Ttilde, s, m = init.rescaleData(S,T)
     
     q0 = torch.cat((w_S.clone().detach().flatten(),Stilde.clone().detach().flatten()),0).requires_grad_(True).type(dtype) # not adding extra element for xc
     p0 = (torch.zeros_like(q0)).requires_grad_(True).type(dtype)
@@ -340,7 +353,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, s
     print("sigmaVar, ", sigmaVar)
     pTilde = torch.zeros_like(p0).type(dtype)
     pTilde[0:numS] = kScale #torch.sqrt(kScale)*torch.sqrt(kScale)
-    pTilde[numS:] = torch.tensor(1.0).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
+    pTilde[numS:] = torch.sqrt(gammaT).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
 
     
     if (beta is None):
@@ -351,6 +364,8 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, s
             k1 = Kinit(Stilde, Stilde, w_S*zeta_S, w_S*zeta_S)
             k2 = Kinit(Stilde, Ttilde, w_S*zeta_S, w_T*zeta_T)
             beta = torch.tensor(2.0/(cinit + k1.sum() - 2*k2.sum())).type(dtype)
+            print("beta is ", beta.detach().cpu().numpy())
+            beta = [torch.tensor(2.0/(cinit + k1.sum() - 2*k2.sum())).type(dtype)]
         
         # print out indiviual costs
         else:
@@ -366,10 +381,14 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, s
                 print("mu source norm ", k1.detach().cpu().numpy())
                 print("mu target norm ", cinit.detach().cpu().numpy())
                 print("total norm ", (cinit + k1 + k2).detach().cpu().numpy())
-            
-    print("beta is ", beta.detach().cpu().numpy())
+    # Compute constants to weigh each kernel norm in RKHS by
+    uCoeff = []
+    for sig in sigmaRKHS:
+        Kinit = GaussKernelSpace(sigma=sig,d=d)
+        uCoeff.append(torch.clone((1.0/(N*sig))*Kinit(Stilde,Stilde).sum()).type(dtype))
+
     cst, dataloss = lossVarifoldNorm(Ttilde,w_T,zeta_T,zeta_S,GaussLinKernel(sigma=sigmaVar,d=d,l=labs,beta=beta),d,numS,beta=beta)
-    Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d)
+    Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d,uCoeff=uCoeff)
     Kv = GaussKernelB(sigma=sigmaRKHS,d=d)
 
     loss = LDDMMloss(Kg,Kv,sigmaRKHS,d, numS, gammaA,gammaT,gammaU, dataloss)
@@ -488,11 +507,11 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, s
         D = qnp[numS:].detach().view(-1,d).cpu().numpy()
         muD = qnp.detach().cpu().numpy()
         nu_D = np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
-        Dlist.append(gi.resizeData(D,s,m))
+        Dlist.append(init.resizeData(D,s,m))
         nu_Dlist.append(nu_D)
         gt = listpq[t][2]
         G = gt.detach().view(-1,d).cpu().numpy()
-        Glist.append(gi.resizeData(G,s,m))
+        Glist.append(init.resizeData(G,s,m))
         gw = listpq[t][3]
         W = gw.detach().cpu().numpy()
         wGlist.append(W)

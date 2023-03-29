@@ -6,7 +6,10 @@ from sys import path as sys_path
 sys_path.append('..')
 sys_path.append('../xmodmap')
 sys_path.append('../xmodmap/io')
+
 import getInput as gi
+import initialize as init
+
 sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
 import vtkFunctions as vtf
 
@@ -15,8 +18,8 @@ import torch
 from fromScratchHamiltonianAT import *
 from analyzeOutput import *
 
-np_dtype = "float32"
-dtype = torch.cuda.FloatTensor 
+np_dtype = "float64"
+dtype = torch.cuda.DoubleTensor 
 
 import nibabel as nib
 
@@ -27,14 +30,16 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 def main():
     d = 3
     labs = 12
-    sigmaRKHS = 20.0
-    sigmaVar = 20.0
-    its = 6
+    sigmaRKHS = [0.1,0.2]
+    sigmaVar = [0.1,0.2,0.5]
+    its = 7
     alphaSt = 'B2toB5'
-    beta = 0.1
+    beta = None
     res=1.0
-    alpha = 1.0
-    gamma = 1.0
+    gammaU = 0.01
+    gammaT = 0.01
+    gammaA = 0.01
+    kScale=1
     
     original = sys.stdout
 
@@ -50,12 +55,12 @@ def main():
     b5 = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain5/3DSegmentations/Brain5_allMerge_smoothe.nii.gz'
     
     # amygdala, CA1, CA2, CA3, DG-granular, DG-hilus, DG-molecular, ERC, ERC ext, Presubiculum, Parasubiculum, Subiculum
-    S,nu_S = gi.makeFromSingleChannelImage(b2,0.125*8,bg=0,ordering=[3,4,5,6,9,10,11,7,8,12,13,14],ds=8)
+    S,nu_S = gi.makeFromSingleChannelImage(b2,0.125*8,bg=0,ordering=[3,4,5,6,9,10,11,8,7,12,13,14],ds=8)
     T,nu_T = gi.makeFromSingleChannelImage(b5,0.125*8,bg=0,ordering=[15,2,3,4,7,9,10,6,14,11,12,13],ds=8)
     
     N = S.shape[0]
     
-    savedir = outpath + str(alphaSt) + '/output_dl_sig_its_be_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(beta) + '_' + str(N) + str(alpha)+str(gamma)+'/'
+    savedir = outpath + str(alphaSt) + '/output_dl_sig_its_be_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(beta) + '_' + str(N) + str(gammaA)+str(gammaT)+'/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
     
@@ -89,14 +94,26 @@ def main():
     vtf.writeVTK(Sp,imageValsS,imageNames,savedir+'testOutput_S.vtk',polyData=None)
     vtf.writeVTK(Tp,imageValsT,imageNames,savedir+'testOutput_T.vtk',polyData=None)
     '''
+    Arot = torch.zeros((3,3)).type(dtype)
+    Arot[0,0] = 1.0
+    Arot[1,1] = -1.0
+    Arot[2,2] = 1.0
+    T,nu_T = init.applyAffine(T,nu_T,Arot,torch.zeros((1,d)).type(dtype))
     
-    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,[torch.tensor(sigmaRKHS).type(dtype)],torch.tensor(sigmaVar).type(dtype),torch.tensor(alpha).type(dtype),torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,beta=beta)
+    sigmaRKHSlist = []
+    sigmaVarlist = []
+    for sigg in sigmaRKHS:
+        sigmaRKHSlist.append(torch.tensor(sigg).type(dtype))
+    for sigg in sigmaVar:
+        sigmaVarlist.append(torch.tensor(sigg).type(dtype))
+        
+    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gammaA).type(dtype),torch.tensor(gammaT).type(dtype),torch.tensor(gammaU).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cScale=torch.tensor(1.0).type(dtype))
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
     nu_S = nu_S.detach().cpu().numpy()
     nu_T = nu_T.detach().cpu().numpy()
-    
+
     imageNames = ['weights', 'maxImageVal']
     imageValsS = [np.sum(nu_S,axis=-1), np.argmax(nu_S,axis=-1)]
     imageValsT = [np.sum(nu_T,axis=-1), np.argmax(nu_T,axis=-1)]
@@ -110,7 +127,7 @@ def main():
 
     vtf.writeVTK(S,imageValsS,imageNames,savedir+'testOutput_S.vtk',polyData=None)
     vtf.writeVTK(T,imageValsT,imageNames,savedir+'testOutput_T.vtk',polyData=None)
-
+    
     pointList = np.zeros((S.shape[0]*len(Dlist),d))
     polyList = np.zeros((S.shape[0]*(len(Dlist)-1),3))
     polyList[:,0] = 2
@@ -155,9 +172,9 @@ def main():
     volS = np.prod(np.max(S,axis=(0,1)) - np.min(S,axis=(0,1)))
     volT = np.prod(np.max(T,axis=(0,1)) - np.min(T,axis=(0,1)))
     volD = np.prod(np.max(Dlist[-1],axis=(0,1)) - np.min(Dlist[-1],axis=(0,1)))
-    getLocalDensity(S,nu_S,sigmaVar,savedir+'density_S.vtk',coef=2.0)
-    getLocalDensity(T,nu_T,sigmaVar,savedir+'density_T.vtk',coef=2.0)
-    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar,savedir+'density_D.vtk',coef=2.0)
+    getLocalDensity(S,nu_S,sigmaVar[0],savedir+'density_S.vtk',coef=2.0)
+    getLocalDensity(T,nu_T,sigmaVar[0],savedir+'density_T.vtk',coef=2.0)
+    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar[0],savedir+'density_D.vtk',coef=2.0)
     
     print("volumes of source, target, and deformed source")
     print(volS)
@@ -185,8 +202,8 @@ def main():
     
     x = applyAandTau(qx0,qw0,A0,tau0)
     vtf.writeVTK(x,[qw0],['weights'],savedir+'testOutput_D_ATau.vtk',polyData=None)
-    getLocalDensity(x,nu_S,sigmaVar,savedir+'density_D_ATau.vtk',coef=0.25)
-    
+    getLocalDensity(x,nu_S,sigmaVar[0],savedir+'density_D_ATau.vtk',coef=2.0)
+
     sys.stdout = original
     return
 
