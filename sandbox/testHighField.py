@@ -15,15 +15,13 @@ import vtkFunctions as vtf
 
 import torch
 
-from fromScratchHamiltonianAT import *
+from fromScratchHamiltonianATCalibrated import *
 from analyzeOutput import *
 
 np_dtype = "float64"
 dtype = torch.cuda.DoubleTensor 
 
 import nibabel as nib
-
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 #############################################################################
 
@@ -36,11 +34,10 @@ def main():
     alphaSt = 'B2toB5'
     beta = None
     res=1.0
-    gammaU = 0.01
-    gammaT = 0.01
-    gammaA = 0.01
+    gamma = 0.01
     kScale=1
-    
+    extra='new'
+       
     original = sys.stdout
 
     outpath='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/Human/'
@@ -60,7 +57,7 @@ def main():
     
     N = S.shape[0]
     
-    savedir = outpath + str(alphaSt) + '/output_dl_sig_its_be_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(beta) + '_' + str(N) + str(gammaA)+str(gammaT)+'/'
+    savedir = outpath + str(alphaSt) + '/output_dl_sig_its_be_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(beta) + '_' + str(N) + str(gammaA)+str(gammaT)+extra+'/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
     
@@ -107,7 +104,7 @@ def main():
     for sigg in sigmaVar:
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
-    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gammaA).type(dtype),torch.tensor(gammaT).type(dtype),torch.tensor(gammaU).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cScale=torch.tensor(1.0).type(dtype))
+    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype))
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
