@@ -5,12 +5,11 @@ sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
 import vtkFunctions as vtf
 
 import torch
-dtype = torch.cuda.FloatTensor 
+dtype = torch.cuda.FloatTensor #DoubleTensor
 
 import nibabel as nib
 import pandas as pd
-import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+
 
 
 def applyAffine(Z, nu_Z, A, tau):

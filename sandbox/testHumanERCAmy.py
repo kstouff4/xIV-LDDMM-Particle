@@ -6,6 +6,7 @@ sys_path.append('..')
 sys_path.append('../xmodmap')
 sys_path.append('../xmodmap/io')
 import initialize as gi
+import getInput as gI
 
 sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
 import vtkFunctions as vtf
@@ -14,28 +15,28 @@ import torch
 
 from fromScratchHamiltonianAT import *
 from analyzeOutput import *
-
-np_dtype = "float32" # "float64"
-dtype = torch.cuda.FloatTensor #DoubleTensor 
+# Set data type in: fromScratHamiltonianAT, analyzeOutput, getInput, initialize
+np_dtype = "float64" # "float64"
+dtype = torch.cuda.DoubleTensor #DoubleTensor 
 
 import nibabel as nib
-
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 def main():
     d = 3
     labs = 3
-    sigmaRKHS = [0.25] # as of 3/16, should be fraction of total domain of S+T #[10.0]
-    sigmaVar = 0.25 # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 25
-    alphaSt = 'BEIALE-ROT'
+    sigmaRKHS = [0.1] # as of 3/16, should be fraction of total domain of S+T #[10.0]
+    sigmaVar = [0.2,0.05] # as of 3/16, should be fraction of total domain of S+T #10.0
+    its = 10
+    alphaSt = 'BEIALE-new'
     beta = None
     res=1.0
+    kScale=1
     
     # Set these parameters according to relative decrease you expect in data attachment term
+    # these should be based on approximately what the contribution compared to original cost is
     gammaA = 0.01 #10.0
     gammaT = 0.01 #0.1
-    gammaU = 0.01*2.0*sigmaRKHS[0]**3
+    gammaU = 0.01*sigmaRKHS[0] # 1*2.0*sigmaRKHS[0]**3 sigmaRKHS
     
     original = sys.stdout
 
@@ -116,6 +117,7 @@ def main():
     Arot = gi.get3DRotMatrix(torch.tensor(np.pi/4.0),torch.tensor(np.pi/2.0),torch.tensor(3.0*np.pi/2.0))
     T,nu_T = gi.applyAffine(T,nu_T,Arot,torch.zeros((1,d)).type(dtype))
 
+    S, nu_S = gI.returnMultiplesSpace(S,nu_S,kScale)
     #S,nu_XS = ess.makeAllXandZ(imgPref+'150318/AMYGDALA+ERC+TEC.img', outpath+'ABEBER_150318_', thickness=-1, res=1.0,sig=0.1,C=-1,flip=False)
     #T,nu_XT = ess.makeAllXandZ(imgPref+'170831/AMYGDALA+ERC+TEC.img', outpath+'ABEBER_170831_', thickness=-1, res=1.0,sig=0.1,C=-1,flip=False)
     
@@ -144,10 +146,12 @@ def main():
     '''
     
     N = S.shape[0]
+    '''
     if (alpha is None):
         alpha = np.sqrt(N)
     if (gamma is None):
         gamma = np.sqrt(N)
+    '''
     
     savedir = outpath + '/output_dl_sig_its_albega_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(gammaA) + str(beta) + str(gammaT) + str(gammaU) + '_' + str(N) + '/'
     if (not os.path.exists(savedir)):
@@ -160,17 +164,22 @@ def main():
     print("sigmaRKHS: " + str(sigmaRKHS))
     print("sigmaVar: " + str(sigmaVar))
     print("its: " + str(its))
-    print("alpha: " + str(alpha))
+    print("gammaA: " + str(gammaA))
     print("beta: " + str(beta))
+    print("gamma: " + str(gammaT))
+    print("gammaU: " + str(gammaU))
     
     print("N " + str(N))
     
     #Dlist, nu_Dlist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),d,labs,savedir,its=its,beta=beta)
     sigmaRKHSlist = []
+    sigmaVarlist = []
     for sigg in sigmaRKHS:
         sigmaRKHSlist.append(torch.tensor(sigg).type(dtype))
+    for sigg in sigmaVar:
+        sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
-    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,torch.tensor(sigmaVar).type(dtype),torch.tensor(gammaA).type(dtype),torch.tensor(gammaT).type(dtype),torch.tensor(gammaU).type(dtype),d,labs,savedir,its=its)
+    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gammaA).type(dtype),torch.tensor(gammaT).type(dtype),torch.tensor(gammaU).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cScale=torch.tensor(10.0).type(dtype))
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
@@ -235,9 +244,9 @@ def main():
     volS = np.prod(np.max(S,axis=(0,1)) - np.min(S,axis=(0,1)))
     volT = np.prod(np.max(T,axis=(0,1)) - np.min(T,axis=(0,1)))
     volD = np.prod(np.max(Dlist[-1],axis=(0,1)) - np.min(Dlist[-1],axis=(0,1)))
-    getLocalDensity(S,nu_S,sigmaVar,savedir+'density_S.vtk',coef=2.0)
-    getLocalDensity(T,nu_T,sigmaVar,savedir+'density_T.vtk',coef=2.0)
-    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar,savedir+'density_D.vtk',coef=2.0)
+    getLocalDensity(S,nu_S,sigmaVar[0],savedir+'density_S.vtk',coef=2.0)
+    getLocalDensity(T,nu_T,sigmaVar[0],savedir+'density_T.vtk',coef=2.0)
+    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar[0],savedir+'density_D.vtk',coef=2.0)
     
     print("volumes of source, target, and deformed source")
     print(volS)
@@ -265,7 +274,7 @@ def main():
     
     x = applyAandTau(qx0,qw0,A0,tau0)
     vtf.writeVTK(x,[qw0],['weights'],savedir+'testOutput_D_ATau.vtk',polyData=None)
-    getLocalDensity(x,nu_S,sigmaVar,savedir+'density_D_ATau.vtk',coef=0.25)
+    getLocalDensity(x,nu_S,sigmaVar[0],savedir+'density_D_ATau.vtk',coef=0.25)
     
     sys.stdout = original
     return

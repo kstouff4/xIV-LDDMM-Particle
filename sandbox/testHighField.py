@@ -18,8 +18,8 @@ import torch
 from fromScratchHamiltonianATCalibrated import *
 from analyzeOutput import *
 
-np_dtype = "float64"
-dtype = torch.cuda.DoubleTensor 
+np_dtype = "float32"
+dtype = torch.cuda.FloatTensor 
 
 import nibabel as nib
 
@@ -30,13 +30,16 @@ def main():
     labs = 12
     sigmaRKHS = [0.1,0.2]
     sigmaVar = [0.1,0.2,0.5]
-    its = 7
+    its = 50
     alphaSt = 'B2toB5'
     beta = None
     res=1.0
     gamma = 0.01
     kScale=1
-    extra='new'
+    extra='newHs100Float32c20'
+    cS=20.0
+    cA=1.0
+    cT=1.0
        
     original = sys.stdout
 
@@ -57,7 +60,7 @@ def main():
     
     N = S.shape[0]
     
-    savedir = outpath + str(alphaSt) + '/output_dl_sig_its_be_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(beta) + '_' + str(N) + str(gammaA)+str(gammaT)+extra+'/'
+    savedir = outpath + str(alphaSt) + '/output_dl_sig_its_be_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(beta) + '_' + str(N) + str(gamma)+extra+'/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
     
@@ -104,7 +107,9 @@ def main():
     for sigg in sigmaVar:
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
-    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype))
+    #Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype))
+    
+    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()

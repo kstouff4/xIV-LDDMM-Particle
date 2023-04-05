@@ -5,12 +5,12 @@ sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
 import vtkFunctions as vtf
 
 import torch
-dtype = torch.cuda.FloatTensor 
+dtype = torch.cuda.FloatTensor # Double Tensor 
 
 import nibabel as nib
 import pandas as pd
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+#os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 
 def applyAffine(Z, nu_Z, A, tau):
@@ -144,4 +144,18 @@ def readSpaceFeatureCSV(coordCSV,coordNames,featCSV,featNames,scale=None,labs=No
     if (S.shape[-1] < 3):
         S = torch.cat((S,S[...,0][...,None]*0),-1).type(dtype)
     return S,nu_S
+
+def returnMultiplesSpace(S,nu_S,k):
+    '''
+    Add particles for testing by replicating each particle Si, nu_Si k times
+    '''
+    N = S.shape[0]
+    Sk = torch.zeros((N*k,S.shape[-1])).type(dtype)
+    nu_Sk = torch.zeros((N*k,nu_S.shape[-1])).type(dtype)
+    
+    for i in range(k):
+        Sk[i*N:(i+1)*(N),:] = S
+        nu_Sk[i*N:(i+1)*N,:] = nu_S/torch.tensor(k).type(dtype)
+    return Sk,nu_Sk
+              
     

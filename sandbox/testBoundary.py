@@ -1,4 +1,4 @@
-from fromScratchHamiltonianAT import *
+from fromScratchHamiltonianATCalibrated import *
 from analyzeOutput import *
 
 import sys
@@ -6,10 +6,8 @@ from sys import path as sys_path
 sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
 import vtkFunctions as vtf
 
-np_dtype = "float32"
-dtype = torch.cuda.FloatTensor 
-
-os.environ['CUDA_VISIBLE_DEVICES'] = '1'
+np_dtype = "float64"
+dtype = torch.cuda.DoubleTensor 
 
 def main():
     # create test dataset

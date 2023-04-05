@@ -7,13 +7,13 @@ import torch
 from torch.autograd import grad
 
 import pykeops
-import socket
-pykeops.set_build_folder("~/.cache/keop" + pykeops.__version__ + "_" + (socket.gethostname()))
+#import socket
+#pykeops.set_build_folder("~/.cache/keop" + pykeops.__version__ + "_" + (socket.gethostname()))
 
 from pykeops.torch import Vi, Vj
 
-np_dtype = "float64" #"float32"
-dtype = torch.cuda.DoubleTensor #FloatTensor 
+np_dtype = "float32" #"float64"
+dtype = torch.cuda.FloatTensor #DoubleTensor 
 
 from matplotlib import pyplot as plt
 import matplotlib
@@ -73,7 +73,7 @@ def GaussLinKernel(sigma,d,l,beta):
 
 # k(x^\sigma - y^\sigma)
 def GaussKernelSpaceSingle(sig,d):
-    xi,xj = Vi(0,d)/sig, Vj(1,d)/sig
+    x,y = Vi(0,d)/sig, Vj(1,d)/sig
     D2 = x.sqdist(y)
     K = (-D2 * 0.5).exp()
     return K.sum_reduction(axis=1)
@@ -81,11 +81,11 @@ def GaussKernelSpaceSingle(sig,d):
 #################################################################
 # Compute Controls (A,Tau,U,div(U))
 # get A,tau
-def getATau(px,qx,qw):
-    xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0)) # moving barycenters
-    A = ((1.0/(2.0))*(px.T@(qx-xc) - (qx-xc).T@px)).type(dtype) # should be d x d
+def getATau(px,qx,qw,cA=1.0,cT=1.0):
+    xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0)) # moving barycenters; should be 1 x 3
+    A = ((1.0/(2.0*cA))*(px.T@(qx-xc) - (qx-xc).T@px)).type(dtype) # 3 x N * N x 3
     print("A is, ", A.detach().cpu().numpy())
-    tau = ((px.sum(dim=0))).type(dtype)
+    tau = ((1.0/cT)*(px.sum(dim=0))).type(dtype)
     print("tau is, ", tau.detach().cpu().numpy())
     return A,tau
 
@@ -113,11 +113,11 @@ def getUdiv(sigma,d,uCoeff):
         x,qy,wpy = xO/sig, qyO/sig, wpyO/sig
         D2 = x.sqdist(qy)
         K = (-D2 * 0.5).exp()
-        h = d*wpy - (1.0/sig)*((x-qy)*py).sum() - (1.0/sig)*wpy*D2
+        h = wpy*(d - D2) - ((x-qy)*py).sum()
         if sInd == 0:
-            retVal = (1.0/uCoeff[sInd])*K*h
+            retVal = (1.0/(sig*uCoeff[sInd]))*K*h
         else:
-            retVal += (1.0/uCoeff[sInd])*(K*h) #.sum_reduction(axis=1)
+            retVal += (1.0/(sig*uCoeff[sInd]))*(K*h) #.sum_reduction(axis=1)
     return retVal.sum_reduction(axis=1) # G x 1
 
 
@@ -148,7 +148,7 @@ def RalstonIntegrator():
 
 #################################################################
 # Hamiltonian 
-def Hamiltonian(K0, sigma, d,numS):
+def Hamiltonian(K0, sigma, d,numS,cA=1.0,cT=1.0):
     # K0 = GaussKernelHamiltonian(x,x,px,px,w*pw,w*pw)
     def H(p, q):
         px = p[numS:].view(-1,d)
@@ -160,22 +160,26 @@ def Hamiltonian(K0, sigma, d,numS):
         k = K0(qx,qx,px,px,wpq,wpq) # k shape should be N x 1
 
         print("u norm cost is ")
-        print(k.detach().cpu().numpy())
-        #print("h is, ", h.detach())
-        #print("h2 is, ", h2.detach())
-        A,tau = getATau(px,qx,qw) #getAtau( = (1.0/(2*alpha))*(px.T@(qx-qc) - (qx-qc).T@px) # should be d x d
+        print(k.detach().sum().cpu().numpy())
+        # px = N x 3, qx = N x 3, qw = N x 1
+        A,tau = getATau(px,qx,qw,cA,cT) #getAtau( = (1.0/(2*alpha))*(px.T@(qx-qc) - (qx-qc).T@px) # should be d x d
         Anorm = (A*A).sum()
-        print("Anorm is, ", (torch.clone(gammaA).cpu().numpy()/2.0)*torch.clone(Anorm).detach().cpu().numpy())
+        print("Anorm is, ", (1.0/2.0)*torch.clone(Anorm).detach().cpu().numpy())
         print("tau is, ", torch.clone(tau).detach().cpu().numpy())
-        print("tauNorm is, ", (torch.clone(gammaT).cpu().numpy()/2.0)*(np.sum(torch.clone(tau).detach().cpu().numpy()*torch.clone(tau).detach().cpu().numpy())))
+        print("tauNorm is, ", (1.0/2.0)*(np.sum(torch.clone(tau).detach().cpu().numpy()*torch.clone(tau).detach().cpu().numpy())))
         
-        return k.sum() + (0.5)*Anorm + (0.5)*(tau*tau).sum()
+        xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0)) # moving barycenters; should be 1 x 3
+        AnormN = (px*((qx-xc)@A.T)).sum()
+        print("AnormN ", AnormN.detach().cpu().numpy())
+        print("Anorm ", Anorm.detach().cpu().numpy())
+        
+        return k.sum() + AnormN - (cA/2.0)*Anorm + (cT/2.0)*(tau*tau).sum()
 
     return H
 
 
-def HamiltonianSystem(K0, sigma, d,numS):
-    H = Hamiltonian(K0, sigma, d, numS)
+def HamiltonianSystem(K0, sigma, d,numS,cA=1.0,cT=1.0):
+    H = Hamiltonian(K0, sigma, d, numS,cA,cT)
 
     def HS(p, q):
         Gp, Gq = grad(H(p, q), (p, q), create_graph=True)
@@ -184,8 +188,8 @@ def HamiltonianSystem(K0, sigma, d,numS):
     return HS
 
 # Katie change this to include A and T for the grid 
-def HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff):
-    H = Hamiltonian(K0,sigma,d,numS)
+def HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0):
+    H = Hamiltonian(K0,sigma,d,numS,cA,cT)
     def HS(p,q,qgrid,qgridw):
         px = p[numS:].view(-1,d)
         pw = p[:numS].view(-1,1)
@@ -209,20 +213,20 @@ def HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff):
 ##################################################################
 # Shooting
 
-def Shooting(p0, q0, K0,sigma,d, numS,nt=10, Integrator=RalstonIntegrator()):
-    return Integrator(HamiltonianSystem(K0,sigma,d,numS), (p0, q0), nt)
+def Shooting(p0, q0, K0,sigma,d, numS,cA=1.0,cT=1.0,nt=10, Integrator=RalstonIntegrator()):
+    return Integrator(HamiltonianSystem(K0,sigma,d,numS,cA,cT), (p0, q0), nt)
 
 
-def LDDMMloss(K0,sigma, d, numS,gamma,dataloss):
+def LDDMMloss(K0,sigma, d, numS,gamma,dataloss,cA=1.0,cT=1.0):
     def loss(p0, q0):
         p, q = Shooting(p0, q0, K0,sigma, d,numS)[-1]
-        return gamma * Hamiltonian(K0, sigma, d,numS)(p0, q0), dataloss(q)
+        return (gamma * Hamiltonian(K0, sigma, d,numS,cA,cT)(p0, q0)), dataloss(q)
         #return dataloss(q)
 
     return loss
 
-def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,uCoeff,nt=10,Integrator=RalstonIntegrator()):
-    return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff), (p0,q0,qGrid,qGridw),nt)
+def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,nt=10,Integrator=RalstonIntegrator()):
+    return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA,cT), (p0,q0,qGrid,qGridw),nt)
 
 #################################################################
 # Data Attachment Term
@@ -239,15 +243,12 @@ def lossVarifoldNorm(T,w_T,zeta_T,zeta_S,K,d,numS):
         sSw = sS[:numS].view(-1,1)
      
         k1 = K(sSx, sSx, sSw*zeta_S, sSw*zeta_S) 
-        print("ks")
-        print(k1.detach().cpu().numpy())
         k2 = K(sSx, T, sSw*zeta_S, w_T*zeta_T)
-        print(k2.detach().cpu().numpy())
               
         return (
             (1.0/2.0)*(cst
             + k1.sum()
-            - 2 * k2.sum())
+            - 2.0 * k2.sum())
         )
 
     return cst.detach().cpu().numpy(), loss
@@ -270,7 +271,7 @@ def makePQ(S,nu_S,T,nu_T):
     
     return w_S,w_T,zeta_S,zeta_T,q0,p0,numS, Stilde, Ttilde, s, m
 
-def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100,kScale = torch.tensor(1.0).type(dtype),beta=None):
+def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100,kScale = torch.tensor(1.0).type(dtype),cA=1.0,cT=1.0,cS=10.0,beta=None):
     '''
     Parameters:
         S, nu_S = source image varifold
@@ -291,8 +292,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     N = torch.tensor(S.shape[0]).type(dtype)
     s = s.cpu().numpy()
     m = m.cpu().numpy()
-    print("sigmaRKHS, ", sigmaRKHS)
-    print("sigmaVar, ", sigmaVar)
+
     pTilde = torch.zeros_like(p0).type(dtype)
     pTilde[0:numS] = kScale #torch.sqrt(kScale)*torch.sqrt(kScale)
     pTilde[numS:] = torch.tensor(1.0).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
@@ -305,9 +305,9 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
             cinit = Kinit(Ttilde,Ttilde,w_T*zeta_T,w_T*zeta_T).sum()
             k1 = Kinit(Stilde, Stilde, w_S*zeta_S, w_S*zeta_S)
             k2 = Kinit(Stilde, Ttilde, w_S*zeta_S, w_T*zeta_T)
-            beta = torch.tensor(2.0/(cinit + k1.sum() - 2*k2.sum())).type(dtype)
+            beta = torch.tensor(2.0/(cinit + k1.sum() - 2.0*k2.sum())).type(dtype)
             print("beta is ", beta.detach().cpu().numpy())
-            beta = [torch.clone(2.0/(cinit + k1.sum() - 2*k2.sum())).type(dtype)]
+            beta = [torch.clone(2.0/(cinit + k1.sum() - 2.0*k2.sum())).type(dtype)] 
         
         # print out indiviual costs
         else:
@@ -318,7 +318,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
                 Kinit = GaussLinKernelSingle(sig=sig,d=d,l=labs)
                 cinit = Kinit(Ttilde,Ttilde,w_T*zeta_T,w_T*zeta_T).sum()
                 k1 = Kinit(Stilde, Stilde, w_S*zeta_S, w_S*zeta_S).sum()
-                k2 = -2*Kinit(Stilde, Ttilde, w_S*zeta_S, w_T*zeta_T).sum()
+                k2 = -2.0*Kinit(Stilde, Ttilde, w_S*zeta_S, w_T*zeta_T).sum()
                 beta.append(torch.clone(2.0/(cinit + k1 + k2)).type(dtype))
                 print("mu source norm ", k1.detach().cpu().numpy())
                 print("mu target norm ", cinit.detach().cpu().numpy())
@@ -326,8 +326,10 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     # Compute constants to weigh each kernel norm in RKHS by
     uCoeff = []
     for sig in sigmaRKHS:
-        Kinit = GaussKernelSpaceSingle(sigma=sig,d=d)
-        uCoeff.append(torch.clone((1.0/(N*N*sig*sig))*Kinit(Stilde,Stilde).sum()).type(dtype))
+        Kinit = GaussKernelSpaceSingle(sig=sig,d=d)
+        uCoeff.append(torch.clone((torch.tensor(cS).type(dtype)*Kinit(Stilde,Stilde).sum())/(N*N*sig*sig)).type(dtype))
+        #uCoeff.append(torch.clone((N*N*sig*sig)/(Kinit(Stilde,Stilde).sum())).type(dtype))
+        #uCoeff.append(torch.tensor(100.0).type(dtype))
     for ss in range(len(uCoeff)):
         print("sig is ", sigmaRKHS[ss].detach().cpu().numpy())
         print("uCoeff ", uCoeff[ss].detach().cpu().numpy())
@@ -335,9 +337,9 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     cst, dataloss = lossVarifoldNorm(Ttilde,w_T,zeta_T,zeta_S,GaussLinKernel(sigma=sigmaVar,d=d,l=labs,beta=beta),d,numS)
     Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d,uCoeff=uCoeff)
 
-    loss = LDDMMloss(Kg,sigmaRKHS,d, numS, gamma, dataloss)
+    loss = LDDMMloss(Kg,sigmaRKHS,d, numS, gamma, dataloss,cA,cT)
 
-    optimizer = torch.optim.LBFGS([p0], max_eval=15, max_iter=10,line_search_fn = 'strong_wolfe',history_size=10,tolerance_grad=1e-8,tolerance_change=1e-10)
+    optimizer = torch.optim.LBFGS([p0], max_eval=15, max_iter=10,line_search_fn = 'strong_wolfe',history_size=100,tolerance_grad=1e-8,tolerance_change=1e-10)
     print("performing optimization...")
     start = time.time()
     
@@ -358,6 +360,9 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         lossListDA.append(np.copy(LDA.detach().cpu().numpy()))
         relLossList.append(np.copy(LDA.detach().cpu().numpy())/cst)
         L.backward()
+        print("gradients are, ", p0.grad)
+        print("pw are, ", p0.grad[0:numS])
+        print("px are, ", p0.grad[numS:])
         return L
     
     for i in range(its):
@@ -366,12 +371,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         print("state of optimizer")
         osd = optimizer.state_dict()
         print(osd)
-        '''
-        with torch.no_grad():
-            LH,LDA = loss(p0,q0)
-        lossOnlyH.append(np.copy(LH.detach().cpu().numpy()))
-        lossOnlyDA.append(np.copy(LDA.detach().cpu().numpy()))
-        '''
+
         lossOnlyH.append(np.copy(osd['state'][0]['prev_loss']))
     print("Optimization (L-BFGS) time: ", round(time.time() - start, 2), " seconds")
 
@@ -400,6 +400,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     ax.legend()
     f.savefig(savedir + 'CostOuterIter.png',dpi=300)
     
+    '''
     lossListHdiff = []
     lossListDAdiff = []
     lossListTotdiff = []
@@ -422,6 +423,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     print(lossListDAdiff)
     print("loss differences Tot")
     print(lossListTotdiff)
+    '''
     
     
     # Print out deformed states
@@ -440,7 +442,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     qGrid = qGrid.flatten()
     qGridw = torch.ones((numG)).type(dtype)
 
-    listpq = ShootingGrid(p0*pTilde,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,uCoeff)
+    listpq = ShootingGrid(p0*pTilde,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,uCoeff,cA,cT)
     print("length of pq list is, ", len(listpq))
     Dlist = []
     nu_Dlist = []

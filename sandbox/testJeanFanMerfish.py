@@ -6,7 +6,7 @@ from sys import path as sys_path
 sys_path.append('..')
 sys_path.append('../xmodmap')
 sys_path.append('../xmodmap/io')
-import getInput as gi
+import getInput as gI
 sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
 import vtkFunctions as vtf
 
@@ -26,7 +26,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 def main():
     d = 3
-    labs = 33
+    labs = 13
     sigmaRKHS = 2.0
     sigmaVar = 1.0
     its = 6
@@ -47,17 +47,19 @@ def main():
         os.mkdir(outpath+str(alphaSt))
 
     fSf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S2R1.csv"
-    fSs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S2R1.csv"
+    fSf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/gene_S1R2.csv"
+    fSs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S1R2.csv"
 
-    fTf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S2R2.csv"
-    fTs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S2R2.csv"
+    fTf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S1R1.csv"
+    fTs = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/meta_S1R1.csv"
+    fTf = "/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/gene_S1R1.csv"
 
-    S,nu_S = gi.readSpaceFeatureCSV(fSs,['center_x','center_y'],fSf,['celllabels'],scale=1e-3,labs=labs)
+    S,nu_S = gI.readSpaceFeatureCSV(fSs,['center_x','center_y'],fSf,['Ntrk3','Fzd3','Baiap2','Slc17a6','Adora2a','Gpr151','Gabbr2','Cckar','Adgrb3','Lmtk2','Adgrl1','Cx3cl1','Epha4'],scale=1e-3,labs=labs)
     #Rot = torch.zeros((2,2)).type(dtype)
     #Rot[0,1] = -1
     #Rot[1,0] = 1
     #S[...,0:2] = S[...,0:2]@Rot.T
-    T,nu_T = gi.readSpaceFeatureCSV(fTs,['center_x','center_y'],fTf,['celllabels'],scale=1e-3,labs=labs)
+    T,nu_T = gI.readSpaceFeatureCSV(fTs,['center_x','center_y'],fTf,['Ntrk3','Fzd3','Baiap2','Slc17a6','Adora2a','Gpr151','Gabbr2','Cckar','Adgrb3','Lmtk2','Adgrl1','Cx3cl1','Epha4'],scale=1e-3,labs=labs)
 
     N = S.shape[0]
     
@@ -75,7 +77,8 @@ def main():
     print("beta: " + str(beta))
     print("N " + str(N))
     
-    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,[torch.tensor(sigmaRKHS).type(dtype)],torch.tensor(sigmaVar).type(dtype),torch.tensor(alpha).type(dtype),torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,beta=beta)
+    #Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,[torch.tensor(sigmaRKHS).type(dtype)],torch.tensor(sigmaVar).type(dtype),torch.tensor(alpha).type(dtype),torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,beta=beta)
+    Dlist = []
     
     #Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,[torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaRKHS/2.0).type(dtype)],torch.tensor(sigmaVar).type(dtype),torch.tensor(alpha).type(dtype),torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,beta=beta)
     
@@ -88,8 +91,12 @@ def main():
     imageValsS = [np.sum(nu_S,axis=-1), np.argmax(nu_S,axis=-1)]
     imageValsT = [np.sum(nu_T,axis=-1), np.argmax(nu_T,axis=-1)]
 
+    i = np.sum(nu_S,axis=-1)
     zeta_S = nu_S/(np.sum(nu_S,axis=-1)[...,None])
+    zeta_S[i == 0,:] = 0
     zeta_T = nu_T/(np.sum(nu_T,axis=-1)[...,None])
+    i = np.sum(nu_T,axis=-1)
+    zeta_T[i == 0,:] = 0
     for i in range(labs):
         imageNames.append('zeta_' + str(i))
         imageValsS.append(zeta_S[:,i])
@@ -97,6 +104,9 @@ def main():
 
     vtf.writeVTK(S,imageValsS,imageNames,savedir+'testOutput_S.vtk',polyData=None)
     vtf.writeVTK(T,imageValsT,imageNames,savedir+'testOutput_T.vtk',polyData=None)
+    
+    return
+
     pointList = np.zeros((S.shape[0]*len(Dlist),d))
     polyList = np.zeros((S.shape[0]*(len(Dlist)-1),3))
     polyList[:,0] = 2
