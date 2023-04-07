@@ -24,18 +24,20 @@ import nibabel as nib
 
 def main():
     d = 3
-    labs = 3 # in target 
+    labs = 2 # in target 
+    labS = 3 # template
     sigmaRKHS = [0.1] # as of 3/16, should be fraction of total domain of S+T #[10.0]
-    sigmaVar = [0.2,0.05] # as of 3/16, should be fraction of total domain of S+T #10.0
+    sigmaVar = [0.5,0.2,0.05] # as of 3/16, should be fraction of total domain of S+T #10.0
     its = 15
     alphaSt = 'BEIALE-crossMod'
     beta = None
     res=1.0
     kScale=1
-    extra="1to3"
+    extra="3to2"
     cA=1.0
     cT=1.0 # original is 0.5
     cS=10.0
+    cPi=1.0
     
     # Set these parameters according to relative decrease you expect in data attachment term
     # these should be based on approximately what the contribution compared to original cost is
@@ -65,7 +67,7 @@ def main():
     numUniqueMinus0 = len(uniqueVals)-1
     
     X,Y,Z = torch.meshgrid(torch.tensor(x0).type(dtype),torch.tensor(x1).type(dtype),torch.tensor(x2).type(dtype),indexing='ij')
-    nu_S = torch.zeros((X.shape[0],X.shape[1],X.shape[2],labs)).type(dtype)
+    nu_S = torch.zeros((X.shape[0],X.shape[1],X.shape[2],labS)).type(dtype)
     S = torch.stack((X.flatten(),Y.flatten(),Z.flatten()),axis=-1).type(dtype)
     listOfNu = []
     for u in range(1,len(uniqueVals)):
@@ -77,8 +79,11 @@ def main():
     S = S[toKeep]
     nu_S = nu_S[toKeep]
     N = S.shape[0]
-    nu_S = torch.ones((nu_S.shape[0],1))
     
+    #nu_Sn = torch.zeros((nu_S.shape[0],2)).type(dtype)
+    #nu_Sn[:,0] = torch.sum(nu_S[:,1:],dim=-1)
+    #nu_Sn[:,1] = nu_S[:,0]
+    #nu_S = nu_Sn
     # Debugging
        
     imgFile = imgPref+'170516/AMYGDALA+ERC+TEC.img'
@@ -97,7 +102,7 @@ def main():
     numUniqueMinus0 = len(uniqueVals)-1
     
     X,Y,Z = torch.meshgrid(torch.tensor(x0).type(dtype),torch.tensor(x1).type(dtype),torch.tensor(x2).type(dtype),indexing='ij')
-    nu_T = torch.zeros((X.shape[0],X.shape[1],X.shape[2],labs)).type(dtype)
+    nu_T = torch.zeros((X.shape[0],X.shape[1],X.shape[2],labS)).type(dtype)
     T = torch.stack((X.flatten(),Y.flatten(),Z.flatten()),axis=-1).type(dtype)
     listOfNu = []
     for u in range(1,len(uniqueVals)):
@@ -108,15 +113,27 @@ def main():
     toKeep = nu_T.sum(axis=-1) > 0
     T = T[toKeep]
     nu_T = nu_T[toKeep]
+    nu_Tn = torch.zeros((nu_T.shape[0],2)).type(dtype)
+    nu_Tn[:,-1] = nu_T[:,1] + nu_T[:,2]
+    nu_Tn[:,0] = nu_T[:,0]
+    print("max of nu_S, ", nu_Tn.max(axis=0))
+    nu_T = nu_Tn.type(dtype)
     
     # Trying Rotation manually 
-    Arot = init.get3DRotMatrix(torch.tensor(np.pi/4.0),torch.tensor(np.pi/2.0),torch.tensor(3.0*np.pi/2.0))
+    Arot = init.get3DRotMatrix(torch.tensor(0.0),torch.tensor(np.pi/16.0),torch.tensor(np.pi/8.0))
     T,nu_T = init.applyAffine(T,nu_T,Arot,torch.zeros((1,d)).type(dtype))
 
     S, nu_S = gI.returnMultiplesSpace(S,nu_S,kScale)
     N = S.shape[0]
+    '''
+    nu_Sn = torch.zeros((nu_S.shape[0],2)).type(dtype)
+    nu_Sn[:,-1] = nu_S[:,1] + nu_S[:,2]
+    nu_Sn[:,0] = nu_S[:,0]
+    print("max of nu_S, ", nu_Sn.max(axis=0))
+    nu_S = nu_Sn.type(dtype)
+    '''
 
-    savedir = outpath + '/output_dl_sig_its_albega_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(gammaA) + str(beta) + str(gamma) + '_' + str(N) + extra + '/'
+    savedir = outpath + '/output_dl_sig_its_albega_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(gamma) + str(beta) + '_' + str(N) + extra + '/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
     
@@ -140,7 +157,7 @@ def main():
     for sigg in sigmaVar:
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
-    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS)
+    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
@@ -150,16 +167,20 @@ def main():
     imageNames = ['weights', 'maxImageVal']
     imageValsS = [np.sum(nu_S,axis=-1), np.argmax(nu_S,axis=-1)]
     imageValsT = [np.sum(nu_T,axis=-1), np.argmax(nu_T,axis=-1)]
+    imageNamesS = ['weights', 'maxImageVal']
+    imageNamesT = ['weights', 'maxImageVal']
 
     zeta_S = nu_S/(np.sum(nu_S,axis=-1)[...,None])
     zeta_T = nu_T/(np.sum(nu_T,axis=-1)[...,None])
     for i in range(labs):
-        imageNames.append('zeta_' + str(i))
-        imageValsS.append(zeta_S[:,i])
+        imageNamesT.append('zeta_' + str(i))
         imageValsT.append(zeta_T[:,i])
+    for i in range(zeta_S.shape[-1]):
+        imageValsS.append(zeta_S[:,i])
+        imageNamesS.append('zeta_' + str(i))
 
-    vtf.writeVTK(S,imageValsS,imageNames,savedir+'testOutput_S.vtk',polyData=None)
-    vtf.writeVTK(T,imageValsT,imageNames,savedir+'testOutput_T.vtk',polyData=None)
+    vtf.writeVTK(S,imageValsS,imageNamesS,savedir+'testOutput_S.vtk',polyData=None)
+    vtf.writeVTK(T,imageValsT,imageNamesT,savedir+'testOutput_T.vtk',polyData=None)
     np.savez(savedir+'origST.npz',S=S,nu_S=nu_S,T=T,nu_T=T,zeta_S=zeta_S,zeta_T=zeta_T)
     pointList = np.zeros((S.shape[0]*len(Dlist),d))
     polyList = np.zeros((S.shape[0]*(len(Dlist)-1),3))
@@ -176,11 +197,17 @@ def main():
         G = Glist[t]
         nu_D = nu_Dlist[t]
         nu_G = nu_Glist[t]
+        nu_Dpi = nu_DPilist[t]
         zeta_D = nu_D/(np.sum(nu_D,axis=-1)[...,None])
+        zeta_Dpi = nu_Dpi / (np.sum(nu_Dpi,axis=-1)[...,None])
         imageValsD = [np.sum(nu_D,axis=-1), np.argmax(nu_D,axis=-1)]
+        imageValsDPi = [np.sum(nu_Dpi,axis=-1),np.argmax(nu_Dpi,axis=-1)]
         for i in range(labs):
+            imageValsDPi.append(zeta_Dpi[:,i])
+        for i in range(zeta_D.shape[-1]):
             imageValsD.append(zeta_D[:,i])
-        vtf.writeVTK(D,imageValsD,imageNames,savedir+'testOutput_D' + str(t) + '.vtk',polyData=None)
+        vtf.writeVTK(D,imageValsD,imageNamesS,savedir+'testOutput_D' + str(t) + '.vtk',polyData=None)
+        vtf.writeVTK(D,imageValsDPi,imageNamesT,savedir+'testOutput_Dpi' + str(t) + '.vtk',polyData=None)
         vtf.writeVTK(G,[nu_G],['Weights'],savedir+'testOutput_G' + str(t) + '.vtk',polyData=None)
         if (t == len(Dlist) - 1):
             np.savez(savedir+'testOutput.npz',S=S, nu_S=nu_S,T=T,nu_T=nu_T,D=D,nu_D=nu_D)
