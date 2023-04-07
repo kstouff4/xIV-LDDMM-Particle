@@ -1,4 +1,5 @@
 import numpy as np
+import scipy as sp
 from sys import path as sys_path
 
 sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
@@ -66,6 +67,23 @@ def get3DRotMatrix(thetaX,thetaY,thetaZ):
     R = Ax@Ay@Az
     print("R: ", R)
     return R
+
+def get3DRotMatrixAxis(theta,ax=None):
+    # ax = vector on unit sphere (e.g. 
+    # theta is numpy number in radians
+    if (ax is None):
+        ax = np.zeros((3,1))
+        ax[1] = 1.0
+    K = np.zeros((3,3))
+    K[0,1] = -ax[2]
+    K[0,2] = ax[1]
+    K[1,0] = ax[2]
+    K[2,0] = -ax[1]
+    K[1,2] = -ax[0]
+    K[2,1] = ax[0]
+    #A = np.cross(-theta*ax,np.identity(3),axisa=0,axisb=0)
+    R = sp.linalg.expm(theta*K)
+    return torch.from_numpy(R).type(dtype)
 
 def rescaleData(S,T):
     '''

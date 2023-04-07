@@ -35,16 +35,26 @@ def readFromPrevious(npzFile):
     
     return S,nu_S,T,nu_T
 
-def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None,ds=1):
+def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None,ds=1,axEx=None):
     '''
     Makes discrete particle representation from image file (NIFTI or ANALYZE).
     Assumes background has value 0 and excluded as no data.
     
     Centers particles around the origin based on bounding box of coordinates.
+    ds = amount to downsample by
+    axEx = tuple (axis along which to select one plane and plane number to select)
     '''
     
     imInfo = nib.load(imageFile)
     im = np.squeeze(np.asanyarray(imInfo.dataobj)).astype('float32')
+    if (axEx is not None):
+        if (axEx[0] == 0):
+            im = np.squeeze(im[axEx[1],...])
+        elif (axEx[0] == 1):
+            im = np.squeeze(im[:,axEx[1],...])
+        elif (axEx[0] == 2):
+            im = np.squeeze(im[:,:,axEx[1],...])
+            
     dims = im.shape
     if (ds > 1):
         if len(dims) == 2:
