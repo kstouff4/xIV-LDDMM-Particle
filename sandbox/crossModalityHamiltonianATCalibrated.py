@@ -82,9 +82,7 @@ def GaussKernelSpaceSingle(sig,d):
 def getATau(px,qx,qw,cA=1.0,cT=1.0):
     xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0)) # moving barycenters; should be 1 x 3
     A = ((1.0/(2.0*cA))*(px.T@(qx-xc) - (qx-xc).T@px)).type(dtype) # 3 x N * N x 3
-    print("A is, ", A.detach().cpu().numpy())
     tau = ((1.0/cT)*(px.sum(dim=0))).type(dtype)
-    print("tau is, ", tau.detach().cpu().numpy())
     return A,tau
 
 # compute U and divergence of U
@@ -162,16 +160,15 @@ def Hamiltonian(K0, sigma, d,numS,cA=1.0,cT=1.0):
         # px = N x 3, qx = N x 3, qw = N x 1
         A,tau = getATau(px,qx,qw,cA,cT) #getAtau( = (1.0/(2*alpha))*(px.T@(qx-qc) - (qx-qc).T@px) # should be d x d
         Anorm = (A*A).sum()
-        print("Anorm is, ", (1.0/2.0)*torch.clone(Anorm).detach().cpu().numpy())
         print("tau is, ", torch.clone(tau).detach().cpu().numpy())
-        print("tauNorm is, ", (1.0/2.0)*(np.sum(torch.clone(tau).detach().cpu().numpy()*torch.clone(tau).detach().cpu().numpy())))
+        print("tauNormSquared is, ", (np.sum(torch.clone(tau).detach().cpu().numpy()*torch.clone(tau).detach().cpu().numpy())))
         
-        xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0)) # moving barycenters; should be 1 x 3
-        AnormN = (px*((qx-xc)@A.T)).sum()
-        print("AnormN ", AnormN.detach().cpu().numpy())
-        print("Anorm ", Anorm.detach().cpu().numpy())
+        #xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0)) # moving barycenters; should be 1 x 3
+        #AnormN = (px*((qx-xc)@A.T)).sum()
+        print("A is ", torch.clone(A).detach().cpu().numpy())
+        print("AnormSquared ", Anorm.detach().cpu().numpy())
         
-        return k.sum() + AnormN - (cA/2.0)*Anorm + (cT/2.0)*(tau*tau).sum()
+        return k.sum() + (cA/2.0)*Anorm + (cT/2.0)*(tau*tau).sum()
 
     return H
 
@@ -231,8 +228,6 @@ def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,nt=10,I
 def lossVarifoldNorm(T,w_T,zeta_T,zeta_S,K,d,numS):
     #print(w_T*zeta_T.cpu().numpy())
     cst = (K(T,T,w_T*zeta_T,w_T*zeta_T)).sum()
-    print("cst is ")
-    print(cst.detach().cpu().numpy())
 
     def loss(sS,pi_est):
         # sS will be in the form of q (w_S,S,x_c)
@@ -263,12 +258,51 @@ def PiRegularizationSystem(zeta_S,nu_T,numS,d):
         mass_S = torch.sum(qw*zeta_S,dim=0)
         qwSum = torch.sum(qw,dim=0)[None,...]
         pi_ST = (pi_est.view(zeta_S.shape[-1],nu_T.shape[-1]))**2
-        pi_S = torch.sum(pi_ST,dim=-1)[...,None]
-        numer = pi_ST/(pi_S[...,None]*nu_Tprob)
-        #numer[pi_S == 0,:] = 0.0 # avoid 0/0
+        pi_S = torch.sum(pi_ST,dim=-1)
+        pi_STprob = pi_ST/pi_S[...,None]
+        numer = pi_STprob/nu_Tprob
         di = mass_S@(pi_ST*(torch.log(numer)))
         return (1.0/nuTconst)*di.sum()
     return PiReg
+
+##################################################################
+# Print out Functions
+
+def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S,labT,s,m,savedir):
+    np.savez(savedir+'p0_iter' + str(itCurr) + '.npz',p0=p0Curr.detach().cpu().numpy())
+    p,q = Shooting(p0Curr[:(d+1)*numS], q0Curr, K0,sigmaRKHS, d,numS)[-1]
+    pi_ST = p0Curr[(d+1)*numS:].detach().view(zeta_S.shape[-1],labT)
+    pi_ST = pi_ST**2
+    pi_ST = pi_ST.cpu().numpy()
+    print("pi final, ", pi_ST)
+    f,ax = plt.subplots()
+    im = ax.imshow(pi_ST)
+    f.colorbar(im,ax=ax)
+    ax.set_ylabel("Source Labels")
+    ax.set_xlabel("Target Labels")
+    f.savefig(savedir + 'pi_STiter' + str(itCurr) + '.png',dpi=300)
+    
+    D = q[numS:].detach().view(-1,d).cpu().numpy()
+    muD = q[0:numS].detach().view(-1,1).cpu().numpy()
+    nu_D = np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
+    zeta_D = nu_D/np.sum(nu_D,axis=-1)
+    nu_Dpi = nu_D@pi_ST
+    Ds = init.resizeData(D,s,m)
+    zeta_Dpi = nu_Dpi/np.sum(nu_Dpi,axis=-1)
+    
+    imageNamesSpi = ['weights', 'maxImageVal']
+    imageNamesS = ['weights', 'maxImageVal']
+    imageValsSpi = [np.sum(nu_Dpi,axis=-1),np.argmax(nu_Dpi,axis=-1)]
+    imageValsS = [np.sum(nu_D,axis=-1),np.argmax(nu_D,axis=-1)]
+    for i in range(zeta_Dpi.shape[-1]):
+        imageValsSpi.append(zeta_Dpi[:,i])
+        imageNamesSpi.append('zeta_' + str(i))
+    for i in range(zeta_D.shape[-1]):
+        imageValsS.append(zeta_D[:,i])
+        imageNamesS.append('zeta_' + str(i))
+    vtf.writeVTK(D,imageValsS,imageNamesS,savedir+'testOutputiter' + str(itCurr) + '_D10.vtk',polyData=None)
+    vtf.writeVTK(D,imageValsSPi,imageNamesSPi,savedir+'testOutputiter' + str(itCurr) + '_Dpi10.vtk',polyData=None)
+    return
                             
 
 ###################################################################
@@ -295,7 +329,7 @@ def makePQ(S,nu_S,T,nu_T):
     
     return w_S,w_T,zeta_S,zeta_T,q0,p0,numS, Stilde, Ttilde, s, m, pi_STinit
 
-def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100,kScale = torch.tensor(1.0).type(dtype),cA=1.0,cT=1.0,cS=10.0,cPi=10.0,beta=None):
+def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100,kScale = torch.tensor(1.0).type(dtype),cA=1.0,cT=1.0,cS=10.0,cPi=1.0,beta=None):
     '''
     Parameters:
         S, nu_S = source image varifold
@@ -386,20 +420,18 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         relLossList.append(np.copy(LDA.detach().cpu().numpy())/cst)
         lossListPI.append(np.copy(LPI.detach().cpu().numpy()))
         L.backward()
-        print("gradients are, ", p0.grad)
-        print("pw are, ", p0.grad[0:numS])
-        print("px are, ", p0.grad[numS:(d+1)*numS])
         return L
     
     for i in range(its):
         print("it ", i, ": ", end="")
         optimizer.step(closure) # default of 25 iterations in strong wolfe line search; will compute evals and iters until 25 unless reaches an optimum 
-        print("state of optimizer")
         osd = optimizer.state_dict()
-        print(osd)
-
         lossOnlyH.append(np.copy(osd['state'][0]['prev_loss']))
+        if (np.mod(i,25) == 0):
+            p0Save = torch.clone(p0).detach()
+            printCurrentVariables(p0Save,i,Kg,sigmaRKHS,uCoeff,torch.clone(q0).detach(),d,numS,zeta_S,labs,s,m,savedir)
     print("Optimization (L-BFGS) time: ", round(time.time() - start, 2), " seconds")
+        # save p0 for every 50th iteration and pi
 
     f,ax = plt.subplots()
     ax.plot(np.arange(len(lossListH)),np.asarray(lossListH),label="H($q_0$,$p_0$), Final = {0:.6f}".format(lossListH[-1]))
@@ -411,13 +443,6 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     ax.set_ylabel("Cost")
     ax.legend()
     f.savefig(savedir + 'Cost.png',dpi=300)
-    
-    f,ax = plt.subplots()
-    ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA/cst),label="Varifold Norm, Final = {0:.2f}".format(lossListDA[-1]/cst))
-    ax.set_title("Relative Loss Varifold Norm")
-    ax.set_xlabel("Iterations")
-    ax.legend()
-    f.savefig(savedir + 'RelativeLossVarifoldNorm.png',dpi=300)
     
     f,ax = plt.subplots()
     ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyH),label="TotLoss, Final = {0:.6f}".format(lossOnlyH[-1]))
@@ -435,20 +460,28 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     rangesX = (torch.max(coords[...,0]) - torch.min(coords[...,0]))/100.0
     rangesY = (torch.max(coords[...,1]) - torch.min(coords[...,1]))/100.0
     rangesZ = (torch.max(coords[...,2]) - torch.min(coords[...,2]))/100.0
-                               
-    xGrid = torch.arange(torch.min(coords[...,0])-rangesX,torch.max(coords[...,0])+rangesX*2,rangesX)
-    yGrid = torch.arange(torch.min(coords[...,1])-rangesY,torch.max(coords[...,1])+rangesY*2,rangesY)
-    zGrid = torch.arange(torch.min(coords[...,2])-rangesZ,torch.max(coords[...,2])+rangesZ*2,rangesZ)
+    
+    if (rangesX == 0):
+        rangesX = torch.max(coords[...,0])
+        xGrid = torch.arange(torch.min(coords[...,0])+1.0)
+    else:
+        xGrid = torch.arange(torch.min(coords[...,0])-rangesX,torch.max(coords[...,0])+rangesX*2,rangesX)
+    if (rangesY == 0):
+        rangesY = torch.max(coords[...,1])
+        yGrid = torch.arange(torch.min(coords[...,1])+1.0)
+    else:
+        yGrid = torch.arange(torch.min(coords[...,1])-rangesY,torch.max(coords[...,1])+rangesY*2,rangesY)
+    if (rangesZ == 0):
+        rangesZ = torch.max(coords[...,2])
+        zGrid = torch.arange(torch.min(coords[...,2])+1.0)
+    else:
+        zGrid = torch.arange(torch.min(coords[...,2])-rangesZ,torch.max(coords[...,2])+rangesZ*2,rangesZ)
+    
     XG,YG,ZG = torch.meshgrid((xGrid,yGrid,zGrid),indexing='ij')
     qGrid = torch.stack((XG.flatten(),YG.flatten(),ZG.flatten()),axis=-1).type(dtype)
     numG = qGrid.shape[0]
     qGrid = qGrid.flatten()
-    qGridw = torch.ones((numG)).type(dtype)
-    
-    pi_STfinal = p0[(d+1)*numS:].detach().view(zeta_S.shape[-1],zeta_T.shape[-1])
-    pi_STfinal = pi_STfinal**2
-    pi_STfinal = pi_STfinal.cpu().numpy()
-    
+    qGridw = torch.ones((numG)).type(dtype)    
 
     listpq = ShootingGrid(p0*pTilde,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,uCoeff,cA,cT)
     print("length of pq list is, ", len(listpq))
@@ -457,6 +490,18 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     nu_DPilist = []
     Glist = []
     wGlist = []
+    
+    pi_STfinal = p0[(d+1)*numS:].detach().view(zeta_S.shape[-1],zeta_T.shape[-1])
+    pi_STfinal = pi_STfinal**2
+    pi_STfinal = pi_STfinal.cpu().numpy()
+    print("pi final, ", pi_STfinal)
+    f,ax = plt.subplots()
+    im = ax.imshow(pi_STfinal)
+    f.colorbar(im,ax=ax)
+    ax.set_ylabel("Source Labels")
+    ax.set_xlabel("Target Labels")
+    f.savefig(savedir + 'pi_STfinal.png',dpi=300)
+    
     for t in range(len(listpq)):
         qnp = listpq[t][1]
         D = qnp[numS:].detach().view(-1,d).cpu().numpy()

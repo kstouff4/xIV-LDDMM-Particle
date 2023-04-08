@@ -23,13 +23,13 @@ dtype = torch.cuda.FloatTensor #DoubleTensor
 import nibabel as nib
 
 def main():
-    d = 2
+    d = 3
     labs = 2 # in target 
     labS = 3 # template
     sigmaRKHS = [0.1] # as of 3/16, should be fraction of total domain of S+T #[10.0]
     sigmaVar = [0.5,0.2,0.05] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 15
-    alphaSt = 'AllenToKim'
+    its = 700
+    alphaSt = 'KimToAllen'
     beta = None
     res=1.0
     kScale=1
@@ -37,32 +37,34 @@ def main():
     cA=1.0
     cT=1.0 # original is 0.5
     cS=10.0
-    cPi=1.0
     
     # Set these parameters according to relative decrease you expect in data attachment term
     # these should be based on approximately what the contribution compared to original cost is
-    gamma = 0.01 #10.0
+    gamma = 0.1 #10.0
     
     original = sys.stdout
 
     outpath='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/AtlasMapping/' + alphaSt + '/'
-    imgSource='/cis/home/kstouff4/Documents/MeshRegistration/TestImages/Allen_10_anno_16bit_ap.img'
-    imgTarg='/cis/home/kstouff4/Documents/MeshRegistration/Yongsoo/KimLabDevCCFv001_Annotations_ASL_Oriented_10um.nii'
+    imgTarg='/cis/home/kstouff4/Documents/MeshRegistration/TestImages/Allen_10_anno_16bit_ap.img'
+    imgSource='/cis/home/kstouff4/Documents/MeshRegistration/TestImages/Yongsoo/KimLabDevCCFv001_Annotations_ASL_Oriented_10um.nii'
 
     if (not os.path.exists(outpath)):
         os.mkdir(outpath) 
-    S,nu_S = gI.makeFromSingleChannelImage(imageSource,0.01,bg=0,axEx=[2,679])
+    S,nu_S = gI.makeFromSingleChannelImage(imgSource,0.08,bg=0,ds=8,axEx=[0,679],rotate=True)
     N = S.shape[0]
     labS = nu_S.shape[-1]
     
-    T,nu_T = gI.makeFromSingleChannelImage(imageTarg,0.01,bg=0,axEx=[0,679])
+    T,nu_T = gI.makeFromSingleChannelImage(imgTarg,0.08,bg=0,ds=8,axEx=[2,679],rotate=True,flip=True)
     labs = nu_T.shape[-1]
+    cPi=np.log(labs) #0.1
     
     # Trying Rotation manually 
-    #Arot = init.get3DRotMatrix(torch.tensor(0.0),torch.tensor(np.pi/16.0),torch.tensor(np.pi/8.0))
-    #T,nu_T = init.applyAffine(T,nu_T,Arot,torch.zeros((1,d)).type(dtype))
+    Arot = init.get3DRotMatrix(torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0))
+    tauManual = torch.zeros((1,d)).type(dtype)
+    tauManual[0,0] = torch.tensor(2.0).type(dtype)
+    T,nu_T = init.applyAffine(T,nu_T,Arot,tauManual)
 
-    savedir = outpath + '/output_dl_sig_its_albega_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(gamma) + str(beta) + '_' + str(N) + extra + '/'
+    savedir = outpath + '/output_dl_sig_its_albega_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(gamma) + str(beta) + '_' + str(N) + str(cPi) + extra + '/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
     
@@ -86,7 +88,7 @@ def main():
     for sigg in sigmaVar:
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
-    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi)
+    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labS,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
