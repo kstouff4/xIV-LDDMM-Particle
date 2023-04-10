@@ -249,9 +249,13 @@ def lossVarifoldNorm(T,w_T,zeta_T,zeta_S,K,d,numS):
     return cst.detach().cpu().numpy(), loss
 
 # pi regularization (KL divergence)
-def PiRegularizationSystem(zeta_S,nu_T,numS,d):
+def PiRegularizationSystem(zeta_S,nu_T,numS,d,norm=True):
     nuTconst = torch.sum(nu_T)
-    nu_Tprob = torch.sum(nu_T,dim=0)/torch.sum(nu_T)
+    # two alternatives for distribution to compare to 
+    if (not norm):
+        nu_Tprob = torch.sum(nu_T,dim=0)/torch.sum(nu_T) # compare to overall distribution of features
+    else:
+        nu_Tprob = torch.ones((1,nu_T.shape[-1]))/nu_T.shape[-1] 
     
     def PiReg(q,pi_est):  
         qw = q[:numS].view(-1,1)
@@ -308,7 +312,7 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
 ###################################################################
 # Optimization
 
-def makePQ(S,nu_S,T,nu_T):
+def makePQ(S,nu_S,T,nu_T,norm=True):
     # initialize state vectors based on normalization 
     w_S = nu_S.sum(axis=-1)[...,None].type(dtype)
     w_T = nu_T.sum(axis=-1)[...,None].type(dtype)
@@ -319,9 +323,15 @@ def makePQ(S,nu_S,T,nu_T):
     Stilde, Ttilde, s, m = init.rescaleData(S,T)
     
     q0 = torch.cat((w_S.clone().detach().flatten(),Stilde.clone().detach().flatten()),0).requires_grad_(True).type(dtype) # not adding extra element for xc
+    
+    # two alternatives (linked to variation of KL divergence norm that consider)
     pi_STinit = torch.zeros((zeta_S.shape[-1],zeta_T.shape[-1])).type(dtype)
     nuSTtot = torch.sum(w_T)/torch.sum(w_S)
-    pi_STinit[:,:] = nu_T.sum(axis=0)/torch.sum(w_S) #zeta_T.sum(dim=0)*nuSTtot # nuTtot/(torch.sum(w_T)) #(nuStot*torch.sum(w_T))
+    if (not norm):
+        pi_STinit[:,:] = nu_T.sum(axis=0)/torch.sum(w_S) # feature distribution of target scaled by total mass in source
+    else:
+        pi_STinit[:,:] = torch.ones((1,nu_T.shape[-1]))/nu_T.shape[-1]
+        pi_STinit = pi_STinit*nuSTtot
     print("pi shape ", pi_STinit.shape)
     print("initial Pi ", pi_STinit.detach().cpu().numpy())
     
@@ -365,7 +375,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
             k2 = Kinit(Stilde, Ttilde, (w_S*zeta_S)@pi_STinit, w_T*zeta_T)
             beta = torch.tensor(2.0/(cinit + k1.sum() - 2.0*k2.sum())).type(dtype)
             print("beta is ", beta.detach().cpu().numpy())
-            beta = [torch.clone(2.0/(cinit + k1.sum() - 2.0*k2.sum())).type(dtype)] 
+            beta = [(0.6/sigmaVar[0])*torch.clone(2.0/(cinit + k1.sum() - 2.0*k2.sum())).type(dtype)] 
         
         # print out indiviual costs
         else:
@@ -377,7 +387,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
                 cinit = Kinit(Ttilde,Ttilde,w_T*zeta_T,w_T*zeta_T).sum()
                 k1 = Kinit(Stilde, Stilde, (w_S*zeta_S)@pi_STinit, (w_S*zeta_S)@pi_STinit).sum()
                 k2 = -2.0*Kinit(Stilde, Ttilde, (w_S*zeta_S)@pi_STinit, w_T*zeta_T).sum()
-                beta.append(torch.clone(2.0/(cinit + k1 + k2)).type(dtype))
+                beta.append((0.6/sig)*torch.clone(2.0/(cinit + k1 + k2)).type(dtype))
                 print("mu source norm ", k1.detach().cpu().numpy())
                 print("mu target norm ", cinit.detach().cpu().numpy())
                 print("total norm ", (cinit + k1 + k2).detach().cpu().numpy())

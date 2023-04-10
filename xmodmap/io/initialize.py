@@ -106,3 +106,18 @@ def resizeData(Xtilde,s,m):
     '''
     X = Xtilde*s + m
     return X
+
+def scaleDataByVolumes(S,T):
+    '''
+    Scale the source by the ratio of the overall volumes. Assume isotropic scaling.
+    '''
+    # center source and target at 0,0
+    minS = torch.min(S,axis=0)
+    maxS = torch.max(S,axis=0)
+    Sn = S - 0.5*(maxS+minS)
+    vS = torch.prod(maxS - minS)
+    vT = torch.prod(torch.max(T,axis=0) - torch.min(T,axis=0))
+    scaleF = vT/vS
+    Sn = scaleF*Sn
+    
+    return Sn
