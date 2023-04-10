@@ -285,10 +285,10 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
     D = q[numS:].detach().view(-1,d).cpu().numpy()
     muD = q[0:numS].detach().view(-1,1).cpu().numpy()
     nu_D = np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
-    zeta_D = nu_D/np.sum(nu_D,axis=-1)
+    zeta_D = nu_D/np.sum(nu_D,axis=-1)[...,None]
     nu_Dpi = nu_D@pi_ST
     Ds = init.resizeData(D,s,m)
-    zeta_Dpi = nu_Dpi/np.sum(nu_Dpi,axis=-1)
+    zeta_Dpi = nu_Dpi/np.sum(nu_Dpi,axis=-1)[...,None]
     
     imageNamesSpi = ['weights', 'maxImageVal']
     imageNamesS = ['weights', 'maxImageVal']
@@ -301,7 +301,7 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
         imageValsS.append(zeta_D[:,i])
         imageNamesS.append('zeta_' + str(i))
     vtf.writeVTK(D,imageValsS,imageNamesS,savedir+'testOutputiter' + str(itCurr) + '_D10.vtk',polyData=None)
-    vtf.writeVTK(D,imageValsSPi,imageNamesSPi,savedir+'testOutputiter' + str(itCurr) + '_Dpi10.vtk',polyData=None)
+    vtf.writeVTK(D,imageValsSpi,imageNamesSpi,savedir+'testOutputiter' + str(itCurr) + '_Dpi10.vtk',polyData=None)
     return
                             
 
@@ -428,8 +428,9 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         osd = optimizer.state_dict()
         lossOnlyH.append(np.copy(osd['state'][0]['prev_loss']))
         if (np.mod(i,25) == 0):
-            p0Save = torch.clone(p0).detach()
-            printCurrentVariables(p0Save,i,Kg,sigmaRKHS,uCoeff,torch.clone(q0).detach(),d,numS,zeta_S,labs,s,m,savedir)
+            #p0Save = torch.clone(p0).detach()
+            optimizer.zero_grad()
+            printCurrentVariables(p0,i,Kg,sigmaRKHS,uCoeff,q0,d,numS,zeta_S,labs,s,m,savedir)
     print("Optimization (L-BFGS) time: ", round(time.time() - start, 2), " seconds")
         # save p0 for every 50th iteration and pi
 

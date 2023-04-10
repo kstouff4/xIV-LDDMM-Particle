@@ -35,7 +35,7 @@ def readFromPrevious(npzFile):
     
     return S,nu_S,T,nu_T
 
-def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None,ds=1,axEx=None):
+def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None,ds=1,axEx=None,rotate=False,flip=False):
     '''
     Makes discrete particle representation from image file (NIFTI or ANALYZE).
     Assumes background has value 0 and excluded as no data.
@@ -54,7 +54,12 @@ def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None,ds=1,axEx=Non
             im = np.squeeze(im[:,axEx[1],...])
         elif (axEx[0] == 2):
             im = np.squeeze(im[:,:,axEx[1],...])
-            
+    # rotate such that second axis is longer than first
+    if (rotate):
+        if (im.shape[1] < im.shape[0]):
+            im = np.swapaxes(im,0,1)
+    if (flip):
+        im = np.flip(im,axis=0)
     dims = im.shape
     if (ds > 1):
         if len(dims) == 2:
@@ -71,7 +76,7 @@ def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None,ds=1,axEx=Non
         x2 = np.arange(dims[2])*resXYZ
         x2 -= np.mean(x2)
     else:
-        x2 = np.zeros((1,1)) # default to centering 2d image at 0
+        x2 = np.zeros(1) # default to centering 2d image at 0
     
     X,Y,Z = torch.meshgrid(torch.tensor(x0).type(dtype),torch.tensor(x1).type(dtype),torch.tensor(x2).type(dtype),indexing='ij')
     S = torch.stack((X.flatten(),Y.flatten(),Z.flatten()),axis=-1).type(dtype)
@@ -107,6 +112,27 @@ def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None,ds=1,axEx=Non
     #nu_S = nu_S[toKeep]
 
     return S,nu_S
+
+def combineObjects(Slist,nu_Slist,d=3):
+    '''
+    combine list of particles that have different feature values; assume mutually exclusive lists
+    '''
+    nu_Stot = 0
+    sTot = 0
+    for i in range(len(Slist)):
+        nu_Stot += nu_Slist[i].shape[-1]
+        sTot += Slist[i].shape[0]
+    Scomb = torch.zeros((sTot,d)).type(dtype)
+    nuScomb = torch.zeros((sTot,nu_Stot)).type(dtype)
+    cntS = 0
+    cntnuS = 0
+    for i in range(len(Slist)):
+        Scomb[cntS:cntS+Slist[i].shape[0],...] = Slist[i]
+        nuScomb[cntS:cntS+Slist[i].shape[0],cntnuS:cntnuS+nu_Slist[i].shape[-1]] = nu_Slist[i]
+        cntS += Slist[i].shape[0]
+        cntnuS += nu_Slist[i].shape[-1]
+    return Scomb,nuScomb
+        
 
 def readParticleApproximation(particleNPZ):
     '''
