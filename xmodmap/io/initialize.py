@@ -107,17 +107,32 @@ def resizeData(Xtilde,s,m):
     X = Xtilde*s + m
     return X
 
-def scaleDataByVolumes(S,T):
+def scaleDataByVolumes(S,nuS,T,nuT,dRel=3):
     '''
     Scale the source by the ratio of the overall volumes. Assume isotropic scaling.
     '''
     # center source and target at 0,0
-    minS = torch.min(S,axis=0)
-    maxS = torch.max(S,axis=0)
-    Sn = S - 0.5*(maxS+minS)
-    vS = torch.prod(maxS - minS)
-    vT = torch.prod(torch.max(T,axis=0) - torch.min(T,axis=0))
-    scaleF = vT/vS
-    Sn = scaleF*Sn
+    minS = torch.min(S,axis=0).values
+    maxS = torch.max(S,axis=0).values
+    print("minS size", minS.shape)
+    Sn = S - torch.tensor(0.5)*(maxS+minS)
+    if (dRel < 3):
+        vS = torch.prod(maxS[:dRel] - minS[:dRel])
+        vT = torch.prod(torch.max(T,axis=0).values[:dRel] - torch.min(T,axis=0).values[:dRel])
+        print("vT versus vS")
+        print(vT)
+        print(vS)
+        scaleF = vT/vS
+        scaleF = scaleF**(1.0/dRel)
+        Sn[:,0:dRel] = Sn[:,0:dRel]*scaleF
+        nuSn = nuS*(scaleF**dRel)
+    else:
+        vS = torch.prod(maxS - minS)
+        vT = torch.prod(torch.max(T,axis=0).values - torch.min(T,axis=0).values)
+        scaleF = vT/vS
+        scaleF = scaleF**(1.0/3.0)
+        Sn = scaleF*Sn
+        nuSn = nuS*(scaleF**3)
+    print("scale factor is, ", scaleF)
     
-    return Sn
+    return Sn,nuSn

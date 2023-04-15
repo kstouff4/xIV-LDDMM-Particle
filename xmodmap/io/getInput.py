@@ -35,7 +35,7 @@ def readFromPrevious(npzFile):
     
     return S,nu_S,T,nu_T
 
-def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None,ds=1,axEx=None,rotate=False,flip=False):
+def makeFromSingleChannelImage(imageFile,resXYZ,bg=[0],ordering=None,ds=1,axEx=None,rotate=False,flip=False,weights=None):
     '''
     Makes discrete particle representation from image file (NIFTI or ANALYZE).
     Assumes background has value 0 and excluded as no data.
@@ -88,7 +88,8 @@ def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None,ds=1,axEx=Non
     else:
         uniqueVals = np.unique(im)
         if (bg is not None):
-            uniqueVals = uniqueVals[uniqueVals != bg]
+            for bbg in bg:
+                uniqueVals = uniqueVals[uniqueVals != bbg]
         
     numUnique = len(uniqueVals)
 
@@ -96,20 +97,19 @@ def makeFromSingleChannelImage(imageFile,resXYZ,bg=0,ordering=None,ds=1,axEx=Non
     for u in range(len(uniqueVals)):
         n = torch.tensor((im == uniqueVals[u])).type(dtype)
         listOfNu.append(n.flatten())
-        print("n flatten shape ", n.flatten().shape)
         keepSum += n.flatten()[...,None]
     toKeep = torch.squeeze(keepSum > 0)
-    print("toKeep shape ", toKeep.shape)
     listOfNewNu = []
-    print("length of list ", len(listOfNu))
     for l in listOfNu:
-        print("l shape ", l[toKeep].shape)
         listOfNewNu.append(l[toKeep])
     nu_S = torch.stack(listOfNewNu,axis=-1).type(dtype)
 
     #toKeep = nu_S.sum(axis=-1) > 0
     S = S[toKeep]
     #nu_S = nu_S[toKeep]
+    
+    if (weights is not None):
+        nu_S = nu_S*weights
 
     return S,nu_S
 
