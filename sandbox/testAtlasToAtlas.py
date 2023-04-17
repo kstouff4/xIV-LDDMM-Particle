@@ -13,7 +13,7 @@ import vtkFunctions as vtf
 
 import torch
 
-from crossModalityHamiltonianATCalibrated import *
+from crossModalityHamiltonianATSCalibrated import *
 from analyzeOutput import *
 
 # Set data type in: fromScratHamiltonianAT, analyzeOutput, getInput, initialize
@@ -56,7 +56,7 @@ def main():
     
     T,nu_T = gI.makeFromSingleChannelImage(imgTarg,0.08,bg=0,ds=8,axEx=[2,679],rotate=True,flip=True)
     labs = nu_T.shape[-1]
-    cPi=np.log(labs) #0.1
+    cPi=torch.tensor(1.0/np.log(labs)).type(dtype) #0.1
     
     # Trying Rotation manually 
     Arot = init.get3DRotMatrix(torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0))
@@ -88,7 +88,7 @@ def main():
     for sigg in sigmaVar:
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
-    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labS,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi)
+    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()

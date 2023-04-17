@@ -13,7 +13,7 @@ import vtkFunctions as vtf
 
 import torch
 
-from crossModalityHamiltonianATCalibrated import *
+from crossModalityHamiltonianATSCalibrated import *
 from analyzeOutput import *
 
 # Set data type in: fromScratHamiltonianAT, analyzeOutput, getInput, initialize
@@ -26,17 +26,17 @@ def main():
     d = 3
     labs = 2 # in target 
     labS = 3 # template
-    sigmaRKHS = [0.1] # as of 3/16, should be fraction of total domain of S+T #[10.0]
-    sigmaVar = [0.5,0.2,0.05] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 50
+    sigmaRKHS = [0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
+    sigmaVar = [0.5,0.2,0.05,0.02] # as of 3/16, should be fraction of total domain of S+T #10.0
+    its = 100
     alphaSt = 'MouseToRat'
     beta = None
     res=1.0
     kScale=1
-    extra="sl536"
+    extra="sl536-scaling"
     cA=1.0
     cT=1.0 # original is 0.5
-    cS=10.0
+    cS=30.0
     
     # Set these parameters according to relative decrease you expect in data attachment term
     # these should be based on approximately what the contribution compared to original cost is
@@ -50,13 +50,13 @@ def main():
 
     if (not os.path.exists(outpath)):
         os.mkdir(outpath) 
-    S,nu_S = gI.makeFromSingleChannelImage(imgSource,0.08,bg=0,ds=8,axEx=[2,536])
+    S,nu_S = gI.makeFromSingleChannelImage(imgSource,0.08,bg=[0],ds=8,axEx=[2,536],weights=torch.tensor(0.08**2).type(dtype))
     N = S.shape[0]
     labS = nu_S.shape[-1]
     
-    T,nu_T = gI.makeFromSingleChannelImage(imgTarg,0.312,bg=0,ds=8,axEx=[1,627])
+    T,nu_T = gI.makeFromSingleChannelImage(imgTarg,0.078,bg=[0,76],ds=2,axEx=[1,627],weights=torch.tensor(0.078**2).type(dtype))
     labs = nu_T.shape[-1]
-    cPi=torch.tensor(1.0/np.log(labs)).type(dtype) #0.1
+    cPi=torch.tensor(0.1/np.log(labs)).type(dtype) #0.1
     
     # Trying Rotation manually 
     #Arot = init.get3DRotMatrix(torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0))
@@ -64,7 +64,7 @@ def main():
     #tauManual[0,0] = torch.tensor(2.0).type(dtype)
     #T,nu_T = init.applyAffine(T,nu_T,Arot,tauManual)
     
-    S = init.scaleDataByVolumes(S,T)
+    #S,nu_S = init.scaleDataByVolumes(S,nu_S,T,nu_T,dRel=2) # dRel for what relative volume is 
 
     savedir = outpath + '/output_dl_sig_its_albega_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(gamma) + str(beta) + '_' + str(N) + str(cPi) + extra + '/'
     if (not os.path.exists(savedir)):
