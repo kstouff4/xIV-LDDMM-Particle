@@ -35,6 +35,12 @@ def readFromPrevious(npzFile):
     
     return S,nu_S,T,nu_T
 
+def getFromFile(npzFile):
+    npz = np.load(npzFile)
+    S = torch.tensor(npz[npz.files[0]]).type(dtype)
+    nu_S = torch.tensor(npz[npz.files[1]]).type(dtype)
+    return S,nu_S
+
 def makeFromSingleChannelImage(imageFile,resXYZ,bg=[0],ordering=None,ds=1,axEx=None,rotate=False,flip=False,weights=None):
     '''
     Makes discrete particle representation from image file (NIFTI or ANALYZE).
@@ -193,5 +199,58 @@ def returnMultiplesSpace(S,nu_S,k):
         Sk[i*N:(i+1)*(N),:] = S
         nu_Sk[i*N:(i+1)*N,:] = nu_S/torch.tensor(k).type(dtype)
     return Sk,nu_Sk
-              
+
+def makeBinsFromMultiChannelImage(imageFile,res,dimEff,dimFeats,ds=1,z=0,threshold=0,bins=1):
+    im = nib.load(imageFile)
+    im = np.squeeze(im.dataobj)
+    
+    imDS = im[0::ds,...]
+    imDS = imDS[:,0::ds,...]
+    if dimEff == 3:
+        imDS = imDS[:,:,0::ds,...]
+        if dimFeats == 1 and imDS.shape[-1] > 1:
+            imDS = imDS[...,None]
+    
+    # make grid
+    dims = imDS.shape
+    print("dims is ", dims)
+    x0 = np.arange(dims[0])*res[0]
+    x0 -= np.mean(x0)
+    x1 = np.arange(dims[1])*res[1]
+    x1 -= np.mean(x1)
+    if dimEff > 2:
+        x2 = np.arange(dims[2])*res[2]
+        x2 -= np.mean(x2)
+    else:
+        x2 = np.zeros(1) + z
+    
+    X,Y,Z = torch.meshgrid(torch.tensor(x0).type(dtype),torch.tensor(x1).type(dtype),torch.tensor(x2).type(dtype),indexing='ij')
+    S = torch.stack((X.flatten(),Y.flatten(),Z.flatten()),axis=-1).type(dtype)
+    print("S shape, ", S.shape)
+    
+    # use tissue volume as weight
+    if bins > 0:
+        nu_S = torch.zeros((S.shape[0],(bins-threshold)*dimFeats)).type(dtype)
+        for di in range(dimFeats):
+            nu_Sdi = np.ravel(imDS[...,di])
+            b = np.arange(bins)*(np.max(nu_Sdi)+1-np.min(nu_Sdi))/bins + np.min(nu_Sdi) - 0.5
+            nu_Sdibin = np.ravel(np.digitize(nu_Sdi,b)-1) # 1 based
+            print(np.unique(nu_Sdibin))
+            oneHot = np.zeros((nu_Sdibin.shape[0],bins))
+            print("one hot shape, ", oneHot.shape)
+            oneHot[np.arange(nu_Sdibin.shape[0]),nu_Sdibin] = 1.0
+            if (threshold > 0):
+                oneHot = oneHot[:,threshold:]
+            nu_S[:,di*(bins-threshold):(di+1)*(bins-threshold)] = torch.tensor(oneHot).type(dtype)*torch.tensor(np.prod(res)) # set weights to tissue area of each feature (if multichannel, then total weights are multiplied by that
+    else:
+        nu_S = torch.zeros((S.shape[0],dimFeats)).type(dtype)
+        for di in range(dimFeats):
+            nu_S[:,di] = torch.tensor(imDS[...,di]).type(dtype).flatten()
+    
+    if threshold > 0:
+        keep = torch.sum(nu_S,axis=-1) > 0
+        nu_S = nu_S[keep,...]
+        S = S[keep,...]
+    
+    return S,nu_S   
     
