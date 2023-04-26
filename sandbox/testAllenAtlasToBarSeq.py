@@ -28,12 +28,12 @@ def main():
     labS = 5 # template
     sigmaRKHS = [0.2,0.1] # as of 3/16, should be fraction of total domain of S+T #[10.0]
     sigmaVar = [0.5,0.2,0.05] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 100
+    its = 500
     alphaSt = 'AllenAtlasToBarSeq'
     beta = None
     res=1.0
     kScale=1
-    extra="singleSigTarg"
+    extra="flip"
     cA=1.0
     cT=1.0 # original is 0.5
     cS=30.0
@@ -51,11 +51,17 @@ def main():
         
     outpath = outpath + alphaSt + '/'
     
+    if (not os.path.exists(outpath)):
+        os.mkdir(outpath)
+    
     atlasImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/BarSeq_8mmAP_0.2approx.npz'
     targetImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/BarSeq/Redo__optimalZnu_ZAllwC8.0_sig[0.2]_Nmax1500.0_Npart2000.0.npz'
     
     S,nu_S = gI.getFromFile(atlasImage)
     T,nu_T = gI.getFromFile(targetImage)
+    
+    # flip Allen atlas over z axis
+    S[:,-1] = -1.0*S[:,-1]
 
     labs = nu_T.shape[-1]
     labS = nu_S.shape[-1]
