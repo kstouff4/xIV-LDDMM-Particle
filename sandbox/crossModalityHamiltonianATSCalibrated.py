@@ -84,8 +84,16 @@ def getATauAlpha(px,qx,pw,qw,cA=1.0,cT=1.0,dimEff=3):
     xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0)) # moving barycenters; should be 1 x 3
     A = ((1.0/(2.0*cA))*(px.T@(qx-xc) - (qx-xc).T@px)).type(dtype) # 3 x N * N x 3
     tau = ((1.0/cT)*(px.sum(dim=0))).type(dtype)
-    alpha = ((px*(qx-xc)).sum() + (pw*qw*dimEff).sum()).type(dtype)
-    return A,tau,alpha
+    if (dimEff == 2):
+        alpha = ((px*(qx-xc)).sum() + (pw*qw*dimEff).sum()).type(dtype)
+        Alpha = torch.eye(2).type(dtype)*alpha
+    else:
+        alpha_xy = 0.5*((px[:,0:2]*(qx-xc)[:,0:2]).sum() + (pw*qw*2.0).sum()).type(dtype)
+        alpha_z = ((px[:,-1]*(qx-xc)[:,-1]).sum() + (pw*qw).sum()).type(dtype)
+        Alpha = torch.eye(3).type(dtype)*alpha_xy
+        Alpha[-1,-1] = alpha_z
+    
+    return A,tau,Alpha
 
 # compute U and divergence of U
 def getU(sigma,d,uCoeff):
@@ -157,9 +165,10 @@ def Hamiltonian(K0, sigma, d,numS,cA=1.0,cT=1.0,dimEff=3):
         wpq = pw*qw
         k = K0(qx,qx,px,px,wpq,wpq) # k shape should be N x 1
         # px = N x 3, qx = N x 3, qw = N x 1
-        A,tau,alpha = getATauAlpha(px,qx,pw,qw,cA,cT,dimEff) #getAtau( = (1.0/(2*alpha))*(px.T@(qx-qc) - (qx-qc).T@px) # should be d x d
-        Anorm = (A*A).sum()        
-        return k.sum() + (cA/2.0)*Anorm + (cT/2.0)*(tau*tau).sum() + (0.5)*(alpha*alpha).sum()
+        A,tau,Alpha = getATauAlpha(px,qx,pw,qw,cA,cT,dimEff) #getAtau( = (1.0/(2*alpha))*(px.T@(qx-qc) - (qx-qc).T@px) # should be d x d
+        Anorm = (A*A).sum()  
+        Alphanorm = (Alpha*Alpha).sum()
+        return k.sum() + (cA/2.0)*Anorm + (cT/2.0)*(tau*tau).sum() + (0.5)*Alphanorm
 
     return H
 
@@ -186,10 +195,10 @@ def HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=3):
         gx = qgrid.view(-1,d)
         gw = qgridw.view(-1,1)
         Gp,Gq = grad(H(p,q), (p,q), create_graph=True)
-        A,tau,alpha = getATauAlpha(px,qx,pw,qw,dimEff=dimEff)
+        A,tau,Alpha = getATauAlpha(px,qx,pw,qw,dimEff=dimEff)
         xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0))
-        Gg = (getU(sigma,d,uCoeff)(gx,qx,px,pw*qw) + (gx-xc)@A.T + tau + alpha*(gx-xc)).flatten()
-        Ggw = (getUdiv(sigma,d,uCoeff)(gx,qx,px,pw*qw)*gw + alpha*dimEff*gw).flatten()
+        Gg = (getU(sigma,d,uCoeff)(gx,qx,px,pw*qw) + (gx-xc)@A.T + tau + (gx-xc)@Alpha).flatten()
+        Ggw = (getUdiv(sigma,d,uCoeff)(gx,qx,px,pw*qw)*gw + Alpha.sum()*gw).flatten()
                                                    
         return -Gq,Gp,Gg,Ggw
     
@@ -274,6 +283,7 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
     pi_ST = pi_ST.cpu().numpy()
     print("pi final, ", pi_ST)
     print("non diffeomorphism")
+    totA = np.zeros((3,3))
     for i in range(len(pqList)):
         p = pqList[i][0]
         q = pqList[i][1]
@@ -281,13 +291,14 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
         pw = p[:numS].view(-1,1)
         qx = q[numS:].view(-1,d)
         qw = q[:numS].view(-1,1) #torch.squeeze(q[:numS])[...,None]
-        A,tau,alpha = getATauAlpha(px,qx,pw,qw,dimEff=dimEff)
+        A,tau,Alpha = getATauAlpha(px,qx,pw,qw,dimEff=dimEff)
+        totA += (0.1)*A.detach().cpu().numpy() # assume 10 time steps?
         print("A, ", A.detach().cpu().numpy())
         print("tau, ", tau.detach().cpu().numpy())
-        print("alpha, ", alpha.detach().cpu().numpy())
-        R = sp.linalg.expm(A.detach().cpu().numpy())
-        print("R, ", R)
-        print("det(R), ", np.linalg.det(R))
+        print("alpha, ", Alpha.detach().cpu().numpy())
+    R = sp.linalg.expm(totA)
+    print("R, ", R)
+    print("det(R), ", np.linalg.det(R))
     
     if (pi_ST.shape[0] > pi_ST.shape[1]*10):
         pi_STplot = np.zeros((pi_ST.shape[0],10*pi_ST.shape[1]))
@@ -302,6 +313,7 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
     ax.set_xlabel("Target Label Replicates")
     f.savefig(savedir + 'pi_STiter' + str(itCurr) + '.png',dpi=300)
     
+    q = pqList[-1][1]
     D = q[numS:].detach().view(-1,d).cpu().numpy()
     muD = q[0:numS].detach().view(-1,1).cpu().numpy()
     nu_D = np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
@@ -448,6 +460,20 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         L.backward()
         return L
     
+    def printCost(currIt):    
+        # save p0 for every 50th iteration and pi
+        f,ax = plt.subplots()
+        ax.plot(np.arange(len(lossListH)),np.asarray(lossListH),label="H($q_0$,$p_0$), Final = {0:.6f}".format(lossListH[-1]))
+        ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA),label="Varifold Norm, Final = {0:.6f}".format(lossListDA[-1]))
+        ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA)+np.asarray(lossListH),label="Total Cost, Final = {0:.6f}".format(lossListDA[-1]+lossListH[-1]))
+        ax.plot(np.arange(len(lossListH)),np.asarray(lossListPI),label="Pi Cost, Final = {0:.6f}".format(lossListPI[-1]))
+        ax.set_title("Loss")
+        ax.set_xlabel("Iterations")
+        ax.set_ylabel("Cost")
+        ax.legend()
+        f.savefig(savedir + 'Cost_' + str(currIt) + '.png',dpi=300)
+        return
+    
     for i in range(its):
         print("it ", i, ": ", end="")
         optimizer.step(closure) # default of 25 iterations in strong wolfe line search; will compute evals and iters until 25 unless reaches an optimum 
@@ -456,20 +482,11 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         if (np.mod(i,25) == 0):
             #p0Save = torch.clone(p0).detach()
             optimizer.zero_grad()
-            printCurrentVariables(p0,i,Kg,sigmaRKHS,uCoeff,q0,d,numS,zeta_S,labs,s,m,savedir)
+            printCurrentVariables(p0*pTilde,i,Kg,sigmaRKHS,uCoeff,q0,d,numS,zeta_S,labs,s,m,savedir)
+            printCost(i)
     print("Optimization (L-BFGS) time: ", round(time.time() - start, 2), " seconds")
-        # save p0 for every 50th iteration and pi
-
-    f,ax = plt.subplots()
-    ax.plot(np.arange(len(lossListH)),np.asarray(lossListH),label="H($q_0$,$p_0$), Final = {0:.6f}".format(lossListH[-1]))
-    ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA),label="Varifold Norm, Final = {0:.6f}".format(lossListDA[-1]))
-    ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA)+np.asarray(lossListH),label="Total Cost, Final = {0:.6f}".format(lossListDA[-1]+lossListH[-1]))
-    ax.plot(np.arange(len(lossListH)),np.asarray(lossListPI),label="Pi Cost, Final = {0:.6f}".format(lossListPI[-1]))
-    ax.set_title("Loss")
-    ax.set_xlabel("Iterations")
-    ax.set_ylabel("Cost")
-    ax.legend()
-    f.savefig(savedir + 'Cost.png',dpi=300)
+    
+    printCost(its)
     
     f,ax = plt.subplots()
     ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyH),label="TotLoss, Final = {0:.6f}".format(lossOnlyH[-1]))
@@ -518,7 +535,8 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     Glist = []
     wGlist = []
     
-    pi_STfinal = p0[(d+1)*numS:].detach().view(zeta_S.shape[-1],zeta_T.shape[-1])
+    p0T = p0*pTilde
+    pi_STfinal = p0T[(d+1)*numS:].detach().view(zeta_S.shape[-1],zeta_T.shape[-1]) # shouldn't matter multiplication by pTilde
     pi_STfinal = pi_STfinal**2
     pi_STfinal = pi_STfinal.cpu().numpy()
     print("pi final, ", pi_STfinal)
@@ -552,15 +570,15 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     polyListSp0[:,1] = np.arange(numS)# +1
     polyListSp0[:,2] = numS + np.arange(numS) #+ 1
     listSp0[0:numS,:] = S.detach().cpu().numpy()
-    listSp0[numS:,:] = p0[numS:(d+1)*numS].detach().view(-1,d).cpu().numpy() + listSp0[0:numS,:]
+    listSp0[numS:,:] = p0T[numS:(d+1)*numS].detach().view(-1,d).cpu().numpy() + listSp0[0:numS,:]
     featsp0 = np.zeros((numS*2,1))
-    featsp0[numS:,:] = p0[0:numS].detach().view(-1,1).cpu().numpy()
+    featsp0[numS:,:] = p0T[0:numS].detach().view(-1,1).cpu().numpy()
     vtf.writeVTK(listSp0,[featsp0],['p0_w'],savedir + 'testOutput_p0.vtk',polyData=polyListSp0)
     pNew = pTilde*p0
-    A,tau,alpha = getATauAlpha(pNew[numS:(d+1)*numS].view(-1,d),q0[numS:].view(-1,d),pNew[:numS].view(-1,1),q0[:numS].view(-1,1),dimEff=dimEff)
+    A,tau,Alpha = getATauAlpha(pNew[numS:(d+1)*numS].view(-1,d),q0[numS:].view(-1,d),pNew[:numS].view(-1,1),q0[:numS].view(-1,1),dimEff=dimEff)
     print("A final, ", A.detach().cpu().numpy())
     print("tau final, ", tau.detach().cpu().numpy())
-    print("alpha final, ", alpha.detach().cpu().numpy())
-    np.savez(savedir + 'testOutput_values.npz',A0=A.detach().cpu().numpy(),tau0=tau.detach().cpu().numpy(),p0=p0.detach().cpu().numpy(),q0=q0.detach().cpu().numpy(),alpha0=alpha.detach().cpu().numpy())    
+    print("Alpha final, ", Alpha.detach().cpu().numpy())
+    np.savez(savedir + 'testOutput_values.npz',A0=A.detach().cpu().numpy(),tau0=tau.detach().cpu().numpy(),p0=pNew.detach().cpu().numpy(),q0=q0.detach().cpu().numpy(),alpha0=Alpha.detach().cpu().numpy(),pTilde=pTilde.detach().cpu().numpy())    
     
     return Dlist, nu_Dlist, nu_DPilist, Glist, wGlist

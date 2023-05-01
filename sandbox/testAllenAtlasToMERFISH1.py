@@ -25,50 +25,52 @@ import nibabel as nib
 def main():
     d = 3
     labs = 2 # in target 
-    labS = 5 # template
-    sigmaRKHS = [0.2,0.1] # as of 3/16, should be fraction of total domain of S+T #[10.0]
-    sigmaVar = [0.5,0.2,0.05] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 25
-    alphaSt = 'AllenAtlasToBarSeq'
+    labS = 3 # template
+    sigmaRKHS = [0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
+    sigmaVar = [0.5,0.2,0.05,0.02] # as of 3/16, should be fraction of total domain of S+T #10.0
+    its = 50
+    alphaSt = 'MouseToMerfish'
     beta = None
     res=1.0
     kScale=1
-    extra="flip"
+    extra="sl484to212"
     cA=1.0
     cT=1.0 # original is 0.5
     cS=30.0
+    dimEff=2
     
     # Set these parameters according to relative decrease you expect in data attachment term
     # these should be based on approximately what the contribution compared to original cost is
-    gamma = 10.0 #0.01 #10.0
+    gamma = 10.0 #10 for rescaling of varifold kernels by 0.6/sig #10.0
     
     original = sys.stdout
 
-    outpath='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/'
+    outpath='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/AllenMERFISH/' + alphaSt + '/'
+    imgSource='/cis/home/kstouff4/Documents/MeshRegistration/TestImages/Allen_10_anno_16bit_ap.img'
+    imgTarg='/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenMerfish/XnuX_Aligned/top20MI/_212_XnuX_lowToHighMI.npz.npz'
 
     if (not os.path.exists(outpath)):
         os.mkdir(outpath) 
-        
-    outpath = outpath + alphaSt + '/'
+    S,nu_S = gI.makeFromSingleChannelImage(imgSource,0.08,bg=[0],ds=8,axEx=[2,484],weights=torch.tensor(0.08**2).type(dtype))
+    N = S.shape[0]
+    labS = nu_S.shape[-1]
     
-    if (not os.path.exists(outpath)):
-        os.mkdir(outpath)
+    T,nu_T = gI.getFromFile(imgTarg)
     
-    atlasImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/downFromOld__optimalZnu_ZAllwC1.0_sig0.2_Nmax1500.0_Npart2000.0_BarSeqSlab.npz'
-    targetImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/BarSeq/Redo2__optimalZnu_ZAllwC8.0_sig[0.4]_Nmax1500.0_Npart2000.0.npz'
-    
-    S,nu_S = gI.getFromFile(atlasImage)
-    T,nu_T = gI.getFromFile(targetImage)
-    
-    # flip Allen atlas over z axis
-    S[:,-1] = -1.0*S[:,-1]
-
     labs = nu_T.shape[-1]
     labS = nu_S.shape[-1]
     cPi=torch.tensor(0.1/np.log(labs)).type(dtype) #0.1
     N = S.shape[0]
 
-    savedir = outpath + '/output_dl_sig_its_albega_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(gamma) + str(beta) + '_' + str(N) + extra + '/'
+    # Trying Rotation manually 
+    #Arot = init.get3DRotMatrix(torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0))
+    #tauManual = torch.zeros((1,d)).type(dtype)
+    #tauManual[0,0] = torch.tensor(2.0).type(dtype)
+    #T,nu_T = init.applyAffine(T,nu_T,Arot,tauManual)
+    
+    #S,nu_S = init.scaleDataByVolumes(S,nu_S,T,nu_T,dRel=2) # dRel for what relative volume is 
+
+    savedir = outpath + '/output_dl_sig_its_albega_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(gamma) + str(beta) + '_' + str(N) + str(cPi) + extra + '/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
     
@@ -92,7 +94,7 @@ def main():
     for sigg in sigmaVar:
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
-    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=d)
+    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=dimEff)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
