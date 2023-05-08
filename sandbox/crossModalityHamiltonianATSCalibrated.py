@@ -80,13 +80,17 @@ def GaussKernelSpaceSingle(sig,d):
 #################################################################
 # Compute Controls (A,Tau,U,div(U))
 # get A,tau,alpha
-def getATauAlpha(px,qx,pw,qw,cA=1.0,cT=1.0,dimEff=3):
+def getATauAlpha(px,qx,pw,qw,cA=1.0,cT=1.0,dimEff=3,single=False):
     xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0)) # moving barycenters; should be 1 x 3
     A = ((1.0/(2.0*cA))*(px.T@(qx-xc) - (qx-xc).T@px)).type(dtype) # 3 x N * N x 3
     tau = ((1.0/cT)*(px.sum(dim=0))).type(dtype)
     if (dimEff == 2):
         alpha = ((px*(qx-xc)).sum() + (pw*qw*dimEff).sum()).type(dtype)
-        Alpha = torch.eye(2).type(dtype)*alpha
+        Alpha = torch.eye(3).type(dtype)*alpha
+        Alpha[-1,-1] = 0.0 # always scale Z by 0
+    elif (dimEff == 3 and single):
+        alpha = ((px*(qx-xc)).sum() + (pw*qw*dimEff).sum()).type(dtype)
+        Alpha = torch.eye(3).type(dtype)*alpha
     else:
         alpha_xy = 0.5*((px[:,0:2]*(qx-xc)[:,0:2]).sum() + (pw*qw*2.0).sum()).type(dtype)
         alpha_z = ((px[:,-1]*(qx-xc)[:,-1]).sum() + (pw*qw).sum()).type(dtype)
@@ -154,7 +158,7 @@ def RalstonIntegrator():
 
 #################################################################
 # Hamiltonian 
-def Hamiltonian(K0, sigma, d,numS,cA=1.0,cT=1.0,dimEff=3):
+def Hamiltonian(K0, sigma, d,numS,cA=1.0,cT=1.0,dimEff=3,single=False):
     # K0 = GaussKernelHamiltonian(x,x,px,px,w*pw,w*pw)
     def H(p, q):
         px = p[numS:].view(-1,d)
@@ -165,7 +169,7 @@ def Hamiltonian(K0, sigma, d,numS,cA=1.0,cT=1.0,dimEff=3):
         wpq = pw*qw
         k = K0(qx,qx,px,px,wpq,wpq) # k shape should be N x 1
         # px = N x 3, qx = N x 3, qw = N x 1
-        A,tau,Alpha = getATauAlpha(px,qx,pw,qw,cA,cT,dimEff) #getAtau( = (1.0/(2*alpha))*(px.T@(qx-qc) - (qx-qc).T@px) # should be d x d
+        A,tau,Alpha = getATauAlpha(px,qx,pw,qw,cA,cT,dimEff,single) #getAtau( = (1.0/(2*alpha))*(px.T@(qx-qc) - (qx-qc).T@px) # should be d x d
         Anorm = (A*A).sum()  
         Alphanorm = (Alpha*Alpha).sum()
         return k.sum() + (cA/2.0)*Anorm + (cT/2.0)*(tau*tau).sum() + (0.5)*Alphanorm
@@ -173,8 +177,8 @@ def Hamiltonian(K0, sigma, d,numS,cA=1.0,cT=1.0,dimEff=3):
     return H
 
 
-def HamiltonianSystem(K0, sigma, d,numS,cA=1.0,cT=1.0,dimEff=3):
-    H = Hamiltonian(K0, sigma, d, numS,cA,cT,dimEff)
+def HamiltonianSystem(K0, sigma, d,numS,cA=1.0,cT=1.0,dimEff=3,single=False):
+    H = Hamiltonian(K0, sigma, d, numS,cA,cT,dimEff,single)
 
     def HS(p, q):
         Gp, Gq = grad(H(p, q), (p, q), create_graph=True)
@@ -183,8 +187,8 @@ def HamiltonianSystem(K0, sigma, d,numS,cA=1.0,cT=1.0,dimEff=3):
     return HS
 
 # Katie change this to include A and T for the grid 
-def HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=3):
-    H = Hamiltonian(K0,sigma,d,numS,cA,cT,dimEff=dimEff)
+def HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=3,single=False):
+    H = Hamiltonian(K0,sigma,d,numS,cA,cT,dimEff=dimEff,single=single)
     def HS(p,q,qgrid,qgridw):
         px = p[numS:].view(-1,d)
         pw = p[:numS].view(-1,1)
@@ -195,7 +199,7 @@ def HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=3):
         gx = qgrid.view(-1,d)
         gw = qgridw.view(-1,1)
         Gp,Gq = grad(H(p,q), (p,q), create_graph=True)
-        A,tau,Alpha = getATauAlpha(px,qx,pw,qw,dimEff=dimEff)
+        A,tau,Alpha = getATauAlpha(px,qx,pw,qw,dimEff=dimEff,single=single)
         xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0))
         Gg = (getU(sigma,d,uCoeff)(gx,qx,px,pw*qw) + (gx-xc)@A.T + tau + (gx-xc)@Alpha).flatten()
         Ggw = (getUdiv(sigma,d,uCoeff)(gx,qx,px,pw*qw)*gw + Alpha.sum()*gw).flatten()
@@ -207,14 +211,14 @@ def HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=3):
 ##################################################################
 # Shooting
 
-def Shooting(p0, q0, K0,sigma,d, numS,cA=1.0,cT=1.0,dimEff=3,nt=10, Integrator=RalstonIntegrator()):
-    return Integrator(HamiltonianSystem(K0,sigma,d,numS,cA,cT,dimEff), (p0, q0), nt)
+def Shooting(p0, q0, K0,sigma,d, numS,cA=1.0,cT=1.0,dimEff=3,single=False,nt=10, Integrator=RalstonIntegrator()):
+    return Integrator(HamiltonianSystem(K0,sigma,d,numS,cA,cT,dimEff,single), (p0, q0), nt)
 
 
-def LDDMMloss(K0,sigma, d, numS,gamma,dataloss,piLoss,cA=1.0,cT=1.0,cPi=10.0,dimEff=3):
+def LDDMMloss(K0,sigma, d, numS,gamma,dataloss,piLoss,cA=1.0,cT=1.0,cPi=10.0,dimEff=3,single=False):
     def loss(p0, q0):
-        p, q = Shooting(p0[:(d+1)*numS], q0, K0,sigma, d,numS,dimEff=dimEff)[-1]
-        hLoss = (gamma * Hamiltonian(K0, sigma, d,numS,cA,cT,dimEff)(p0[:(d+1)*numS], q0))
+        p, q = Shooting(p0[:(d+1)*numS], q0, K0,sigma, d,numS,dimEff=dimEff,single=single)[-1]
+        hLoss = (gamma * Hamiltonian(K0, sigma, d,numS,cA,cT,dimEff,single=single)(p0[:(d+1)*numS], q0))
         dLoss = dataloss(q,p0[(d+1)*numS:])
         pLoss = gamma*torch.tensor(cPi).type(dtype)*piLoss(q,p0[(d+1)*numS:])
         return hLoss, dLoss, pLoss
@@ -222,8 +226,8 @@ def LDDMMloss(K0,sigma, d, numS,gamma,dataloss,piLoss,cA=1.0,cT=1.0,cPi=10.0,dim
 
     return loss
 
-def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=3,nt=10,Integrator=RalstonIntegrator()):
-    return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA,cT,dimEff), (p0[:(d+1)*numS],q0,qGrid,qGridw),nt)
+def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=3,single=False,nt=10,Integrator=RalstonIntegrator()):
+    return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA,cT,dimEff,single=single), (p0[:(d+1)*numS],q0,qGrid,qGridw),nt)
 
 #################################################################
 # Data Attachment Term
@@ -275,13 +279,14 @@ def PiRegularizationSystem(zeta_S,nu_T,numS,d,norm=True):
 ##################################################################
 # Print out Functions
 
-def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S,labT,s,m,savedir,dimEff=3):
+def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S,labT,s,m,savedir,dimEff=3,single=False):
     np.savez(savedir+'p0_iter' + str(itCurr) + '.npz',p0=p0Curr.detach().cpu().numpy())
     pqList = Shooting(p0Curr[:(d+1)*numS], q0Curr, K0,sigmaRKHS, d,numS)
     pi_ST = p0Curr[(d+1)*numS:].detach().view(zeta_S.shape[-1],labT)
     pi_ST = pi_ST**2
     pi_ST = pi_ST.cpu().numpy()
-    print("pi final, ", pi_ST)
+    print("pi iter " + str(itCurr) + ", ", pi_ST)
+    print(np.unique(pi_ST))
     print("non diffeomorphism")
     totA = np.zeros((3,3))
     for i in range(len(pqList)):
@@ -291,7 +296,7 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
         pw = p[:numS].view(-1,1)
         qx = q[numS:].view(-1,d)
         qw = q[:numS].view(-1,1) #torch.squeeze(q[:numS])[...,None]
-        A,tau,Alpha = getATauAlpha(px,qx,pw,qw,dimEff=dimEff)
+        A,tau,Alpha = getATauAlpha(px,qx,pw,qw,dimEff=dimEff,single=single)
         totA += (0.1)*A.detach().cpu().numpy() # assume 10 time steps?
         print("A, ", A.detach().cpu().numpy())
         print("tau, ", tau.detach().cpu().numpy())
@@ -301,9 +306,10 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
     print("det(R), ", np.linalg.det(R))
     
     if (pi_ST.shape[0] > pi_ST.shape[1]*10):
-        pi_STplot = np.zeros((pi_ST.shape[0],10*pi_ST.shape[1]))
+        rat = np.round(pi_ST.shape[0]/pi_ST.shape[1]).astype(int)
+        pi_STplot = np.zeros((pi_ST.shape[0],rat*pi_ST.shape[1]))
         for j in range(pi_ST.shape[1]):
-            pi_STplot[:,j*pi_ST.shape[1]:(j+1)*pi_ST.shape[1]] = pi_ST[:,j][...,None]
+            pi_STplot[:,j*rat:(j+1)*rat] = np.squeeze(pi_ST[:,j])[...,None]
     else:
         pi_STplot = pi_ST
     f,ax = plt.subplots()
@@ -340,7 +346,7 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
 ###################################################################
 # Optimization
 
-def makePQ(S,nu_S,T,nu_T,norm=True):
+def makePQ(S,nu_S,T,nu_T,Csqpi=torch.tensor(1.0).type(dtype),norm=True):
     # initialize state vectors based on normalization 
     w_S = nu_S.sum(axis=-1)[...,None].type(dtype)
     w_T = nu_T.sum(axis=-1)[...,None].type(dtype)
@@ -362,12 +368,13 @@ def makePQ(S,nu_S,T,nu_T,norm=True):
         pi_STinit = pi_STinit*nuSTtot
     print("pi shape ", pi_STinit.shape)
     print("initial Pi ", pi_STinit.detach().cpu().numpy())
+    print("unique values in Pi ", np.unique(pi_STinit.detach().cpu().numpy()))
     
-    p0 = torch.cat((torch.zeros_like(q0),torch.sqrt(pi_STinit).clone().detach().flatten()),0).requires_grad_(True).type(dtype)
+    p0 = torch.cat((torch.zeros_like(q0),(1.0/Csqpi)*torch.sqrt(pi_STinit).clone().detach().flatten()),0).requires_grad_(True).type(dtype)
     
     return w_S,w_T,zeta_S,zeta_T,q0,p0,numS, Stilde, Ttilde, s, m, pi_STinit
 
-def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100,kScale = torch.tensor(1.0).type(dtype),cA=1.0,cT=1.0,cS=10.0,cPi=1.0,dimEff=3,beta=None):
+def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100,kScale = torch.tensor(1.0).type(dtype),cA=1.0,cT=1.0,cS=10.0,cPi=1.0,dimEff=3,Csqpi=torch.tensor(1.0).type(dtype),single=False,beta=None):
     '''
     Parameters:
         S, nu_S = source image varifold
@@ -384,15 +391,15 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         kScale = multiplicative factor of particles if applying parameter settings for one set of particles to another (larger), with assumption that mass has been conserved
         beta = computed to scale the varifold norm initially to 1; overridden with desired value if not None
     '''
-    w_S, w_T,zeta_S,zeta_T,q0,p0,numS,Stilde,Ttilde,s,m, pi_STinit = makePQ(S,nu_S,T,nu_T)
+    w_S, w_T,zeta_S,zeta_T,q0,p0,numS,Stilde,Ttilde,s,m, pi_STinit = makePQ(S,nu_S,T,nu_T,Csqpi=Csqpi)
     N = torch.tensor(S.shape[0]).type(dtype)
     s = s.cpu().numpy()
     m = m.cpu().numpy()
 
     pTilde = torch.zeros_like(p0).type(dtype)
     pTilde[0:numS] = torch.squeeze(torch.tensor(1.0/(dimEff*w_S))).type(dtype) #torch.sqrt(kScale)*torch.sqrt(kScale)
-    pTilde[numS:] = torch.tensor(1.0).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
-
+    pTilde[numS:numS*(d+1)] = torch.tensor(1.0).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
+    pTilde[(d+1)*numS:] = Csqpi
     
     if (beta is None):
         # set beta to make ||mu_S - mu_T||^2 = 1
@@ -432,7 +439,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     piLoss = PiRegularizationSystem(zeta_S,nu_T,numS,d)
     Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d,uCoeff=uCoeff)
 
-    loss = LDDMMloss(Kg,sigmaRKHS,d, numS, gamma, dataloss,piLoss,cA,cT,cPi,dimEff)
+    loss = LDDMMloss(Kg,sigmaRKHS,d, numS, gamma, dataloss,piLoss,cA,cT,cPi,dimEff,single=single)
 
     optimizer = torch.optim.LBFGS([p0], max_eval=15, max_iter=10,line_search_fn = 'strong_wolfe',history_size=100,tolerance_grad=1e-8,tolerance_change=1e-10)
     print("performing optimization...")
@@ -449,10 +456,12 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         optimizer.zero_grad()
         LH,LDA,LPI = loss(p0*pTilde, q0)
         L = LH+LDA+LPI
+        '''
         print("loss", L.detach().cpu().numpy())
         print("loss H ", LH.detach().cpu().numpy())
         print("loss LDA ", LDA.detach().cpu().numpy())
         print("loss LPI ", LPI.detach().cpu().numpy())
+        '''
         lossListH.append(np.copy(LH.detach().cpu().numpy()))
         lossListDA.append(np.copy(LDA.detach().cpu().numpy()))
         relLossList.append(np.copy(LDA.detach().cpu().numpy())/cst)
@@ -465,7 +474,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         f,ax = plt.subplots()
         ax.plot(np.arange(len(lossListH)),np.asarray(lossListH),label="H($q_0$,$p_0$), Final = {0:.6f}".format(lossListH[-1]))
         ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA),label="Varifold Norm, Final = {0:.6f}".format(lossListDA[-1]))
-        ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA)+np.asarray(lossListH),label="Total Cost, Final = {0:.6f}".format(lossListDA[-1]+lossListH[-1]))
+        ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA)+np.asarray(lossListH),label="Total Cost, Final = {0:.6f}".format(lossListDA[-1]+lossListH[-1]+lossListPI[-1]))
         ax.plot(np.arange(len(lossListH)),np.asarray(lossListPI),label="Pi Cost, Final = {0:.6f}".format(lossListPI[-1]))
         ax.set_title("Loss")
         ax.set_xlabel("Iterations")
@@ -477,6 +486,10 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     for i in range(its):
         print("it ", i, ": ", end="")
         optimizer.step(closure) # default of 25 iterations in strong wolfe line search; will compute evals and iters until 25 unless reaches an optimum 
+        print("Current Losses")
+        print("H loss: ", lossListH[-1])
+        print("Var loss: ", lossListDA[-1])
+        print("Pi lossL ", lossListPI[-1])
         osd = optimizer.state_dict()
         lossOnlyH.append(np.copy(osd['state'][0]['prev_loss']))
         if (np.mod(i,25) == 0):
@@ -527,7 +540,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     qGrid = qGrid.flatten()
     qGridw = torch.ones((numG)).type(dtype)    
 
-    listpq = ShootingGrid(p0*pTilde,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,uCoeff,cA,cT,dimEff)
+    listpq = ShootingGrid(p0*pTilde,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,uCoeff,cA,cT,dimEff,single=single)
     print("length of pq list is, ", len(listpq))
     Dlist = []
     nu_Dlist = []
@@ -540,11 +553,20 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     pi_STfinal = pi_STfinal**2
     pi_STfinal = pi_STfinal.cpu().numpy()
     print("pi final, ", pi_STfinal)
+    print(np.unique(pi_STfinal))
+    
+    if (pi_STfinal.shape[0] > pi_STfinal.shape[1]*10):
+        rat = np.round(pi_STfinal.shape[0]/pi_STfinal.shape[1]).astype(int)
+        pi_STplot = np.zeros((pi_STfinal.shape[0],rat*pi_STfinal.shape[1]))
+        for j in range(pi_STfinal.shape[1]):
+            pi_STplot[:,j*rat:(j+1)*rat] = np.squeeze(pi_STfinal[:,j])[...,None]
+    else:
+        pi_STplot = pi_STfinal
     f,ax = plt.subplots()
-    im = ax.imshow(pi_STfinal)
+    im = ax.imshow(pi_STplot)
     f.colorbar(im,ax=ax)
     ax.set_ylabel("Source Labels")
-    ax.set_xlabel("Target Labels")
+    ax.set_xlabel("Target Label Replicates")
     f.savefig(savedir + 'pi_STfinal.png',dpi=300)
     
     for t in range(len(listpq)):
@@ -575,10 +597,10 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     featsp0[numS:,:] = p0T[0:numS].detach().view(-1,1).cpu().numpy()
     vtf.writeVTK(listSp0,[featsp0],['p0_w'],savedir + 'testOutput_p0.vtk',polyData=polyListSp0)
     pNew = pTilde*p0
-    A,tau,Alpha = getATauAlpha(pNew[numS:(d+1)*numS].view(-1,d),q0[numS:].view(-1,d),pNew[:numS].view(-1,1),q0[:numS].view(-1,1),dimEff=dimEff)
+    A,tau,Alpha = getATauAlpha(pNew[numS:(d+1)*numS].view(-1,d),q0[numS:].view(-1,d),pNew[:numS].view(-1,1),q0[:numS].view(-1,1),dimEff=dimEff,single=single)
     print("A final, ", A.detach().cpu().numpy())
     print("tau final, ", tau.detach().cpu().numpy())
     print("Alpha final, ", Alpha.detach().cpu().numpy())
-    np.savez(savedir + 'testOutput_values.npz',A0=A.detach().cpu().numpy(),tau0=tau.detach().cpu().numpy(),p0=pNew.detach().cpu().numpy(),q0=q0.detach().cpu().numpy(),alpha0=Alpha.detach().cpu().numpy(),pTilde=pTilde.detach().cpu().numpy())    
+    np.savez(savedir + 'testOutput_values.npz',A0=A.detach().cpu().numpy(),tau0=tau.detach().cpu().numpy(),p0=pNew.detach().cpu().numpy(),q0=q0.detach().cpu().numpy(),alpha0=Alpha.detach().cpu().numpy(),pTilde=pTilde.detach().cpu().numpy(),pi_ST=pi_STfinal)    
     
     return Dlist, nu_Dlist, nu_DPilist, Glist, wGlist
