@@ -12,6 +12,7 @@ import pandas as pd
 import os
 #os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
+from matplotlib import pyplot as plt
 
 def applyAffine(Z, nu_Z, A, tau):
     '''
@@ -37,6 +38,9 @@ def readFromPrevious(npzFile):
 
 def getFromFile(npzFile):
     npz = np.load(npzFile)
+    print("min and max")
+    print(np.min(npz[npz.files[0]],axis=0))
+    print(np.max(npz[npz.files[0]],axis=0))
     S = torch.tensor(npz[npz.files[0]]).type(dtype)
     nu_S = torch.tensor(npz[npz.files[1]]).type(dtype)
     return S,nu_S
@@ -200,9 +204,13 @@ def returnMultiplesSpace(S,nu_S,k):
         nu_Sk[i*N:(i+1)*N,:] = nu_S/torch.tensor(k).type(dtype)
     return Sk,nu_Sk
 
-def makeBinsFromMultiChannelImage(imageFile,res,dimEff,dimFeats,ds=1,z=0,threshold=0,bins=1):
-    im = nib.load(imageFile)
-    im = np.squeeze(im.dataobj)
+def makeBinsFromMultiChannelImage(imageFile,res,dimEff,dimFeats,ds=1,z=0,threshold=0,bins=1,reverse=False):
+    imageSuff = imageFile.split('.')[-1] 
+    if (imageSuff == 'tif' or imageSuff == 'tif' or imageSuff == 'png' or imageSuff == 'TIF'):
+        im = np.squeeze(plt.imread(imageFile))
+    else:
+        im = nib.load(imageFile)
+        im = np.squeeze(im.dataobj)
     
     imDS = im[0::ds,...]
     imDS = imDS[:,0::ds,...]
@@ -232,8 +240,11 @@ def makeBinsFromMultiChannelImage(imageFile,res,dimEff,dimFeats,ds=1,z=0,thresho
     if bins > 0:
         nu_S = torch.zeros((S.shape[0],(bins-threshold)*dimFeats)).type(dtype)
         for di in range(dimFeats):
-            nu_Sdi = np.ravel(imDS[...,di])
+            nu_Sdi = np.ravel(imDS[...,di]).astype('float32')
+            if (reverse):
+                nu_Sdi = -1*nu_Sdi
             b = np.arange(bins)*(np.max(nu_Sdi)+1-np.min(nu_Sdi))/bins + np.min(nu_Sdi) - 0.5
+            print("bins are: ", b)
             nu_Sdibin = np.ravel(np.digitize(nu_Sdi,b)-1) # 1 based
             print(np.unique(nu_Sdibin))
             oneHot = np.zeros((nu_Sdibin.shape[0],bins))

@@ -13,16 +13,28 @@ import pandas as pd
 
 
 
-def applyAffine(Z, nu_Z, A, tau):
+def applyAffine(Z, nu_Z, A, tau,bc=False):
     '''
     Makes a new set of particles based on an input set and applying the affine transformation given by matrix A and translation, tau
     '''
     print("max before ", torch.max(Z,axis=0))
     R = torch.clone(Z)
     nu_R = torch.clone(nu_Z)
-    R = R@A.T + tau
+    if (not bc):
+        R = R@A.T + tau
+    else:
+        # rotate around center of mass 
+        xc = torch.sum((torch.sum(nu_R,axis=-1)*Z),axis=0)/torch.sum(nu_R)
+        Rp = R-xc
+        R = Rp@A.T + tau
     print("max ", torch.max(R,axis=0))
     return R,nu_R
+
+def flip(Z):
+    R = torch.clone(Z)
+    R[:,0] = -1.0*R[:,0]
+    
+    return R
 
 def alignBaryCenters(S,nu_S,T,nu_T):
     '''
@@ -93,12 +105,28 @@ def rescaleData(S,T):
     
     X = torch.cat((S,T))
     m = torch.min(X,axis=0).values
-    rang = torch.max(X,axis=0).values - m
+    rang = torch.max(X,axis=0).values
+    print("min and max originally")
+    print(m.detach())
+    print(rang.detach())
+    rang = rang-m
     s = torch.max(rang)
     Stilde = (S - m)*(1.0/s)
     Ttilde = (T-m)*(1.0/s)
     
     return Stilde,Ttilde,s,m
+
+def rescaleDataList(Slist):
+    X = torch.cat((Slist[0],Slist[1]))
+    for i in range(2,len(Slist)):
+        X = torch.cat((X,Slist[i]))
+    m = torch.min(X,axis=0).values
+    rang = torch.max(X,axis=0).values - m
+    s = torch.max(rang)
+    Stilde = []
+    for i in range(len(Slist)):
+        Stilde.append((Slist[i] - m)*(1.0/s))
+    return Stilde,s,m
 
 def resizeData(Xtilde,s,m):
     '''
@@ -136,3 +164,26 @@ def scaleDataByVolumes(S,nuS,T,nuT,dRel=3):
     print("scale factor is, ", scaleF)
     
     return Sn,nuSn
+
+def combineFeatures(S,nuS,listOfCols):
+    '''
+    Combine list of nuS columns (feature dimensions) as set of new features
+    Remove particles in S that do not have any more mass
+    '''
+    
+    numFeats = len(listOfCols)
+    nuSnew = torch.zeros((nuS.shape[0],numFeats)).type(dtype)
+    
+    c = 0
+    for l in listOfCols:
+        if len(l) > 1:
+            nuSnew[:,c] = torch.sum(nuS[:,l],axis=-1)
+        else:
+            nuSnew[:,c] = torch.squeeze(nuS[:,l])
+        c = c + 1
+    toKeep = torch.sum(nuSnew,axis=-1) > 0
+    Snew = S[toKeep,...]
+    nuSnew = nuSnew[toKeep,...]
+    
+    return Snew, nuSnew
+    
