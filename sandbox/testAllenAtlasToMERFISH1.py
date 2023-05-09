@@ -7,6 +7,7 @@ sys_path.append('../xmodmap')
 sys_path.append('../xmodmap/io')
 import initialize as init
 import getInput as gI
+import getOutput as gO
 
 sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
 import vtkFunctions as vtf
@@ -26,28 +27,30 @@ def main():
     d = 3
     labs = 2 # in target 
     labS = 3 # template
-    sigmaRKHS = [0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
-    sigmaVar = [0.5,0.2,0.05,0.02] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 50
+    sigmaRKHS = [0.05,0.2] # as of 3/16, should be fraction of total domain of S+T #[10.0]
+    sigmaVar = [0.6,0.1,0.05,0.02] # as of 3/16, should be fraction of total domain of S+T #10.0
+    its = 150
     alphaSt = 'MouseToMerfish'
     beta = None
     res=1.0
     kScale=1
-    extra="sl484to212"
+    extra="sl484to212_alainParams"
     cA=1.0
     cT=1.0 # original is 0.5
-    cS=30.0
+    cS=1.0
     dimEff=2
+    Csqpi = 10000.0
     
     # Set these parameters according to relative decrease you expect in data attachment term
     # these should be based on approximately what the contribution compared to original cost is
-    gamma = 10.0 #10 for rescaling of varifold kernels by 0.6/sig #10.0
+    gamma = 1.0 #10 for rescaling of varifold kernels by 0.6/sig #10.0
     
     original = sys.stdout
 
     outpath='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/AllenMERFISH/' + alphaSt + '/'
     imgSource='/cis/home/kstouff4/Documents/MeshRegistration/TestImages/Allen_10_anno_16bit_ap.img'
     imgTarg='/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenMerfish/XnuX_Aligned/top20MI/_212_XnuX_lowToHighMI.npz.npz'
+    imgTarg='/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenMerfish/ZnuZ_Aligned/top20MI/sig0.05/_212_ZnuZ_lowToHighMI__optimalZnu_ZAllwC8.0_sig[0.05]_Nmax1500.0_Npart2000.0.npz'
 
     if (not os.path.exists(outpath)):
         os.mkdir(outpath) 
@@ -59,7 +62,7 @@ def main():
     
     labs = nu_T.shape[-1]
     labS = nu_S.shape[-1]
-    cPi=torch.tensor(0.1/np.log(labs)).type(dtype) #0.1
+    cPi=torch.tensor(10.0/np.log(labs)).type(dtype) #0.1
     N = S.shape[0]
 
     # Trying Rotation manually 
@@ -94,7 +97,7 @@ def main():
     for sigg in sigmaVar:
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
-    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=dimEff)
+    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=dimEff,Csqpi=torch.tensor(Csqpi).type(dtype))
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
@@ -135,6 +138,8 @@ def main():
         nu_D = nu_Dlist[t]
         nu_G = nu_Glist[t]
         nu_Dpi = nu_DPilist[t]
+        print("nu_D shape, ", nu_D.shape)
+        print("nu_Dpi shape, ", nu_Dpi.shape)
         zeta_D = nu_D/(np.sum(nu_D,axis=-1)[...,None])
         zeta_Dpi = nu_Dpi / (np.sum(nu_Dpi,axis=-1)[...,None])
         imageValsD = [np.sum(nu_D,axis=-1), np.argmax(nu_D,axis=-1)]

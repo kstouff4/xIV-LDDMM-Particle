@@ -107,6 +107,45 @@ def analyzeLongitudinalMass(listOfNu,S,ages,savename,labels):
     f.savefig(savename.replace('.vtk','_stats.png'),dpi=300)
     np.savez(savename.replace('.vtk','.npz'),beta=beta,coef=coef,Y=Y)
     return
+
+def getJacobian(D,nu_S,nu_D,savename):
+    j = np.sum(nu_D,axis=-1)/np.sum(nu_S,axis=-1)
+    imageNames = ['maxVal','totalMass','jacobian']
+    imageVals = [np.argmax(nu_D,axis=-1), np.sum(nu_D,axis=-1), j]
+    vtf.writeVTK(S,imageVals,imageNames,savename,polyData=None)
+    return
+
+def splitZs(T,nu_T,D,nu_D,savename,units=10):
+    # split target, and deformed source along Z axis (last one) into units
+    ma = np.max(T,axis=-1)[-1]
+    mi = np.min(T,axis=-1)[-1]
+    mas = np.max(D,axis=-1)[-1]
+    mis = np.min(D,axis=-1)[-1]
+    mi = min(mi,mis)
+    ma = max(ma,mas)
+    
+    interval = np.round(ma-mi/units)
+    imageNamesT = ['maxVal', 'totalMass']
+    imageNamesD = ['maxVal','totalMass']
+    for f in range(nu_T.shape[-1]):
+        imageNamesT.apppend('zeta_' + str(f))
+    for f in range(nu_D.shape[-1]):
+        imageNamesD.append('zeta_' + str(f))
+    
+    for i in range(interval):
+        iT = (T[...,-1] >= mi + i*interval)*(T[...,-1] < mi + (i+1)*interval)
+        nu_Ts = nu_T[iT,...]
+        imageVals = [np.argmax(nu_Ts,axis=-1),np.sum(nu_Ts,axis=-1)]
+        for f in range(nu_T.shape[-1]):
+            imageVals.append(nu_Ts[:,f])
+        vtf.writeVTK(T[iT,...],imageVals,imageNames,savename+'_zunit' + str(i) + '.vtk',polyData=None)
+        iD = (D[...,-1] >= mi + i*interval)*(D[...,-1] < mi + (i+1)*interval)
+        nu_Ds = nu_D[iD,...]
+        imageVals = [np.argmax(nu_Ds,axis=-1),np.sum(nu_Ds,axis=-1)]
+        for f in range(nu_D.shape[-1]):
+            imageVals.append(nu_Ds[:,f])
+        vtf.writeVTK(D[iD,...],imageVals,imageNames,savename+'_zunit'+str(i) + '.vtk',polyData=None)
+    return
                    
                         
     
