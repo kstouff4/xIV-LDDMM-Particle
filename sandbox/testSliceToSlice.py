@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib
 from matplotlib import pyplot as plt
+import sys
+import os
 from sys import path as sys_path
 sys_path.append('..')
 sys_path.append('../xmodmap')
@@ -14,31 +16,48 @@ import vtkFunctions as vtf
 import torch
 import sliceToSliceAlignment as sts
 
+np_dtype = "float32" #"float64"
+dtype = torch.cuda.FloatTensor #DoubleTensor 
+
+
 def main():
-    sigma = 1.0 # in mm 
-    its = 100
+    sigma = 0.5 # in mm 
+    its = 50
     
     wholeX = np.load('/cis/home/kstouff4/Documents/MeshRegistration/Particles/BarSeq/slicesAll_[28-56-111-101-47]_mmRedone_XoneHot.npz')
     zs = np.unique(wholeX[wholeX.files[0]][...,-1])
     
     filesO = ['/cis/home/kstouff4/Documents/MeshRegistration/Particles/BarSeq/Redo__optimalZnu_ZAllwC8.0_sig[0.2]_Nmax1500.0_Npart2000.0.npz']
     
-    Slist, nu_Slist, slIndex = sts.getSlicesFromWhole(filesO[0],zs)
+    extra = "BarSeq/"
+    
+    #wholeX = np.load('/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenMerfish/ZnuZ_Aligned/top20MI/sig0.1/All_ZnuZ_sig0.05.npz')
+    #zs = np.unique(wholeX[wholeX.files[0]][...,-1])
+    #filesO = ['/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenMerfish/ZnuZ_Aligned/top20MI/sig0.1/All_ZnuZ__optimalZnu_ZAllwC1.2_sig[0.1]_Nmax1500.0_Npart2000.0.npz']
+    
+    #extra = "AllenMerfish/"
                        
     original = sys.stdout
     
     savedir = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir) 
-
-    extra = "AllenMerfish/"
     
     savedir = savedir + extra
     
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
         
-    Snew, thetas, taus = sts.align(Slist,nu_Slist,sigma,its,savedir)
+    savedir = savedir + str(sigma) + '/'
+    if (not os.path.exists(savedir)):
+        os.mkdir(savedir)
+        
+    sys.stdout = open(savedir+'test.txt','w')
+    Slist, nu_Slist, slIndex = sts.getSlicesFromWhole(filesO[0],zs)
+    print(len(Slist))
+    print(len(nu_Slist))
+    
+    Snew, thetas, taus = sts.align(Slist,nu_Slist,torch.tensor(sigma).type(dtype),its,savedir,norm=False)
     totalPoints = slIndex.shape[0]
     SnewTotal = np.zeros((totalPoints,3))
     nuSTotal = np.zeros((totalPoints,nu_Slist[0].shape[-1]))
