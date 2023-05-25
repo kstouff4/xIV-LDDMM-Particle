@@ -9,6 +9,14 @@ import scipy as sp
 from scipy import linalg
 
 import nibabel as nib
+from scipy.ndimage import gaussian_filter
+
+import torch
+from pykeops.torch import Vi,Vj
+
+np_dtype = "float32" #"float64"
+dtype = torch.cuda.FloatTensor #DoubleTensor 
+
 
 def getLocalDensity(Z,nu_Z,sigma,savename,coef=3):
     '''
@@ -53,7 +61,7 @@ def getLocalDensity(Z,nu_Z,sigma,savename,coef=3):
     vtf.writeVTK(centroidsPlot,imageDensity,imageNames,savename,polyData=None)
     return
 
-def getCompareDensity(T,nu_T,D,nu_Dpi,sigma,savedir,coef=3):
+def getCompareDensity(T,nu_T,D,nu_D,sigma,savedir,coef=3):
     '''
     Compute local density in cube of size 2sigma x 2sigma x 2sigma; save as segmentation image (maxVal) and intensity (weights)
     '''
@@ -71,26 +79,31 @@ def getCompareDensity(T,nu_T,D,nu_Dpi,sigma,savedir,coef=3):
     
     coords_labels = np.floor((T - np.floor(np.min(T,axis=0)))/cSize).astype(int) # minimum number of cubes in x and y 
     coords_labels = np.ceil((np.ceil(ma) - np.floor(mi))/cSize).astype(int) # number of cubes in x, y, and z
-    totCubes = (np.max(coords_labels[:,0]))*(np.max(coords_labels[:,1]))*(np.max(coords_labels[:,2]))
-    xC = np.arange(np.max(coords_labels[:,0]))*cSize + np.floor(mi[0]) + cSize/2.0
-    yC = np.arange(np.max(coords_labels[:,1]))*cSize + np.floor(mi[1]) + cSize/2.0
-    zC = np.arange(np.max(coords_labels[:,2]))*cSize + np.floor(mi[2]) + cSize/2.0 # center in middle of cube 
+    print(coords_labels.shape)
+    totCubes = (np.max(coords_labels[0]))*(np.max(coords_labels[1]))*(np.max(coords_labels[2]))
+    xC = np.arange(np.max(coords_labels[0]))*cSize + np.floor(mi[0]) + cSize/2.0
+    yC = np.arange(np.max(coords_labels[1]))*cSize + np.floor(mi[1]) + cSize/2.0
+    zC = np.arange(np.max(coords_labels[2]))*cSize + np.floor(mi[2]) + cSize/2.0 # center in middle of cube 
     
     XC,YC, ZC = np.meshgrid(xC,yC,zC,indexing='ij') # physical coordinates 
     cubes_centroids = np.stack((XC,YC,ZC),axis=-1)
+    print("cubes_centroids shapes, ", cubes_centroids.shape)
     cubes_indices = np.reshape(np.arange(totCubes),(cubes_centroids.shape[0],cubes_centroids.shape[1],cubes_centroids.shape[2]))
-    coords_labels_tot = cubes_indices[coords_labels[:,0],coords_labels[:,1],coords_labels[:,2]]
+    #coords_labels_tot = cubes_indices[coords_labels[:,0],coords_labels[:,1],coords_labels[:,2]]
     
     # assign each measure to 1 cube
     coords_labelsT = np.floor((T - np.floor(mi))/cSize).astype(int)
     coords_labelsD = np.floor((D - np.floor(mi))/cSize).astype(int)
     
+    coords_labelsTtot = cubes_indices[coords_labelsT[:,0],coords_labelsT[:,1],coords_labelsT[:,2]]
+    coords_labelsDtot = cubes_indices[coords_labelsD[:,0],coords_labelsD[:,1],coords_labelsD[:,2]]
+    
     cubes_nuT = np.zeros((totCubes,nu_T.shape[-1]))
     cubes_nuD = np.zeros((totCubes,nu_D.shape[-1]))
     
     for c in range(totCubes):
-        cubes_nuT[c,:] = np.sum(nu_T[coords_labelsT == c,:],axis=0)
-        cubes_nuD[c,:] = np.sum(nu_D[coords_labelsD == c,:],axis=0)
+        cubes_nuT[c,:] = np.sum(nu_T[coords_labelsTtot == c,:],axis=0)
+        cubes_nuD[c,:] = np.sum(nu_D[coords_labelsDtot == c,:],axis=0)
         
     # save densities as images 
     densT = np.reshape(np.sum(cubes_nuT,axis=-1),(cubes_centroids.shape[0],cubes_centroids.shape[1],cubes_centroids.shape[2]))
@@ -157,4 +170,53 @@ def applyAandTau(q_x,q_w,A,tau):
     x = (q_x-x_c0)@((sp.linalg.expm(A)).T) + tau
     
     return x
-   
+
+def smootheIm(npz,sig=1.0):
+    
+    n = np.load(npz)
+    X = n['cubes_nuD']
+    cubes_centroids = n['cubes_centroids']
+    
+    Xd = np.reshape(X,(cubes_centroids.shape[0],cubes_centroids.shape[1],cubes_centroids.shape[2],X.shape[-1]))
+    Xdnew = np.zeros_like(Xd)
+    
+    for f in range(Xd.shape[-1]):
+        Xdnew[...,f] = gaussian_filter(Xd[...,f],sig)
+        print("mass before is: ", np.sum(Xd[...,f]))
+        print("mass after is: ", np.sum(Xdnew[...,f]))
+    
+    np.savez(npz.replace('.npz','_smoothed_sig' + str(sig) + '.npz'),cubes_nuD=Xdnew)
+    empty_header = nib.Nifti1Header()
+    densim = nib.Nifti1Image(np.sum(Xdnew,axis=-1), np.eye(4), empty_header)
+    maxValim = nib.Nifti1Image(np.argmax(Xdnew,axis=-1), np.eye(4), empty_header)
+    
+    nib.save(densim,npz.replace('.npz','_smoothed_sig' + str(sig) + 'Ddensity.nii.gz'))
+    nib.save(maxValim,npz.replace('.npz','_smoothed_sig' + str(sig) + 'DmaxVal.nii.gz'))
+    return
+
+def interpolateNN(Td,T,S,nu_S,pi_ST,savename):
+    '''
+    interpolate high resolution source (S)
+    npzT = npz with deformed target
+    pi_ST = transfer matrix for weights
+    '''
+    
+    T_i = Vi(torch.tensor(Td).type(dtype))
+    S_j = Vj(torch.tensor(S).type(dtype))
+    
+    D_ij = ((T_i - S_j) ** 2).sum(-1)  # symbolic matrix of squared distances
+    indKNN = D_ij.argKmin(1, dim=1)  # get nearest neighbor for each of target points
+
+    nu_TS = nu_S[indKNN.cpu().numpy(),...]  # Assign target points with feature values of source 
+    nu_TSpi = nu_TS@pi_ST
+    
+    np.savez(savename,nu_TS=nu_TS,nu_TSpi=nu_TSpi)
+    imageVals = [np.sum(nu_TSpi,axis=-1),np.argmax(nu_TSpi,axis=-1)]
+    imageNames = ['TotalMass','MaxVal']
+    zeta_TSpi = nu_TSpi/np.sum(nu_TSpi,axis=-1)[...,None]
+    for f in range(nu_TSpi.shape[-1]):
+        imageVals.append(zeta_TSpi[:,f])
+        imageNames.append('Zeta_' + str(f))
+        
+    vtf.writeVTK(T,imageVals,imageNames,savename.replace('.npz','.vtk'),polyData=None)
+    return T,nu_TSpi
