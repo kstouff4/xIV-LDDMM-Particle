@@ -318,8 +318,8 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
         imageValsS.append(zeta_D[:,i])
         imageNamesS.append('zeta_' + str(i))
     vtf.writeVTK(D,imageValsS,imageNamesS,savedir+'testOutputiter' + str(itCurr) + '_D10.vtk',polyData=None)
-   
-    return pqList[-1][0],pqList[-1][1]
+
+    return pqList[-1][0], pqList[-1][1]
                             
 
 ###################################################################
@@ -342,7 +342,7 @@ def makePQ(S,nu_S,T,nu_T,Csqpi=torch.tensor(1.0).type(dtype),norm=True):
     
     return w_S,w_T,zeta_S,zeta_T,q0,p0,numS, Stilde, Ttilde, s, m
 
-def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100,kScale = torch.tensor(1.0).type(dtype),cA=1.0,cT=1.0,cS=10.0,dimEff=3,single=False,beta=None):
+def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100,kScale = torch.tensor(1.0).type(dtype),cA=1.0,cT=1.0,dimEff=3,single=False,beta=None,uCo=None,cS=None,pTil=None):
     '''
     Parameters:
         S, nu_S = source image varifold
@@ -363,10 +363,15 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     N = torch.tensor(S.shape[0]).type(dtype)
     s = s.cpu().numpy()
     m = m.cpu().numpy()
+    print("s is, ", s)
+    print("m is, ", m)
 
-    pTilde = torch.zeros_like(p0).type(dtype)
-    pTilde[0:numS] = torch.squeeze(torch.tensor(1.0/(dimEff*w_S))).type(dtype) #torch.sqrt(kScale)*torch.sqrt(kScale)
-    pTilde[numS:numS*(d+1)] = torch.tensor(1.0).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
+    if pTil is None:
+        pTilde = torch.zeros_like(p0).type(dtype)
+        pTilde[0:numS] = torch.squeeze(torch.tensor(1.0/(dimEff*w_S))).type(dtype) #torch.sqrt(kScale)*torch.sqrt(kScale)
+        pTilde[numS:numS*(d+1)] = torch.tensor(1.0).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
+    else:
+        pTilde = torch.zeros_like(p0).type(dtype) + pTil
     
     if (beta is None):
         # set beta to make ||mu_S - mu_T||^2 = 1
@@ -396,8 +401,11 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     # Compute constants to weigh each kernel norm in RKHS by
     uCoeff = []
     for sig in sigmaRKHS:
-        Kinit = GaussKernelSpaceSingle(sig=sig,d=d)
-        uCoeff.append(torch.clone((torch.tensor(cS).type(dtype)*Kinit(Stilde,Stilde).sum())/(N*N*sig*sig)).type(dtype))
+        if uCo is not None:
+            uCoeff.append(uCo)
+        else:
+            Kinit = GaussKernelSpaceSingle(sig=sig,d=d)
+            uCoeff.append(torch.clone((torch.tensor(cS).type(dtype)*Kinit(Stilde,Stilde).sum())/(N*N*sig*sig)).type(dtype))
     for ss in range(len(uCoeff)):
         print("sig is ", sigmaRKHS[ss].detach().cpu().numpy())
         print("uCoeff ", uCoeff[ss].detach().cpu().numpy())
@@ -421,6 +429,12 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         optimizer.zero_grad()
         LH,LDA = loss(p0*pTilde, q0)
         L = LH+LDA
+        '''
+        print("loss", L.detach().cpu().numpy())
+        print("loss H ", LH.detach().cpu().numpy())
+        print("loss LDA ", LDA.detach().cpu().numpy())
+        print("loss LPI ", LPI.detach().cpu().numpy())
+        '''
         lossListH.append(np.copy(LH.detach().cpu().numpy()))
         lossListDA.append(np.copy(LDA.detach().cpu().numpy()))
         relLossList.append(np.copy(LDA.detach().cpu().numpy())/cst)
@@ -443,7 +457,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     for i in range(its):
         print("it ", i, ": ", end="")
         optimizer.step(closure) # default of 25 iterations in strong wolfe line search; will compute evals and iters until 25 unless reaches an optimum 
-        print("Current Losses", flush=True)
+        print("Current Losses",flush=True)
         print("H loss: ", lossListH[-1])
         print("Var loss: ", lossListDA[-1])
         osd = optimizer.state_dict()

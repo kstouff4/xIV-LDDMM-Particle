@@ -129,7 +129,30 @@ def getUdiv(sigma,d,uCoeff):
         else:
             retVal += (1.0/(sig*uCoeff[sInd]))*(K*h) #.sum_reduction(axis=1)
     return retVal.sum_reduction(axis=1) # G x 1
-
+###################################################################
+def checkEndPoint(lossFunction,p0,p1,q1,d,numS,savedir):
+    q = torch.clone(q1).detach().requires_grad_(True).type(dtype)
+    p0n = torch.clone(p0).detach().requires_grad_(False).type(dtype)
+    
+    dLoss = lossFunction(q,p0[(d+1)*numS:])
+    dLoss.backward() # gradient of loss at end point with respect to q1
+    print("checking end point condition")
+    print(q.grad)
+    print(p1[:(d+1)*numS].detach().cpu().numpy())
+    print("should equal zero")
+    ep = q.grad.detach().cpu().numpy() + p1[:(d+1)*numS].detach().cpu().numpy()
+    print(ep)
+    print(np.max(ep))
+    print(np.min(ep))
+    f,ax = plt.subplots()
+    ax.plot(np.arange(numS),ep[:numS],label='x_diff')
+    ax.plot(np.arange(numS),ep[numS:2*numS],label='y_diff')
+    ax.plot(np.arange(numS),ep[2*numS:3*numS],label='z_diff')
+    ax.plot(np.arange(numS),ep[3*numS:],label='w_diff')
+    ax.legend()
+    f.savefig(savedir+'checkPoint.png',dpi=300)
+    
+    return
 
 ###################################################################
 # Integration
@@ -189,7 +212,7 @@ def HamiltonianSystem(K0, sigma, d,numS,cA=1.0,cT=1.0,dimEff=3,single=False):
 # Katie change this to include A and T for the grid 
 def HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=3,single=False):
     H = Hamiltonian(K0,sigma,d,numS,cA,cT,dimEff=dimEff,single=single)
-    def HS(p,q,qgrid,qgridw):
+    def HS(p,q,qgrid,qgridw,T=None,wT=None):
         px = p[numS:].view(-1,d)
         pw = p[:numS].view(-1,1)
         qx = q[numS:].view(-1,d)
@@ -203,8 +226,16 @@ def HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=3,single=F
         xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0))
         Gg = (getU(sigma,d,uCoeff)(gx,qx,px,pw*qw) + (gx-xc)@A.T + tau + (gx-xc)@Alpha).flatten()
         Ggw = (getUdiv(sigma,d,uCoeff)(gx,qx,px,pw*qw)*gw + Alpha.sum()*gw).flatten()
-                                                   
-        return -Gq,Gp,Gg,Ggw
+                              
+        if T == None:
+            return -Gq,Gp,Gg,Ggw
+        else:
+            print("including T")
+            Tx = T.view(-1,d)
+            wTw = wT.view(-1,1)
+            Gt = -1.0*(getU(sigma,d,uCoeff)(Tx,qx,px,pw*qw) + (Tx-xc)@A.T + tau + (Tx-xc)@Alpha).flatten()
+            Gtw = -1.0*(getUdiv(sigma,d,uCoeff)(Tx,qx,px,pw*qw)*wTw + Alpha.sum()*wTw).flatten()
+            return -Gq,Gp,Gg,Ggw,Gt,Gtw
     
     return HS
         
@@ -226,8 +257,17 @@ def LDDMMloss(K0,sigma, d, numS,gamma,dataloss,piLoss,cA=1.0,cT=1.0,cPi=10.0,dim
 
     return loss
 
-def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=3,single=False,nt=10,Integrator=RalstonIntegrator()):
-    return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA,cT,dimEff,single=single), (p0[:(d+1)*numS],q0,qGrid,qGridw),nt)
+def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=3,single=False,nt=10,Integrator=RalstonIntegrator(),T=None,wT=None):
+    if T == None:
+        return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA,cT,dimEff,single=single), (p0[:(d+1)*numS],q0,qGrid,qGridw),nt)
+    else:
+        print("T shape adn wT shape")
+        print(T.detach().cpu().numpy().shape)
+        print(wT.detach().cpu().numpy().shape)
+        print("G and wG shape")
+        print(qGrid.detach().cpu().numpy().shape)
+        print(qGridw.detach().cpu().numpy().shape)
+        return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA,cT,dimEff,single=single), (p0[:(d+1)*numS],q0,qGrid,qGridw,T,wT),nt)
 
 #################################################################
 # Data Attachment Term
@@ -340,7 +380,7 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
         imageNamesS.append('zeta_' + str(i))
     vtf.writeVTK(D,imageValsS,imageNamesS,savedir+'testOutputiter' + str(itCurr) + '_D10.vtk',polyData=None)
     vtf.writeVTK(D,imageValsSpi,imageNamesSpi,savedir+'testOutputiter' + str(itCurr) + '_Dpi10.vtk',polyData=None)
-    return
+    return pqList[-1][0],pqList[-1][1]
                             
 
 ###################################################################
@@ -486,17 +526,29 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     for i in range(its):
         print("it ", i, ": ", end="")
         optimizer.step(closure) # default of 25 iterations in strong wolfe line search; will compute evals and iters until 25 unless reaches an optimum 
-        print("Current Losses")
+        print("Current Losses", flush=True)
         print("H loss: ", lossListH[-1])
         print("Var loss: ", lossListDA[-1])
         print("Pi lossL ", lossListPI[-1])
         osd = optimizer.state_dict()
         lossOnlyH.append(np.copy(osd['state'][0]['prev_loss']))
+        if (i > 0 and np.isnan(lossListH[-1]) or np.isnan(lossListDA[-1])):
+            print("Exiting with detected NaN in Loss")
+            print("state of optimizer")
+            print(osd)
+            break
         if (np.mod(i,25) == 0):
             #p0Save = torch.clone(p0).detach()
             optimizer.zero_grad()
-            printCurrentVariables(p0*pTilde,i,Kg,sigmaRKHS,uCoeff,q0,d,numS,zeta_S,labs,s,m,savedir)
+            p1,q1 = printCurrentVariables(p0*pTilde,i,Kg,sigmaRKHS,uCoeff,q0,d,numS,zeta_S,labs,s,m,savedir)
             printCost(i)
+            checkEndPoint(dataloss,p0*pTilde,p1,q1,d,numS,savedir + 'it' + str(i))
+            if (i > 0):
+                if (lossListH[-1] == lossListH[-2]) and (lossListDA[-1] == lossListDA[-1]):
+                    print("state of optimizer")
+                    print(osd)
+                    break
+
     print("Optimization (L-BFGS) time: ", round(time.time() - start, 2), " seconds")
     
     printCost(its)
@@ -540,13 +592,15 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     qGrid = qGrid.flatten()
     qGridw = torch.ones((numG)).type(dtype)    
 
-    listpq = ShootingGrid(p0*pTilde,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,uCoeff,cA,cT,dimEff,single=single)
+    listpq = ShootingGrid(p0*pTilde,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,uCoeff,cA,cT,dimEff,single=single,T=Ttilde.flatten(),wT=w_T.flatten())
     print("length of pq list is, ", len(listpq))
     Dlist = []
     nu_Dlist = []
     nu_DPilist = []
     Glist = []
     wGlist = []
+    Tlist = []
+    nuTlist = []
     
     p0T = p0*pTilde
     pi_STfinal = p0T[(d+1)*numS:].detach().view(zeta_S.shape[-1],zeta_T.shape[-1]) # shouldn't matter multiplication by pTilde
@@ -585,7 +639,14 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         gw = listpq[t][3]
         W = gw.detach().cpu().numpy()
         wGlist.append(W)
+        
+        Tt = listpq[t][4]
+        Tlist.append(init.resizeData(Tt.detach().view(-1,d).cpu().numpy(),s,m))
+        wTt = listpq[t][5]
+        nuTlist.append(wTt.detach().cpu().numpy()[...,None]*zeta_T.detach().cpu().numpy())
+        
         # plot p0 as arrows
+    checkEndPoint(dataloss,p0T,listpq[-1][0],listpq[-1][1],d,numS,savedir)
     listSp0 = np.zeros((numS*2,3))
     polyListSp0 = np.zeros((numS,3))
     polyListSp0[:,0] = 2
@@ -601,6 +662,8 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     print("A final, ", A.detach().cpu().numpy())
     print("tau final, ", tau.detach().cpu().numpy())
     print("Alpha final, ", Alpha.detach().cpu().numpy())
-    np.savez(savedir + 'testOutput_values.npz',A0=A.detach().cpu().numpy(),tau0=tau.detach().cpu().numpy(),p0=pNew.detach().cpu().numpy(),q0=q0.detach().cpu().numpy(),alpha0=Alpha.detach().cpu().numpy(),pTilde=pTilde.detach().cpu().numpy(),pi_ST=pi_STfinal)    
+    np.savez(savedir + 'testOutput_values.npz',A0=A.detach().cpu().numpy(),tau0=tau.detach().cpu().numpy(),p0=pNew.detach().cpu().numpy(),q0=q0.detach().cpu().numpy(),alpha0=Alpha.detach().cpu().numpy(),pTilde=pTilde.detach().cpu().numpy(),pi_ST=pi_STfinal)
+    np.savez(savedir + 'testOutput_targetScaled.npz',T=Ttilde.detach().cpu().numpy(),w_T=w_T.detach().cpu().numpy(),zeta_T=zeta_T.detach().cpu().numpy(),s=s,m=m)
+    np.savez(savedir + 'testOutput_Dvars.npz',D=Dlist[-1],nu_D=nu_Dlist[-1],nu_Dpi=nu_DPilist[-1],Td=Tlist[-1],nu_Td=nuTlist[-1])
     
-    return Dlist, nu_Dlist, nu_DPilist, Glist, wGlist
+    return Dlist, nu_Dlist, nu_DPilist, Glist, wGlist, Tlist, nuTlist
