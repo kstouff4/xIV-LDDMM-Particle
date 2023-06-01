@@ -28,6 +28,7 @@ sys_path.append('..')
 sys_path.append('../xmodmap')
 sys_path.append('../xmodmap/io')
 import initialize as init
+from saveState import *
 
 #################################################################################
 # Kernels
@@ -342,7 +343,7 @@ def makePQ(S,nu_S,T,nu_T,Csqpi=torch.tensor(1.0).type(dtype),norm=True):
     
     return w_S,w_T,zeta_S,zeta_T,q0,p0,numS, Stilde, Ttilde, s, m
 
-def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100,kScale = torch.tensor(1.0).type(dtype),cA=1.0,cT=1.0,cS=10.0,dimEff=3,single=False,beta=None):
+def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100,kScale = torch.tensor(1.0).type(dtype),cA=1.0,cT=1.0,cS=10.0,dimEff=3,single=False,beta=None,loadPrevious=None):
     '''
     Parameters:
         S, nu_S = source image varifold
@@ -367,7 +368,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     pTilde = torch.zeros_like(p0).type(dtype)
     pTilde[0:numS] = torch.squeeze(torch.tensor(1.0/(dimEff*w_S))).type(dtype) #torch.sqrt(kScale)*torch.sqrt(kScale)
     pTilde[numS:numS*(d+1)] = torch.tensor(1.0).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
-    
+    savePref = savedir + 'State_'
     if (beta is None):
         # set beta to make ||mu_S - mu_T||^2 = 1
         if len(sigmaVar) == 1:
@@ -406,7 +407,8 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d,uCoeff=uCoeff)
 
     loss = LDDMMloss(Kg,sigmaRKHS,d, numS, gamma, dataloss,cA,cT,dimEff,single=single)
-
+    saveParams(uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,0,savepref)
+    
     optimizer = torch.optim.LBFGS([p0], max_eval=15, max_iter=10,line_search_fn = 'strong_wolfe',history_size=100,tolerance_grad=1e-8,tolerance_change=1e-10)
     print("performing optimization...")
     start = time.time()
@@ -440,6 +442,12 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         f.savefig(savedir + 'Cost_' + str(currIt) + '.png',dpi=300)
         return
     
+    if (loadPrevious is not None):
+        stateVars = loadState(loadPrevious)
+        its = stateVars['its'] + its
+        p0 = stateVars['xopt']
+        optimizer.load_state_dict(stateVars['optimizer'])
+    
     for i in range(its):
         print("it ", i, ": ", end="")
         optimizer.step(closure) # default of 25 iterations in strong wolfe line search; will compute evals and iters until 25 unless reaches an optimum 
@@ -448,6 +456,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         print("Var loss: ", lossListDA[-1])
         osd = optimizer.state_dict()
         lossOnlyH.append(np.copy(osd['state'][0]['prev_loss']))
+        saveState(osd,its,i,p0,savepref)
         if (i > 0 and np.isnan(lossListH[-1]) or np.isnan(lossListDA[-1])):
             print("Exiting with detected NaN in Loss")
             print("state of optimizer")
@@ -465,7 +474,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
                     print(osd)
                     break
     print("Optimization (L-BFGS) time: ", round(time.time() - start, 2), " seconds")
-    
+    saveVariables(q0,p0*pTilde,Ttilde,w_T,s,m,savepref)
     printCost(its)
     
     f,ax = plt.subplots()
