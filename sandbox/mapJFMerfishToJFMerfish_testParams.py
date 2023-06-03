@@ -14,7 +14,7 @@ import vtkFunctions as vtf
 
 import torch
 
-from singleModalityHamiltonianATSCalibrated import *
+from singleModalityHamiltonianATSNoCalibration import *
 from analyzeOutput import *
 
 np_dtype = "float32" # "float64"
@@ -26,15 +26,15 @@ def main():
     d = 3
     sigmaRKHS = [0.1] # as of 3/16, should be fraction of total domain of S+T #[10.0]
     sigmaVar = [0.1] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 101
+    its = 50
     alphaSt = 'S1R1_to_S1R2'
     beta = None
     res=1.0
-    kScale=4
-    extra=""
+    kScale=1
+    extra="betapTiluCo"
     cA=1.0
     cT=1.0 # original is 0.5
-    cS=30.0
+    cS=1.0
     
     # Set these parameters according to relative decrease you expect in data attachment term
     # these should be based on approximately what the contribution compared to original cost is
@@ -58,9 +58,6 @@ def main():
     
     S,nu_S = gI.getFromFile(sourceImage)
     T,nu_T = gI.getFromFile(targetImage)
-    
-    # test extra particles
-    S,nu_S = gI.returnMultiplesSpace(S,nu_S,kScale)
     
     labs = nu_T.shape[-1]
     labS = nu_S.shape[-1]
@@ -90,7 +87,7 @@ def main():
     for sigg in sigmaVar:
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
-    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,dimEff=2,single=single)
+    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),dimEff=2,single=single,beta=None,uCo=None,cS=cS,pTil=None)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()

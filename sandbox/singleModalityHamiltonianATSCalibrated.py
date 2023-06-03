@@ -357,7 +357,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         labs = dimensions of feature space
         savedir = location to save cost graphs and p0 in
         its = iterations of LBFGS steps (each step has max 10 iterations and 15 evaluations of objective function)
-        kScale = multiplicative factor of particles if applying parameter settings for one set of particles to another (larger), with assumption that mass has been conserved
+        kScale = multiplicative factor of particles if applying parameter settings for one set of particles to another (larger), with assumption that mass has been conserved; should be ratio of current set of particles to previous 
         beta = computed to scale the varifold norm initially to 1; overridden with desired value if not None
     '''
     w_S, w_T,zeta_S,zeta_T,q0,p0,numS,Stilde,Ttilde,s,m = makePQ(S,nu_S,T,nu_T)
@@ -366,8 +366,8 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     m = m.cpu().numpy()
 
     pTilde = torch.zeros_like(p0).type(dtype)
-    pTilde[0:numS] = torch.squeeze(torch.tensor(1.0/(dimEff*w_S))).type(dtype) #torch.sqrt(kScale)*torch.sqrt(kScale)
-    pTilde[numS:numS*(d+1)] = torch.tensor(1.0).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
+    pTilde[0:numS] = torch.squeeze(torch.tensor(1.0/(torch.sqrt(k)*dimEff*w_S))).type(dtype) #torch.sqrt(kScale)*torch.sqrt(kScale)
+    pTilde[numS:numS*(d+1)] = torch.tensor(1.0/torch.sqrt(k)).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
     savePref = savedir + 'State_'
     if (beta is None):
         # set beta to make ||mu_S - mu_T||^2 = 1
@@ -407,7 +407,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d,uCoeff=uCoeff)
 
     loss = LDDMMloss(Kg,sigmaRKHS,d, numS, gamma, dataloss,cA,cT,dimEff,single=single)
-    saveParams(uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,0,savepref)
+    saveParams(uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,0,single,savepref)
     
     optimizer = torch.optim.LBFGS([p0], max_eval=15, max_iter=10,line_search_fn = 'strong_wolfe',history_size=100,tolerance_grad=1e-8,tolerance_change=1e-10)
     print("performing optimization...")

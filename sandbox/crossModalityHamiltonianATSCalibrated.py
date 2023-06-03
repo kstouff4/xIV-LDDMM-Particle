@@ -431,6 +431,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         its = iterations of LBFGS steps (each step has max 10 iterations and 15 evaluations of objective function)
         kScale = multiplicative factor of particles if applying parameter settings for one set of particles to another (larger), with assumption that mass has been conserved
         beta = computed to scale the varifold norm initially to 1; overridden with desired value if not None
+        single = True if x,y,z should be same scaling 
     '''
     w_S, w_T,zeta_S,zeta_T,q0,p0,numS,Stilde,Ttilde,s,m, pi_STinit = makePQ(S,nu_S,T,nu_T,Csqpi=Csqpi)
     N = torch.tensor(S.shape[0]).type(dtype)
@@ -438,8 +439,8 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     m = m.cpu().numpy()
 
     pTilde = torch.zeros_like(p0).type(dtype)
-    pTilde[0:numS] = torch.squeeze(torch.tensor(1.0/(dimEff*w_S))).type(dtype) #torch.sqrt(kScale)*torch.sqrt(kScale)
-    pTilde[numS:numS*(d+1)] = torch.tensor(1.0).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
+    pTilde[0:numS] = torch.squeeze(torch.tensor(1.0/(torch.sqrt(k)*dimEff*w_S))).type(dtype) #torch.sqrt(kScale)*torch.sqrt(kScale)
+    pTilde[numS:numS*(d+1)] = torch.tensor(1.0/torch.sqrt(k)).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
     pTilde[(d+1)*numS:] = Csqpi
     savepref = savedir + 'State_'
     
@@ -483,7 +484,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
 
     loss = LDDMMloss(Kg,sigmaRKHS,d, numS, gamma, dataloss,piLoss,cA,cT,cPi,dimEff,single=single)
     
-    saveParams(uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,cPi,savepref)
+    saveParams(uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,cPi,single,savepref)
 
     optimizer = torch.optim.LBFGS([p0], max_eval=15, max_iter=10,line_search_fn = 'strong_wolfe',history_size=100,tolerance_grad=1e-8,tolerance_change=1e-10)
     print("performing optimization...")
