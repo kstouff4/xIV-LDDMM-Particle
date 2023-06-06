@@ -22,13 +22,14 @@ else:
     
 import sys
 from sys import path as sys_path
-sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
-import vtkFunctions as vtf
+#sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
+#import vtkFunctions as vtf
 sys_path.append('..')
 sys_path.append('../xmodmap')
 sys_path.append('../xmodmap/io')
 import initialize as init
 from saveState import *
+import getOutput as gO
 
 #################################################################################
 # Kernels
@@ -318,7 +319,7 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
     for i in range(zeta_D.shape[-1]):
         imageValsS.append(zeta_D[:,i])
         imageNamesS.append('zeta_' + str(i))
-    vtf.writeVTK(D,imageValsS,imageNamesS,savedir+'testOutputiter' + str(itCurr) + '_D10.vtk',polyData=None)
+    gO.writeVTK(D,imageValsS,imageNamesS,savedir+'testOutputiter' + str(itCurr) + '_D10.vtk',polyData=None)
    
     return pqList[-1][0],pqList[-1][1]
                             
@@ -366,9 +367,9 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     m = m.cpu().numpy()
 
     pTilde = torch.zeros_like(p0).type(dtype)
-    pTilde[0:numS] = torch.squeeze(torch.tensor(1.0/(torch.sqrt(k)*dimEff*w_S))).type(dtype) #torch.sqrt(kScale)*torch.sqrt(kScale)
-    pTilde[numS:numS*(d+1)] = torch.tensor(1.0/torch.sqrt(k)).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
-    savePref = savedir + 'State_'
+    pTilde[0:numS] = torch.squeeze(torch.tensor(1.0/(torch.sqrt(kScale)*dimEff*w_S))).type(dtype) #torch.sqrt(kScale)*torch.sqrt(kScale)
+    pTilde[numS:numS*(d+1)] = torch.tensor(1.0/torch.sqrt(kScale)).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
+    savepref = savedir + 'State_'
     if (beta is None):
         # set beta to make ||mu_S - mu_T||^2 = 1
         if len(sigmaVar) == 1:
@@ -547,7 +548,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     listSp0[numS:,:] = p0T[numS:(d+1)*numS].detach().view(-1,d).cpu().numpy() + listSp0[0:numS,:]
     featsp0 = np.zeros((numS*2,1))
     featsp0[numS:,:] = p0T[0:numS].detach().view(-1,1).cpu().numpy()
-    vtf.writeVTK(listSp0,[featsp0],['p0_w'],savedir + 'testOutput_p0.vtk',polyData=polyListSp0)
+    gO.writeVTK(listSp0,[featsp0],['p0_w'],savedir + 'testOutput_p0.vtk',polyData=polyListSp0)
     pNew = pTilde*p0
     A,tau,Alpha = getATauAlpha(pNew[numS:(d+1)*numS].view(-1,d),q0[numS:].view(-1,d),pNew[:numS].view(-1,1),q0[:numS].view(-1,1),dimEff=dimEff,single=single)
     print("A final, ", A.detach().cpu().numpy())
