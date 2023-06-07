@@ -22,12 +22,13 @@ else:
     
 import sys
 from sys import path as sys_path
-sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
-import vtkFunctions as vtf
+#sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
+#import vtkFunctions as vtf
 sys_path.append('..')
 sys_path.append('../xmodmap')
 sys_path.append('../xmodmap/io')
 import initialize as init
+import getOutput as gO
 
 #################################################################################
 # Kernels
@@ -317,7 +318,7 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
     for i in range(zeta_D.shape[-1]):
         imageValsS.append(zeta_D[:,i])
         imageNamesS.append('zeta_' + str(i))
-    vtf.writeVTK(D,imageValsS,imageNamesS,savedir+'testOutputiter' + str(itCurr) + '_D10.vtk',polyData=None)
+    gO.writeVTK(D,imageValsS,imageNamesS,savedir+'testOutputiter' + str(itCurr) + '_D10.vtk',polyData=None)
 
     return pqList[-1][0], pqList[-1][1]
                             
@@ -467,17 +468,25 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
             print("state of optimizer")
             print(osd)
             break
-        if (np.mod(i,10) == 0):
+        if (np.mod(i,5) == 0):
             #p0Save = torch.clone(p0).detach()
             optimizer.zero_grad()
             p1,q1 = printCurrentVariables(p0*pTilde,i,Kg,sigmaRKHS,uCoeff,q0,d,numS,zeta_S,labs,s,m,savedir)
             printCost(i)
             checkEndPoint(dataloss,p0*pTilde,p1,q1,d,numS,savedir + 'it' + str(i))
             if (i > 0):
-                if (lossListH[-1] == lossListH[-2]) and (lossListDA[-1] == lossListDA[-1]):
+                if (np.allclose(lossListH[-1],lossListH[-2],atol=1e-6,rtol=1e-5) and np.allclose(lossListDA[-1],lossListDA[-2],atol=1e-6,rtol=1e-5)):
                     print("state of optimizer")
                     print(osd)
                     break
+                else:
+                    print("differences")
+                    print(lossListH[-1] - lossListH[-2])
+                    print(lossListDA[-1] - lossListDA[-2])
+                    print(lossListH[-1] == lossListH[-2])
+                    print(lossListDA[-1] == lossListDA[-2])
+                    print(np.abs(lossListH[-1] - lossListH[-2]) < 10**-8)
+                    print(np.abs(lossListDA[-1] - lossListDA[-2]) < 10**-8)
     print("Optimization (L-BFGS) time: ", round(time.time() - start, 2), " seconds")
     
     printCost(its)
@@ -552,7 +561,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     listSp0[numS:,:] = p0T[numS:(d+1)*numS].detach().view(-1,d).cpu().numpy() + listSp0[0:numS,:]
     featsp0 = np.zeros((numS*2,1))
     featsp0[numS:,:] = p0T[0:numS].detach().view(-1,1).cpu().numpy()
-    vtf.writeVTK(listSp0,[featsp0],['p0_w'],savedir + 'testOutput_p0.vtk',polyData=polyListSp0)
+    gO.writeVTK(listSp0,[featsp0],['p0_w'],savedir + 'testOutput_p0.vtk',polyData=polyListSp0)
     pNew = pTilde*p0
     A,tau,Alpha = getATauAlpha(pNew[numS:(d+1)*numS].view(-1,d),q0[numS:].view(-1,d),pNew[:numS].view(-1,1),q0[:numS].view(-1,1),dimEff=dimEff,single=single)
     print("A final, ", A.detach().cpu().numpy())

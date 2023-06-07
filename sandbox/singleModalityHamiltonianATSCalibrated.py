@@ -470,7 +470,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
             printCost(i)
             checkEndPoint(dataloss,p0*pTilde,p1,q1,d,numS,savedir + 'it' + str(i))
             if (i > 0):
-                if (lossListH[-1] == lossListH[-2]) and (lossListDA[-1] == lossListDA[-1]):
+                if (np.allclose(lossListH[-1],lossListH[-2],atol=1e-6,rtol=1e-5) and np.allclose(lossListDA[-1],lossListDA[-2],atol=1e-6,rtol=1e-5)):
                     print("state of optimizer")
                     print(osd)
                     break

@@ -439,8 +439,8 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     m = m.cpu().numpy()
 
     pTilde = torch.zeros_like(p0).type(dtype)
-    pTilde[0:numS] = torch.squeeze(torch.tensor(1.0/(torch.sqrt(k)*dimEff*w_S))).type(dtype) #torch.sqrt(kScale)*torch.sqrt(kScale)
-    pTilde[numS:numS*(d+1)] = torch.tensor(1.0/torch.sqrt(k)).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
+    pTilde[0:numS] = torch.squeeze(torch.tensor(1.0/(torch.sqrt(kScale)*dimEff*w_S))).type(dtype) #torch.sqrt(kScale)*torch.sqrt(kScale)
+    pTilde[numS:numS*(d+1)] = torch.tensor(1.0/torch.sqrt(kScale)).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
     pTilde[(d+1)*numS:] = Csqpi
     savepref = savedir + 'State_'
     
@@ -549,14 +549,14 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
             print("state of optimizer")
             print(osd)
             break
-        if (np.mod(i,25) == 0):
+        if (np.mod(i,20) == 0):
             #p0Save = torch.clone(p0).detach()
             optimizer.zero_grad()
             p1,q1 = printCurrentVariables(p0*pTilde,i,Kg,sigmaRKHS,uCoeff,q0,d,numS,zeta_S,labs,s,m,savedir)
             printCost(i)
             checkEndPoint(dataloss,p0*pTilde,p1,q1,d,numS,savedir + 'it' + str(i))
             if (i > 0):
-                if (lossListH[-1] == lossListH[-2]) and (lossListDA[-1] == lossListDA[-1]):
+                if (np.allclose(lossListH[-1],lossListH[-2],atol=1e-6,rtol=1e-5) and np.allclose(lossListDA[-1],lossListDA[-2],atol=1e-6,rtol=1e-5)):
                     print("state of optimizer")
                     print(osd)
                     break
