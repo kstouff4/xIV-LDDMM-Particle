@@ -263,5 +263,77 @@ def makeBinsFromMultiChannelImage(imageFile,res,dimEff,dimFeats,ds=1,z=0,thresho
         nu_S = nu_S[keep,...]
         S = S[keep,...]
     
-    return S,nu_S   
+    return S,nu_S  
+
+def makeBinsFromDistance(imageFile,res,dimEff,targetFeat,ds=1,z=0,threshold=0,bins=10,weights=None):
+    '''
+    Categorize values of intensity based on distance from particular color; reduces multiple feature dimensions to 1
+    
+    targetFeat should be of form (...) of size F
+    '''
+    imageSuff = imageFile.split('.')[-1] 
+    if (imageSuff == 'tif' or imageSuff == 'tif' or imageSuff == 'png' or imageSuff == 'TIF'):
+        im = np.squeeze(plt.imread(imageFile))
+    else:
+        im = nib.load(imageFile)
+        im = np.squeeze(im.dataobj)
+    
+    imDS = im[0::ds,...]
+    imDS = imDS[:,0::ds,...]
+    if dimEff == 3:
+        imDS = imDS[:,:,0::ds,...]
+        if dimFeats == 1 and imDS.shape[-1] > 1:
+            imDS = imDS[...,None]
+    
+    # make grid
+    dims = imDS.shape
+    print("dims is ", dims)
+    x0 = np.arange(dims[0])*res[0]
+    x0 -= np.mean(x0)
+    x1 = np.arange(dims[1])*res[1]
+    x1 -= np.mean(x1)
+    if dimEff > 2:
+        x2 = np.arange(dims[2])*res[2]
+        x2 -= np.mean(x2)
+    else:
+        x2 = np.zeros(1) + z
+    
+    X,Y,Z = torch.meshgrid(torch.tensor(x0).type(dtype),torch.tensor(x1).type(dtype),torch.tensor(x2).type(dtype),indexing='ij')
+    S = torch.stack((X.flatten(),Y.flatten(),Z.flatten()),axis=-1).type(dtype)
+    print("S shape, ", S.shape)
+
+    repValue = np.zeros_like(imDS)
+    repValue[...,0:] = np.asarray(targetFeat)
+    print("repValue shape, ", repValue.shape)
+    
+    distS = (imDS-repValue)**2
+    
+    # weigh each dimension differently
+    if weights is not None:
+        for i in range(distS.shape[-1]):
+            distS[...,i] = distS[...,i]*weights[i]
+    
+    dist = np.sqrt(np.sum(distS,axis=-1))
+    print("dist shape, ", dist.shape)
+    nu_S = torch.zeros((S.shape[0],(bins-threshold))).type(dtype)
+    nu_Sdi = -1.0*np.ravel(dist).astype('float32') # largest value (largest bin) = closest to value 
+    b = np.arange(bins)*(np.max(nu_Sdi)+1-np.min(nu_Sdi))/bins + np.min(nu_Sdi) - 0.5
+    print("bins are: ", b)
+    nu_Sdibin = np.ravel(np.digitize(nu_Sdi,b)-1) # 1 based
+    print(np.unique(nu_Sdibin))
+    oneHot = np.zeros((nu_Sdibin.shape[0],bins))
+    print("one hot shape, ", oneHot.shape)
+    oneHot[np.arange(nu_Sdibin.shape[0]),nu_Sdibin] = 1.0
+    if (threshold > 0):
+        oneHot = oneHot[:,threshold:]
+    nu_S[:,0:] = torch.tensor(oneHot).type(dtype)*torch.tensor(np.prod(res)) # set weight to tissue area
+    
+    if threshold > 0:
+        keep = torch.sum(nu_S,axis=-1) > 0
+        nu_S = nu_S[keep,...]
+        S = S[keep,...]
+    
+    return S,nu_S  
+
+
     

@@ -117,8 +117,8 @@ def getCompareDensity(T,nu_T,D,nu_D,sigma,savedir,coef=3):
     nib.save(densDim,savedir + 'Ddensity.nii.gz')
     nib.save(densTDim,savedir + 'TDdiffdensity.nii.gz')
     
-    densT = np.reshape(np.argmax(cubes_nuT,axis=-1),(cubes_centroids.shape[0],cubes_centroids.shape[1],cubes_centroids.shape[2]))
-    densD = np.reshape(np.argmax(cubes_nuD,axis=-1),(cubes_centroids.shape[0],cubes_centroids.shape[1],cubes_centroids.shape[2]))
+    densT = np.reshape((np.sum(cubes_nuT,axis=-1)>0)*(np.argmax(cubes_nuT,axis=-1)+1),(cubes_centroids.shape[0],cubes_centroids.shape[1],cubes_centroids.shape[2]))
+    densD = np.reshape((np.sum(cubes_nuD,axis=-1)>0)*(np.argmax(cubes_nuD,axis=-1)+1),(cubes_centroids.shape[0],cubes_centroids.shape[1],cubes_centroids.shape[2]))
     empty_header = nib.Nifti1Header()
     densTim = nib.Nifti1Image(densT, np.eye(4), empty_header)
     densDim = nib.Nifti1Image(densD, np.eye(4), empty_header)
@@ -206,17 +206,124 @@ def interpolateNN(Td,T,S,nu_S,pi_ST,savename):
     
     D_ij = ((T_i - S_j) ** 2).sum(-1)  # symbolic matrix of squared distances
     indKNN = D_ij.argKmin(1, dim=1)  # get nearest neighbor for each of target points
+    print("indKNN shape, ", indKNN.shape)
+    print("nu_S shape, ", nu_S.shape)
 
-    nu_TS = nu_S[indKNN.cpu().numpy(),...]  # Assign target points with feature values of source 
+    nu_TS = nu_S[np.squeeze(indKNN.cpu().numpy()),...]  # Assign target points with feature values of source 
+    print("nu_TS shape, ", nu_TS.shape)
     nu_TSpi = nu_TS@pi_ST
+    print("nu_TSpi shape, ", nu_TSpi.shape)
     
     np.savez(savename,nu_TS=nu_TS,nu_TSpi=nu_TSpi)
     imageVals = [np.sum(nu_TSpi,axis=-1),np.argmax(nu_TSpi,axis=-1)]
     imageNames = ['TotalMass','MaxVal']
     zeta_TSpi = nu_TSpi/np.sum(nu_TSpi,axis=-1)[...,None]
+    print("zeta_TSpi shape, ", zeta_TSpi.shape)
     for f in range(nu_TSpi.shape[-1]):
         imageVals.append(zeta_TSpi[:,f])
         imageNames.append('Zeta_' + str(f))
         
     vtf.writeVTK(T,imageVals,imageNames,savename.replace('.npz','.vtk'),polyData=None)
     return T,nu_TSpi
+
+def removeZerosAndNormalize(imgT,imgD,norm=True):
+    iT = nib.load(imgT)
+    iTim = np.asarray(iT.dataobj)
+    iD = nib.load(imgD)
+    iDim = np.asarray(iD.dataobj)
+    
+    print("unique values")
+    print(np.unique(iTim))
+    print(np.unique(iDim))
+    
+    zNonzero = []
+    for z in range(iDim.shape[2]):
+        if np.sum(iTim[:,:,z]) > 0:
+            zNonzero.append(z)
+    iTimNZ = iTim[:,:,zNonzero]
+    iDimNZ = iDim[:,:,zNonzero]
+    if (norm):
+        iTimNZ = iTimNZ/np.max(iTimNZ)
+        iDimNZ = iDimNZ/np.max(iDimNZ)
+    
+    empty_header = nib.Nifti1Header()
+    iTimSave = nib.Nifti1Image(iTimNZ, np.eye(4), empty_header)
+    iDimSave = nib.Nifti1Image(iDimNZ, np.eye(4), empty_header)
+    
+    nib.save(iTimSave,imgT.replace('.nii.gz','_RZN.nii.gz'))
+    nib.save(iDimSave,imgD.replace('.nii.gz','_RZN.nii.gz'))
+    return
+
+def interpolateWithImage(imgS,res,Tdgrid,Tgrid,savename,flip=False,ds=2):
+    '''
+    Tdgrid should be a regular grid covering the support of the target slice, deformed into atlas space
+    Tgrid should be in X x Y x Z x 3 shape
+    '''
+    iS = nib.load(imgS)
+    iSim = np.asarray(iS.dataobj)
+    iSim = iSim[0::ds,0::ds,0::ds,...]
+    print("ranges of image")
+    print(iSim.shape)
+    print(np.max(iSim))
+    print(np.min(iSim))
+    
+    x0 = np.arange(iSim.shape[0])*res[0]*ds
+    x1 = np.arange(iSim.shape[1])*res[1]*ds
+    x2 = np.arange(iSim.shape[2])*res[2]*ds
+    
+    x0 = x0 - np.mean(x0)
+    x1 = x1 - np.mean(x1)
+    x2 = x2 - np.mean(x2)
+    
+    if (flip):
+        x2 = -1.0*x2
+    
+    X0,X1,X2 = np.meshgrid(x0,x1,x2,indexing='ij')
+    nuX = np.ravel(iSim)
+    X0r = np.ravel(X0)
+    X1r = np.ravel(X1)
+    X2r = np.ravel(X2)
+    X = np.zeros((X0r.shape[0],3))
+    X[:,0] = X0r
+    X[:,1] = X1r
+    X[:,2] = X2r
+    print("X shape, ", X.shape)
+    print(np.min(X,axis=0))
+    print(np.max(X,axis=0))
+    print(np.min(Tdgrid,axis=0))
+    print(np.max(Tdgrid,axis=0))
+    
+    Tgridr = np.reshape(Tgrid,(Tgrid.shape[0]*Tgrid.shape[1]*Tgrid.shape[2],3))
+    mi = np.min(Tgridr,axis=0) - np.asarray(res)*2.0
+    ma = np.max(Tgridr,axis=0) + np.asarray(res)*2.0
+    
+    inds = (X[:,0] > mi[0])*(X[:,0] < ma[0])*(X[:,1] > mi[1])*(X[:,1] < ma[1])*(X[:,2] > mi[2])*(X[:,2] < ma[2])
+    Xnew = X[inds,...]
+    nuXnew = nuX[inds,...]
+    print("X new shape, ", Xnew.shape)
+    print(np.min(Xnew))
+    print(np.max(Xnew))
+    
+    T_i = Vi(torch.tensor(Tdgrid).type(dtype))
+    S_j = Vj(torch.tensor(Xnew).type(dtype))
+    
+    D_ij = ((T_i - S_j) ** 2).sum(-1)  # symbolic matrix of squared distances
+    indKNN = D_ij.argKmin(1, dim=1)  # get nearest neighbor for each of target points
+
+    nu_TS = nuXnew[np.squeeze(indKNN.cpu().numpy()),...]  # Assign target points with feature values of source 
+    print("nu_TS shape, ", nu_TS.shape)
+    print(np.unique(nu_TS))
+        
+    nu_TSim = np.reshape(nu_TS,(Tgrid.shape[0],Tgrid.shape[1],Tgrid.shape[2]))
+    print("nu_TS shape image, ", nu_TSim.shape)
+    np.savez(savename + '.npz',nu_TS=nu_TS,nu_TSim=nu_TSim)
+    f,ax = plt.subplots()
+    ax.imshow(nu_TSim,cmap='gray')
+    f.savefig(savename+'.png',dpi=300)
+    
+    empty_header = nib.Nifti1Header()
+    wIm = nib.Nifti1Image(nu_TSim[...,None], np.eye(4), empty_header)
+    nib.save(wIm,savename + '.nii.gz')
+    
+    return
+    
