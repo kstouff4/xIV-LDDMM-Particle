@@ -22,9 +22,9 @@ import nibabel as nib
 
 def main():
     # User parameters
-    sigmaRKHS = [0.1] # sigma of velocity field relative to support of 1
-    sigmaVar = [0.1] # sigma of varifold norm relative to support of 1
-    its = 100 # iterations of LBFGS steps (nb each step has 10 line searches)
+    sigmaRKHS = [0.05,0.01] # sigma of velocity field relative to support of 1
+    sigmaVar = [0.05,0.01] # sigma of varifold norm relative to support of 1
+    its = 50 # iterations of LBFGS steps (nb each step has 10 line searches)
     alphaSt = 't1_to_t2' # specification in output directory name
     
     # default parameters
@@ -39,7 +39,7 @@ def main():
     # Set these parameters according to relative decrease you expect in data attachment term
     # these should be based on approximately what the contribution compared to original cost is
     gamma = 1.0 #0.01 #10.0
-    single=True
+    single=False
     
     original = sys.stdout
 
@@ -60,6 +60,8 @@ def main():
     
     S,nu_S = gI.getFromFile(sourceImage)
     T,nu_T = gI.getFromFile(targetImage)
+    
+    S,T = init.checkZ(S,T)
     
     labs = nu_T.shape[-1]
     labS = nu_S.shape[-1]
@@ -88,7 +90,7 @@ def main():
     for sigg in sigmaVar:
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
-    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,dimEff=2,single=single)
+    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,dimEff=3,single=single)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
@@ -121,7 +123,7 @@ def main():
         nu_D = nu_Dlist[t]
         nu_G = nu_Glist[t]
         zeta_D = nu_D/(np.sum(nu_D,axis=-1)[...,None])
-        imageValsD = [np.sum(nu_D,axis=-1), np.argmax(nu_D,axis=-1)]
+        imageValsD = [np.sum(nu_D,axis=-1), (np.argmax(nu_D,axis=-1)+1)*(np.sum(nu_D,axis=-1)>0)]
         for i in range(zeta_D.shape[-1]):
             imageValsD.append(zeta_D[:,i])
         gO.writeVTK(D,imageValsD,imageNamesS,savedir+'testOutput_D' + str(t) + '.vtk',polyData=None)
@@ -135,9 +137,9 @@ def main():
     volS = np.prod(np.max(S,axis=(0,1)) - np.min(S,axis=(0,1)))
     volT = np.prod(np.max(T,axis=(0,1)) - np.min(T,axis=(0,1)))
     volD = np.prod(np.max(Dlist[-1],axis=(0,1)) - np.min(Dlist[-1],axis=(0,1)))
-    getLocalDensity(S,nu_S,sigmaVar[0],savedir+'density_S.vtk',coef=2.0)
-    getLocalDensity(T,nu_T,sigmaVar[0],savedir+'density_T.vtk',coef=2.0)
-    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar[0],savedir+'density_D.vtk',coef=2.0)
+    getLocalDensity(S,nu_S,sigmaVar[0]*1000.0,savedir+'density_S.vtk',coef=2.0)
+    getLocalDensity(T,nu_T,sigmaVar[0]*1000.0,savedir+'density_T.vtk',coef=2.0)
+    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar[0]*1000.0,savedir+'density_D.vtk',coef=2.0)
     
     print("volumes of source, target, and deformed source")
     print(volS)

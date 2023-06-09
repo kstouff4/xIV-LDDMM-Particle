@@ -186,4 +186,37 @@ def combineFeatures(S,nuS,listOfCols):
     nuSnew = nuSnew[toKeep,...]
     
     return Snew, nuSnew
+
+def checkZ(S,T):
+    '''
+    Make narrowest dimension the Z dimension (e.g. last dimension) to allow for independent scaling.
+    '''
+    r = torch.max(S,axis=0).values - torch.min(S,axis=0).values
+    dSmall = np.argmin(r.cpu().numpy())
     
+    if dSmall != 2:
+        print("original smallest dimension is ", dSmall)
+        Sn = torch.clone(S.detach())
+        Sn[:,dSmall] = S[:,2]
+        Sn[:,2] = S[:,dSmall]
+        r = torch.max(Sn,axis=0).values - torch.min(Sn,axis=0).values
+        dSmall = torch.argmin(r)
+        print("new smallest dimension is ", dSmall)
+    else:
+        Sn = S
+    
+    r = torch.max(T,axis=0).values - torch.min(T,axis=0).values
+    dSmall = np.argmin(r.cpu().numpy())
+    
+    if dSmall != 2:
+        print("original smallest dimension is ", dSmall)
+        Tn = torch.clone(T.detach())
+        Tn[:,dSmall] = T[:,2]
+        Tn[:,2] = T[:,dSmall]
+        r = torch.max(Tn,axis=0).values - torch.min(Tn,axis=0).values
+        dSmall = torch.argmin(r)
+        print("new smallest dimension is ", dSmall)
+    else:
+        Tn = T
+
+    return Sn,Tn
