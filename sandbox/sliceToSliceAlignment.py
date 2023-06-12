@@ -22,12 +22,13 @@ else:
     
 import sys
 from sys import path as sys_path
-sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
-import vtkFunctions as vtf
+#sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
+#import vtkFunctions as vtf
 sys_path.append('..')
 sys_path.append('../xmodmap')
 sys_path.append('../xmodmap/io')
 import initialize as init
+import getOutput as gO
 
 #####################################################################################
 # Varifold Norms
@@ -65,12 +66,9 @@ def applyRigid2D(S,nu_S,theta,tau):
     A[1,0] = torch.sin(theta).type(dtype)
     
     xc = torch.sum((torch.sum(nu_S,axis=-1)[...,None]*S)/torch.sum(nu_S),axis=0)
-    print("xc: ", xc.detach())
     
     Snew = (S - xc)@A.T + tau
-    print("min and max Snew")
-    print(torch.min(Snew.detach(),axis=0))
-    print(torch.max(Snew.detach(),axis=0))
+    print(Snew.detach())
     return Snew
 
 def getSlicesFromWhole(files,zU):
@@ -78,9 +76,6 @@ def getSlicesFromWhole(files,zU):
     info = np.load(files)
     X = info[info.files[0]]
     nu_X = info[info.files[1]]
-    print("min and max")
-    print(np.min(X,axis=0))
-    print(np.max(X,axis=0))
         
     zs = np.asarray(zU)
     D = (X[...,-1][...,None] - zs[None,...])**2
@@ -91,11 +86,6 @@ def getSlicesFromWhole(files,zU):
     for i in range(len(zU)):
         Slist.append(torch.tensor(X[slIndex == i,0:2]).type(dtype)) # ignore z 
         nu_Slist.append(torch.tensor(nu_X[slIndex == i,...]).type(dtype))
-        print("min and max of coordinates and nu_X")
-        print(np.min(X[slIndex == i,0:2],axis=0))
-        print(np.max(X[slIndex == i,0:2],axis=0))
-        print(np.min(nu_X[slIndex == i,...],axis=0))
-        print(np.max(nu_X[slIndex == i,...],axis=0))
     return Slist, nu_Slist, slIndex 
 
 def printTransformations(p0,savedir,it):
@@ -160,17 +150,19 @@ def align(Slist,nu_Slist,sigma,its,savedir,norm=False):
             for i in range(len(Slist)-2):
                 theta = p0[i*3].view(1,1)
                 tau = p0[1+i*3:(i+1)*3].view(1,2)
+                print("theta: ", theta)
+                print("tau: ", tau)
                 if (i == 0):
                     L = (1.0/c)*K(Slist[i],applyRigid2D(Slist[i+1],nu_Slist[i+1],theta,tau),nu_Slist[i],nu_Slist[i+1]).sum()
                 else:
                     L += (1.0/c)*K(applyRigid2D(Slist[i],nu_Slist[i],p0[3*(i-1)].view(1,1),p0[1+(i-1)*3:i*3].view(1,2)),applyRigid2D(Slist[i+1],nu_Slist[i+1],theta,tau),nu_Slist[i],nu_Slist[i+1]).sum()
-                print("L intermediate, ", L.detach().cpu().numpy())
+                print("L: ", L)
             L += (1.0/c)*K(applyRigid2D(Slist[-2],nu_Slist[-2],p0[-3].view(1,1),p0[-2:].view(1,2)),Slist[-1],nu_Slist[-2],nu_Slist[-1]).sum()
+            
             return -2.0*L
         return loss
     
     loss = make_loss(Slist,nu_Slist)
-    print("p0 ", p0.detach().cpu().numpy().shape)
     optimizer = torch.optim.LBFGS([p0], max_eval=15, max_iter=10,line_search_fn = 'strong_wolfe',history_size=100,tolerance_grad=1e-8,tolerance_change=1e-10)
     print("performing optimization...")
     start = time.time()
@@ -184,8 +176,9 @@ def align(Slist,nu_Slist,sigma,its,savedir,norm=False):
         return Ln
     
     for i in range(its):
+        print("iteration " + str(i))
         optimizer.step(closure)
-        if (np.mod(i,10) == 0):
+        if (np.mod(i,25) == 0):
             printTransformations(p0,savedir,i)
     
     printTransformations(p0,savedir,its)
@@ -193,6 +186,11 @@ def align(Slist,nu_Slist,sigma,its,savedir,norm=False):
     ax.plot(np.arange(len(lossList)),np.asarray(lossList),label="Total Cost, Final = {0:.6f}".format(lossList[-1]))
     ax.legend()
     f.savefig(savedir + 'cost.png',dpi=300)
+    
+    f,ax = plt.subplots()
+    ax.plot(np.arange(len(lossList)),-1.0*np.log(np.asarray(lossList)*-1.0),label="Total Cost, Final = {0:.6f}".format(lossList[-1]))
+    ax.legend()
+    f.savefig(savedir + 'costLog.png',dpi=300)
     
     Snew = [Slist[0]]
     thetas = [0]

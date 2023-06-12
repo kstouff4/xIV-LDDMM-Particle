@@ -453,8 +453,8 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         print("it ", i, ": ", end="")
         optimizer.step(closure) # default of 25 iterations in strong wolfe line search; will compute evals and iters until 25 unless reaches an optimum 
         print("Current Losses", flush=True)
-        print("H loss: ", lossListH[-1])
-        print("Var loss: ", lossListDA[-1])
+        print("H loss: ", lossListH[-1], " size of H list: ", len(lossListH))
+        print("Var loss: ", lossListDA[-1], " size of DA list: ", len(lossListDA))
         osd = optimizer.state_dict()
         lossOnlyH.append(np.copy(osd['state'][0]['prev_loss']))
         saveState(osd,its,i,p0,savepref)
@@ -474,6 +474,9 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
                     print("state of optimizer")
                     print(osd)
                     break
+                else:
+                    print('H diff: %.15f' % (lossListH[-1]-lossListH[-2]))
+                    print('DA diff: %.15f' % (lossListDA[-1] - lossListDA[-2]))
     print("Optimization (L-BFGS) time: ", round(time.time() - start, 2), " seconds")
     saveVariables(q0,p0*pTilde,Ttilde,w_T,s,m,savepref)
     printCost(its)

@@ -25,32 +25,32 @@ import nibabel as nib
 def main():
     d = 3
     labs = 2 # in target 
-    labS = 3 # template
-    sigmaRKHS = [0.1] # as of 3/16, should be fraction of total domain of S+T #[10.0]
+    labS = 5 # template
+    sigmaRKHS = [0.2,0.1] # as of 3/16, should be fraction of total domain of S+T #[10.0]
     sigmaVar = [0.5,0.2,0.05] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 50
-    alphaSt = 'BIEALEtoB2'
+    its = 100
+    alphaSt = 'B4toWHITAM'
     beta = None
     res=1.0
     kScale=1
     extra=""
     cA=1.0
     cT=1.0 # original is 0.5
-    cS=10.0
+    cS=30.0
     
     # Set these parameters according to relative decrease you expect in data attachment term
     # these should be based on approximately what the contribution compared to original cost is
-    gamma = 0.01 #10.0
+    gamma = 10.0 #0.01 #10.0
     
     original = sys.stdout
 
     outpath='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/Human/' + alphaSt + '/'
-    imgPref='/cis/home/kstouff4/Documents/datasets/BIOCARD/SubsetFall2022/Segmentations/BEIALE/'
+    imgPref='/cis/home/kstouff4/Documents/datasets/BIOCARD/SubsetFall2022/Segmentations/WHITAM/'
 
     if (not os.path.exists(outpath)):
         os.mkdir(outpath) 
 
-    imgFile = imgPref+'150428/AMYGDALA+ERC+TEC.img'
+    imgFile = imgPref+'150929/AMYGDALA+ERC+TEC.img' # WHITAM is 150929, 170921, 191001, 210929
     im = nib.load(imgFile)
     imageO = np.asanyarray(im.dataobj).astype('float32')
     
@@ -85,22 +85,27 @@ def main():
     nu_Sn[:,1] = nu_S[:,0]
     nu_S = nu_Sn
     labS = nu_S.shape[-1]
+    nu_T = nu_S
+    nu_T = nu_T*torch.tensor(1.0**3).type(dtype) # assume 1 mm resolution for biocard and adni 
+    T = S
+    labs = nu_T.shape[-1]
     
-    b2 = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain2/3DSegmentations/allMerge_smoothe.nii.gz'
+    b2 = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain4/3DSegmentations/Brain_4_allMerge.nii.gz'
     
-    b2a = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain2/3DSegmentations/AMYGDALA_SUBREGIONS.nii.gz'
-    T,nu_T = gi.makeFromSingleChannelImage(b2,0.125*4,bg=0,ordering=[8,7],ds=4)
-    Ta,nu_Ta = gi.makeFromSingleChannelImage(b2a,0.125*4,bg=0,ordering=[1,2,3,4],ds=4)
-    Tcomb,nu_Tcomb = gi.combineObjects([Ta,T],[nu_Ta,nu_T])
+    b2a = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain4/3DSegmentations/redone_4222/amygdala_all2.nii.gz'
+    S,nu_S = gI.makeFromSingleChannelImage(b2,0.125*2,bg=0,ordering=[6],ds=2,weights=torch.tensor(0.25**3).type(dtype))
+    Sa,nu_Sa = gI.makeFromSingleChannelImage(b2a,0.125*2,bg=0,ordering=[1,2,3,4,5],ds=2,weights=torch.tensor(0.25**3).type(dtype))
+    Scomb,nu_Scomb = gI.combineObjects([Sa,S],[nu_Sa,nu_S])
     
     #single ERC
-    T = Tcomb
-    nu_T = torch.zeros((nu_Tcomb.shape[0],nu_Tcomb.shape[-1]-1)).type(dtype)
-    nu_T[:,0:4] = nu_Tcomb[:,0:4]
-    nu_T[:,-1] = nu_Tcomb[:,4] + nu_Tcomb[:,5]
+    S = Scomb
+    nu_S = nu_Scomb
+    #nu_S = torch.zeros((nu_Scomb.shape[0],nu_Scomb.shape[-1]-1)).type(dtype)
+    #nu_S[:,0:4] = nu_Scomb[:,0:4]
+    #nu_S[:,-1] = nu_Scomb[:,4] + nu_Scomb[:,5]
     
-    labs = nu_T.shape[-1]
-    cPi=torch.tensor(1.0/np.log(labs)).type(dtype) #0.1
+    labS = nu_S.shape[-1]
+    cPi=torch.tensor(0.1/np.log(labs)).type(dtype) #0.1
     
     # Trying Rotation manually 
     #Arot = init.get3DRotMatrix(torch.tensor(0.0),torch.tensor(np.pi/16.0),torch.tensor(np.pi/8.0))

@@ -29,7 +29,7 @@ def main():
     labS = 3 # template
     sigmaRKHS = [0.05,0.2] # as of 3/16, should be fraction of total domain of S+T #[10.0]
     sigmaVar = [0.6,0.1,0.05,0.02] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 150
+    its = 100
     alphaSt = 'MouseToMerfish'
     beta = None
     res=1.0
@@ -97,12 +97,14 @@ def main():
     for sigg in sigmaVar:
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
-    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=dimEff,Csqpi=torch.tensor(Csqpi).type(dtype))
+    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist, Tlist, nu_Tlist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=dimEff,Csqpi=torch.tensor(Csqpi).type(dtype))
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
     nu_S = nu_S.detach().cpu().numpy()
     nu_T = nu_T.detach().cpu().numpy()
+    nu_Td = nu_Tlist[-1]
+    Td = Tlist[-1]
 
     imageNames = ['weights', 'maxImageVal']
     imageValsS = [np.sum(nu_S,axis=-1), np.argmax(nu_S,axis=-1)]
@@ -122,6 +124,9 @@ def main():
     vtf.writeVTK(S,imageValsS,imageNamesS,savedir+'testOutput_S.vtk',polyData=None)
     vtf.writeVTK(T,imageValsT,imageNamesT,savedir+'testOutput_T.vtk',polyData=None)
     np.savez(savedir+'origST.npz',S=S,nu_S=nu_S,T=T,nu_T=T,zeta_S=zeta_S,zeta_T=zeta_T)
+    imageValsT[0] = np.sum(nu_Td,axis=-1)
+    vtf.writeVTK(Td,imageValsT,imageNamesT,savedir+'testOutput_Td.vtk',polyData=None)
+
     pointList = np.zeros((S.shape[0]*len(Dlist),d))
     polyList = np.zeros((S.shape[0]*(len(Dlist)-1),3))
     polyList[:,0] = 2
@@ -168,6 +173,7 @@ def main():
             polyListG[int(t*len(G)):int((t+1)*len(G)),2] = np.arange((t+1)*len(G),(t+2)*len(G))
 
 
+    gO.getJacobian(Dlist[-1],nu_S,nu_Dlist[-1],savedir+'testOutput_D10_jacobian.vtk')
 
     vtf.writeVTK(pointList,[featList],['Weights'],savedir+'testOutput_curves.vtk',polyData=polyList)
     vtf.writeVTK(pointListG,[featListG],['Weights'],savedir+'testOutput_grid.vtk',polyData=polyListG)

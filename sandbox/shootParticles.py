@@ -7,15 +7,23 @@ dtype = torch.cuda.FloatTensor #DoubleTensor
 import nibabel as nib
 
 
-from crossModalityHamiltonianATSCalibrated import 
+from crossModalityHamiltonianATSCalibrated import GaussKernelHamiltonian, ShootingGrid
 from saveState import loadParams, loadVariables
+import sys
+from sys import path as sys_path
+sys_path.append('../')
+sys_path.append('../xmodmap/')
+sys_path.append('../xmodmap/io/')
+import initialize as init
 
 def resampleGauss(T,nu_T,D,sig):
     '''
     Resample particle information in T,nu_T onto set of particle locations at D using Gaussian with bandwith sig
     nu_D returned conserves mass
     '''
-    
+    print("T shape and D shape")
+    print(T.shape)
+    print(D.shape)
     T_i = Vi(torch.tensor(T).type(dtype))
     D_j = Vj(torch.tensor(D).type(dtype))
 
@@ -24,9 +32,13 @@ def resampleGauss(T,nu_T,D,sig):
     
     # \sum_{F} nu_T(f)
     nu_i = Vi(torch.tensor(nu_T).type(dtype))
+    print("nui shape, ", nu_i.shape)
     nu_j = Vj(torch.ones((D.shape[0],nu_T.shape[-1])).type(dtype))
-    
-    K = K * (nu_i*nu_j).sum()
+    print("nuj shape, ", nu_j.shape)
+    print("K shape, ", K.shape)
+    N = (nu_i*nu_j)
+    print("N shape, ", N.shape)
+    K = K * N
     nu_TD = K.sum_reduction(dim=0)
     print("nu_TD shape should be same as D, ", nu_TD.shape)
     print("D shape, ", D.shape)
@@ -50,16 +62,16 @@ def makeGrid(T,nu_T,res,savedir,dimE=2):
     
     if numCubes[-1] == 0 or dimE == 2:
         dimEff = 2
-        numCubes = numCubes[0:2] + 5
+        numCubes = numCubes[0:2] + 20
     else:
         dimEff = 3
-        numCubes = numCubes + 5 # outline support by 5 extra voxels in each dimension
+        numCubes = numCubes + 20 # outline support by 5 extra voxels in each dimension
         
-    x0 = np.arange(numCubes[0])*res + (np.min(T[:,0]) - 5*res)
-    x1 = np.arange(numCubes[1])*res + (np.min(T[:,1]) - 5*res)
+    x0 = np.arange(numCubes[0])*res + (np.min(T[:,0]) - 10*res)
+    x1 = np.arange(numCubes[1])*res + (np.min(T[:,1]) - 10*res)
     
     if (dimEff == 3):
-        x2 = np.arange(numCubes[2])*res + (np.min(T[:,2]) - 5*res)
+        x2 = np.arange(numCubes[2])*res + (np.min(T[:,2]) - 10*res)
     else:
         x2 = np.arange(1) + np.mean(T[:,-1])
     X0,X1,X2 = np.meshgrid(x0,x1,x2,indexing='ij')
@@ -77,11 +89,83 @@ def makeGrid(T,nu_T,res,savedir,dimE=2):
     
     return X,nu_X,Xgrid,nu_Xgrid
     
-def shootFromP0():
+def shootBackwards(paramFile,variableFile,Z,w_Z,dimE=3):
     '''
     Load variables and parameters from filenames
     Use shootinggrid to reshoot new set of particles --> check if need q0?
     '''
+    uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,cPi,single = loadParams(paramFile)
+    q0,p0,Ttilde,w_T,s,m = loadVariables(variableFile)
+    #p0.requires_grad=True
+    #q0.requires_grad=True
+    Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d,uCoeff=uCoeff)
+    
+    x = torch.arange(3).type(dtype)
+    XG,YG,ZG = torch.meshgrid((x,x,x),indexing='ij')
+    qGrid = torch.stack((XG.flatten(),YG.flatten(),ZG.flatten()),axis=-1).type(dtype)
+    numG = qGrid.shape[0]
+    qGrid = qGrid.flatten()
+    qGridw = torch.ones((numG)).type(dtype) 
+
+    listpq = ShootingGrid(p0,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,uCoeff,cA,cT,dimE,single=single,T=Z.flatten(),wT=w_Z.flatten())
+    
+    Zlist = []
+    wZlist = []
+    
+    for t in range(len(listpq)):
+        Tt = listpq[t][4]
+        Zlist.append(init.resizeData(Tt.detach().view(-1,d).cpu().numpy(),s,m))
+        wTt = listpq[t][5]
+        wZlist.append(wTt.detach().cpu().numpy())
+    
+    return Zlist[-1],wZlist[-1]
+
+def shootForwards(paramFile,variableFile,Q,w_Q,dimE=3):
+    uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,cPi,single = loadParams(paramFile)
+    q0,p0,Ttilde,w_T,s,m = loadVariables(variableFile)
+    
+    Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d,uCoeff=uCoeff)
+    #p0.requires_grad=True
+    #q0.requires_grad=True
+    listpq = ShootingGrid(p0,q0,Q,w_Q,Kg,sigmaRKHS,d,numS,uCoeff,cA,cT,dimEff,single=single)
+    
+    Zlist = []
+    wZlist = []
+    
+    for t in range(len(listpq)):
+        Tt = listpq[t][2]
+        Zlist.append(init.resizeData(Tt.detach().view(-1,d).cpu().numpy(),s,m))
+        wTt = listpq[t][3]
+        wZlist.append(wTt.detach().cpu().numpy())
+    
+    return Zlist[-1],wZlist[-1]
+
+def shootTargetGridSlice(Ttilde,nu_T,index,res,savedir,paramFile,variableFile):
+    '''
+    Returns grid rendering (X x Y x Z x 3) and similar for features covering the support of slice index in T dataset 
+    input in tensors
+    '''
+    u,i = torch.unique(Ttilde[:,-1],return_inverse=True)
+    T = Ttilde[i == index,...]
+    nuT = nu_T[i == index,...]
+    print("ranges of Ttilde slice")
+    print(torch.min(T,axis=0))
+    print(torch.max(T,axis=0))
+    X,nu_X,Xgrid,nu_Xgrid = makeGrid(T.cpu().numpy(),nuT.cpu().numpy(),res,savedir + 'Slice_' + str(index) + '_',dimE=2)
+    print("ranges of Ttilde grid slice")
+    print(np.min(X,axis=0))
+    print(np.max(X,axis=0))
+    w_X = np.sum(nu_X,axis=-1)
+    Xs,w_Xs = shootBackwards(paramFile,variableFile,torch.tensor(X).type(dtype),torch.tensor(w_X).type(dtype),dimE=3)
+    
+    nu_Xs = (nu_X/np.sum(nu_X,axis=-1)[...,None])*w_Xs[...,None]
+    
+    Xsgrid = np.reshape(Xs,Xgrid.shape)
+    nu_Xsgrid = np.reshape(nu_Xs,nu_Xgrid.shape)
+    np.savez(savedir + 'Slice_' + str(index) + '_originalAndShot.npz',Xs=Xs,w_Xs=w_Xs,X=X,nu_X=nu_X,Xsgrid=Xsgrid,nu_Xsgrid=nu_Xsgrid,Xgrid=Xgrid,nu_Xgrid=nu_Xgrid)
+    
+    return Xsgrid, nu_Xsgrid, Xs, nu_Xs 
+
 
     
         

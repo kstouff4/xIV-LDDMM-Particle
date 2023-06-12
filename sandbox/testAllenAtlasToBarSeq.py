@@ -7,6 +7,7 @@ sys_path.append('../xmodmap')
 sys_path.append('../xmodmap/io')
 import initialize as init
 import getInput as gI
+import getOutput as gO
 
 sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
 import vtkFunctions as vtf
@@ -26,21 +27,22 @@ def main():
     d = 3
     labs = 2 # in target 
     labS = 5 # template
-    sigmaRKHS = [0.2,0.1] # as of 3/16, should be fraction of total domain of S+T #[10.0]
+    sigmaRKHS = [0.2] # as of 3/16, should be fraction of total domain of S+T #[10.0]
     sigmaVar = [0.5,0.2,0.05] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 25
-    alphaSt = 'AllenAtlasToBarSeq'
+    its = 150
+    alphaSt = 'AllenAtlas200ToBarSeq'
     beta = None
     res=1.0
     kScale=1
-    extra="flip"
+    extra="flipFullAtlas"
     cA=1.0
     cT=1.0 # original is 0.5
-    cS=30.0
+    cS=10.0
+    Csqpi=10000.0
     
     # Set these parameters according to relative decrease you expect in data attachment term
     # these should be based on approximately what the contribution compared to original cost is
-    gamma = 10.0 #0.01 #10.0
+    gamma = 0.1 #0.01 #10.0
     
     original = sys.stdout
 
@@ -55,7 +57,9 @@ def main():
         os.mkdir(outpath)
     
     atlasImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/downFromOld__optimalZnu_ZAllwC1.0_sig0.2_Nmax1500.0_Npart2000.0_BarSeqSlab.npz'
-    targetImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/BarSeq/Redo2__optimalZnu_ZAllwC8.0_sig[0.4]_Nmax1500.0_Npart2000.0.npz'
+    atlasImage='/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/sig0.4_its10-30__optimalZnu_ZAllwC8.0_sig[0.4]_Nmax1500.0_Npart2000.0.npz'
+    atlasImage='/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/downFromOld__optimalZnu_ZAllwC1.0_sig0.2_Nmax1500.0_Npart2000.0.npz'
+    targetImage = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeq/0.5/allSlices.npz'
     
     S,nu_S = gI.getFromFile(atlasImage)
     T,nu_T = gI.getFromFile(targetImage)
@@ -68,7 +72,7 @@ def main():
     cPi=torch.tensor(0.1/np.log(labs)).type(dtype) #0.1
     N = S.shape[0]
 
-    savedir = outpath + '/output_dl_sig_its_albega_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(gamma) + str(beta) + '_' + str(N) + extra + '/'
+    savedir = outpath + '/output_dl_sig_its_csgamma_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(cS) + str(Csqpi) + str(gamma) + '_' + str(N) + extra + '/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
     
@@ -92,12 +96,15 @@ def main():
     for sigg in sigmaVar:
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
-    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=d)
+    loadP = savedir.replace('_2_','_5_') + 'State__checkpoint.pth.tar'
+    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist, Tlist, nu_Tlist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=d,Csqpi=Csqpi)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
     nu_S = nu_S.detach().cpu().numpy()
     nu_T = nu_T.detach().cpu().numpy()
+    nu_Td = nu_Tlist[-1]
+    Td = Tlist[-1]
 
     imageNames = ['weights', 'maxImageVal']
     imageValsS = [np.sum(nu_S,axis=-1), np.argmax(nu_S,axis=-1)]
@@ -116,7 +123,10 @@ def main():
 
     vtf.writeVTK(S,imageValsS,imageNamesS,savedir+'testOutput_S.vtk',polyData=None)
     vtf.writeVTK(T,imageValsT,imageNamesT,savedir+'testOutput_T.vtk',polyData=None)
-    np.savez(savedir+'origST.npz',S=S,nu_S=nu_S,T=T,nu_T=T,zeta_S=zeta_S,zeta_T=zeta_T)
+    np.savez(savedir+'origST.npz',S=S,nu_S=nu_S,T=T,nu_T=nu_T,zeta_S=zeta_S,zeta_T=zeta_T)
+    imageValsT[0] = np.sum(nu_Td,axis=-1)
+    vtf.writeVTK(Td,imageValsT,imageNamesT,savedir+'testOutput_Td.vtk',polyData=None)
+
     pointList = np.zeros((S.shape[0]*len(Dlist),d))
     polyList = np.zeros((S.shape[0]*(len(Dlist)-1),3))
     polyList[:,0] = 2
@@ -145,7 +155,7 @@ def main():
         vtf.writeVTK(D,imageValsDPi,imageNamesT,savedir+'testOutput_Dpi' + str(t) + '.vtk',polyData=None)
         vtf.writeVTK(G,[nu_G],['Weights'],savedir+'testOutput_G' + str(t) + '.vtk',polyData=None)
         if (t == len(Dlist) - 1):
-            np.savez(savedir+'testOutput.npz',S=S, nu_S=nu_S,T=T,nu_T=nu_T,D=D,nu_D=nu_D)
+            np.savez(savedir+'testOutput.npz',S=S, nu_S=nu_S,T=T,nu_T=nu_T,D=D,nu_D=nu_D,nu_Dpi=nu_Dpi)
             pointList[int(t*len(D)):int((t+1)*len(D))] = D
             pointListG[int(t*len(G)):int((t+1)*len(G))] = G
             featList[int(t*len(D)):int((t+1)*len(D))] = np.squeeze(np.sum(nu_D,axis=-1))[...,None]
@@ -170,6 +180,9 @@ def main():
     getLocalDensity(S,nu_S,sigmaVar[0],savedir+'density_S.vtk',coef=2.0)
     getLocalDensity(T,nu_T,sigmaVar[0],savedir+'density_T.vtk',coef=2.0)
     getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar[0],savedir+'density_D.vtk',coef=2.0)
+    
+    jFile = gO.getJacobian(Dlist[-1],nu_S,nu_Dlist[-1],savedir+'testOutput_D10_jacobian.vtk')
+    gO.splitZs(T,nu_T,Dlist[-1],nu_DPilist[-1],savedir+'testOutput_Dpi10',units=15,jac=jFile)
     
     print("volumes of source, target, and deformed source")
     print(volS)

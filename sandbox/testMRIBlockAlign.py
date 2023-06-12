@@ -24,8 +24,8 @@ import alignMRIBlocks as amb
 ##########################################################################
 
 def main():
-    sigmaVar = 1.0
-    gammaR = 0.01
+    sigmaVar = [50.0,20.0,10.0]
+    gammaR = 1.0
     gammaC = 1.0
     savedir = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/Human/Exvivohuman_11T/'
     if (not os.path.exists(savedir)):
@@ -33,26 +33,35 @@ def main():
     savedir = savedir + 'JOG57/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
+    savedir = savedir + 'Params' + str(sigmaVar) + str(gammaR) + str(gammaC) + '/'
+    if (not os.path.exists(savedir)):
+        os.mkdir(savedir)
         
     zCoordsO = [torch.tensor(149.0).type(dtype),torch.tensor(0.0).type(dtype),torch.tensor(-140.0).type(dtype)]
     
-    b1S,b1nu_S = gI.getFromFile('/cis/home/kstouff4/Documents/MeshRegistration/Particles/Exvivohuman_11T/JOG57/JOG57_1_ap.npz')
-    b2S,b2nu_S = gI.getFromFile('/cis/home/kstouff4/Documents/MeshRegistration/Particles/Exvivohuman_11T/JOG57/JOG57_2_ap.npz')
-    b3S,b3nu_S = gI.getFromFile('/cis/home/kstouff4/Documents/MeshRegistration/Particles/Exvivohuman_11T/JOG57/JOG57_3_ap.npz')
-    b4S,b2nu_S = gI.getFromFile('/cis/home/kstouff4/Documents/MeshRegistration/Particles/Exvivohuman_11T/JOG57/JOG57_4_ap.npz')
+    b1S,b1nu_S = gI.getFromFile('/cis/home/kstouff4/Documents/MeshRegistration/Particles/Exvivohuman_11T/JOG57_1_ap.nii._rotated.npz')
+    b2S,b2nu_S = gI.getFromFile('/cis/home/kstouff4/Documents/MeshRegistration/Particles/Exvivohuman_11T/JOG57_2_ap.nii._rotated.npz')
+    b3S,b3nu_S = gI.getFromFile('/cis/home/kstouff4/Documents/MeshRegistration/Particles/Exvivohuman_11T/JOG57_3_ap.nii._rotated.npz')
+    b4S,b4nu_S = gI.getFromFile('/cis/home/kstouff4/Documents/MeshRegistration/Particles/Exvivohuman_11T/JOG57_4_ap.nii._rotated.npz')
     
-    ASlistScalenp,Asnp,tsnp,s,m = amb.callOptimize([b1S,b2S,b3S,b4S],[b1nu_S,b2nu_S,b3nu_S,b4nu_S],sigmaVar,gammaR,gammaC,savedir, zCoordsO,its=100,d=3,numVars=6)
+    sigmaVarList = []
+    for sigg in sigmaVar:
+        sigmaVarList.append(torch.tensor(sigg).type(dtype))
+        
+    ASlistnp,Asnp,tsnp = amb.callOptimize([b1S,b2S,b3S,b4S],[b1nu_S,b2nu_S,b3nu_S,b4nu_S],sigmaVarList,torch.tensor(gammaR).type(dtype),savedir,its=50,d=3,numVars=6)
     
+    bSorig = [b1S.detach().cpu().numpy(),b2S.detach().cpu().numpy(),b3S.detach().cpu().numpy(),b4S.detach().cpu().numpy()]
+    bnuSorig = [b1nu_S.detach().cpu().numpy(),b2nu_S.detach().cpu().numpy(),b3nu_S.detach().cpu().numpy(),b4nu_S.detach().cpu().numpy()]
     imagenames = ['TotalMass','MaxBin','Bin_0','Bin_1','Bin_2']
     
-    for i in range(len(Asnp)):
+    for i in range(4):
         imageVals = []
-        imageVals.append(np.sum(Asnp[i],axis=-1))
-        imageVals.append(np.argmax(Asnp[i],axis=-1))
-        imageVals.append(Asnp[i][:,0])
-        imageVals.append(Asnp[i][:,1])
-        imageVals.append(Asnp[i][:,2])
-        vtf.writeVTK(ASlistScalenp[i],imageVals,imagenames,savedir + 'transformSeg_' + str(i) + '.vtk',polyData=None)
+        imageVals.append(np.sum(bnuSorig[i],axis=-1))
+        imageVals.append(np.argmax(bnuSorig[i],axis=-1))
+        imageVals.append(bnuSorig[i][:,0])
+        imageVals.append(bnuSorig[i][:,1])
+        imageVals.append(bnuSorig[i][:,2])
+        vtf.writeVTK(ASlistnp[i],imageVals,imagenames,savedir + 'transformSeg_' + str(i) + '.vtk',polyData=None)
     return
 
 if __name__ == "__main__":

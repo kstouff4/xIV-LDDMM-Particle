@@ -9,9 +9,10 @@ sys_path.append('../xmodmap')
 sys_path.append('../xmodmap/io')
 import initialize as init
 import getInput as gI
+import getOutput as gO
 
-sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
-import vtkFunctions as vtf
+#sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
+#import vtkFunctions as vtf
 
 import torch
 import sliceToSliceAlignment as sts
@@ -21,21 +22,25 @@ dtype = torch.cuda.FloatTensor #DoubleTensor
 
 
 def main():
-    sigma = 0.5 # in mm 
-    its = 50
-    
-    wholeX = np.load('/cis/home/kstouff4/Documents/MeshRegistration/Particles/BarSeq/slicesAll_[28-56-111-101-47]_mmRedone_XoneHot.npz')
-    zs = np.unique(wholeX[wholeX.files[0]][...,-1])
+    sigma = 0.25 # in mm 
+    its = 100
+
+    #wholeX = np.load('/cis/home/kstouff4/Documents/MeshRegistration/Particles/BarSeq/slicesAll_[28-56-111-101-47]_mmRedone_XoneHot.npz')
+    #zs = np.unique(wholeX[wholeX.files[0]][...,-1])
+    zs = np.arange(0.2,8.2,0.2)
     
     filesO = ['/cis/home/kstouff4/Documents/MeshRegistration/Particles/BarSeq/Redo__optimalZnu_ZAllwC8.0_sig[0.2]_Nmax1500.0_Npart2000.0.npz']
     
-    extra = "BarSeq/"
+    filesO = ['/cis/home/kstouff4/Documents/MeshRegistration/Particles/BarSeq/top28MI/sig0.025/allSlices_lowToHighMI_centeredAndScaled0.001_US_optimal_all.npz']
+    extra = "BarSeq0.025/"
+    '''
+    wholeX = np.load('/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenMerfish/ZnuZ_Aligned/top20MI/sig0.1/All_ZnuZ_sig0.05.npz')
+    zs = np.unique(wholeX[wholeX.files[0]][...,-1])
+    filesO = ['/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenMerfish/ZnuZ_Aligned/top20MI/sig0.1/All_ZnuZ__optimalZnu_ZAllwC1.2_sig[0.1]_Nmax1500.0_Npart2000.0.npz']
     
-    #wholeX = np.load('/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenMerfish/ZnuZ_Aligned/top20MI/sig0.1/All_ZnuZ_sig0.05.npz')
-    #zs = np.unique(wholeX[wholeX.files[0]][...,-1])
-    #filesO = ['/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenMerfish/ZnuZ_Aligned/top20MI/sig0.1/All_ZnuZ__optimalZnu_ZAllwC1.2_sig[0.1]_Nmax1500.0_Npart2000.0.npz']
+    extra = "AllenMerfish/"
     
-    #extra = "AllenMerfish/"
+    '''
                        
     original = sys.stdout
     
@@ -69,7 +74,7 @@ def main():
         SnewTotal[count:count+S.shape[0],2] = zs[s]
         nuSTotal[count:count+S.shape[0],...] = nu_S
         np.savez(savedir+'slice_' + str(s) + '.npz',S=SnewTotal[count:count+S.shape[0]],nu_S=nu_S)
-        vtf.writeVTK(SnewTotal[count:count+S.shape[0]],[np.sum(nu_S,axis=-1),np.argmax(nu_S,axis=-1)],['totalMass','maxVal'],savedir+'slice_' + str(s) + '.vtk',polyData=None)
+        gO.writeVTK(SnewTotal[count:count+S.shape[0]],[np.sum(nu_S,axis=-1),np.argmax(nu_S,axis=-1)],['totalMass','maxVal'],savedir+'slice_' + str(s) + '.vtk',polyData=None)
         count = count + S.shape[0]
     np.savez(savedir+'allSlices.npz',S=SnewTotal,nu_S=nuSTotal)
     imageNames = ['totalMass','maxVal']
@@ -78,7 +83,7 @@ def main():
     for f in range(nuSTotal.shape[-1]):
         imageNames.append('zeta_' + str(f))
         imageVals.append(zetaTotal[:,f])
-    vtf.writeVTK(SnewTotal,imageVals,imageNames,savedir+'allSlices.vtk',polyData=None)
+    gO.writeVTK(SnewTotal,imageVals,imageNames,savedir+'allSlices.vtk',polyData=None)
 
     sys.stdout = original
     return

@@ -25,7 +25,7 @@ def main():
     d = 3
     sigmaRKHS = [0.2,0.1] # as of 3/16, should be fraction of total domain of S+T #[10.0]
     sigmaVar = [0.5,0.2,0.05] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 25
+    its = 40
     alphaSt = 'B4toASHS'
     beta = None
     res=1.0
@@ -37,7 +37,7 @@ def main():
     
     # Set these parameters according to relative decrease you expect in data attachment term
     # these should be based on approximately what the contribution compared to original cost is
-    gamma = 10.0 #0.01 #10.0
+    gamma = 1.0 #0.01 #10.0
     single=True
     
     original = sys.stdout
@@ -66,10 +66,11 @@ def main():
     #single Amy, ERC, Hip 
     S, nu_S = init.combineFeatures(Scomb,nu_Scomb,[[0,1,2,3,4],[5],[6,7,8,9,10,11,12,13,14]])
     T,nu_T = init.combineFeatures(T,nu_T,[[2],[3,4],[0,1]])
+    Ar = init.get3DRotMatrix(torch.tensor(0.0).type(dtype),torch.tensor(0.0).type(dtype),torch.tensor(np.pi).type(dtype))
+    S,nu_S = init.applyAffine(S, nu_S, Ar, torch.zeros((1,3)).type(dtype))
 
     labs = nu_T.shape[-1]
     labS = nu_S.shape[-1]
-    cPi=torch.tensor(0.1/np.log(labs)).type(dtype) #0.1
     N = S.shape[0]
 
     savedir = outpath + '/output_dl_sig_its_albega_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(gamma) + str(beta) + '_' + str(N) + extra + '/'
@@ -96,7 +97,7 @@ def main():
     for sigg in sigmaVar:
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
-    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=d)
+    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,dimEff=d,single=single)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
@@ -136,17 +137,11 @@ def main():
         G = Glist[t]
         nu_D = nu_Dlist[t]
         nu_G = nu_Glist[t]
-        nu_Dpi = nu_DPilist[t]
         zeta_D = nu_D/(np.sum(nu_D,axis=-1)[...,None])
-        zeta_Dpi = nu_Dpi / (np.sum(nu_Dpi,axis=-1)[...,None])
         imageValsD = [np.sum(nu_D,axis=-1), np.argmax(nu_D,axis=-1)]
-        imageValsDPi = [np.sum(nu_Dpi,axis=-1),np.argmax(nu_Dpi,axis=-1)]
-        for i in range(labs):
-            imageValsDPi.append(zeta_Dpi[:,i])
         for i in range(zeta_D.shape[-1]):
             imageValsD.append(zeta_D[:,i])
         vtf.writeVTK(D,imageValsD,imageNamesS,savedir+'testOutput_D' + str(t) + '.vtk',polyData=None)
-        vtf.writeVTK(D,imageValsDPi,imageNamesT,savedir+'testOutput_Dpi' + str(t) + '.vtk',polyData=None)
         vtf.writeVTK(G,[nu_G],['Weights'],savedir+'testOutput_G' + str(t) + '.vtk',polyData=None)
         if (t == len(Dlist) - 1):
             np.savez(savedir+'testOutput.npz',S=S, nu_S=nu_S,T=T,nu_T=nu_T,D=D,nu_D=nu_D)

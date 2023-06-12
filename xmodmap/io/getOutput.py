@@ -111,7 +111,7 @@ def analyzeLongitudinalMass(listOfNu,S,ages,savename,labels):
 def getJacobian(D,nu_S,nu_D,savename):
     j = np.sum(nu_D,axis=-1)/np.sum(nu_S,axis=-1)
     imageNames = ['maxVal','totalMass','jacobian']
-    imageVals = [np.argmax(nu_D,axis=-1), np.sum(nu_D,axis=-1), j]
+    imageVals = [np.argmax(nu_D,axis=-1)+1, np.sum(nu_D,axis=-1), j]
     vtf.writeVTK(D,imageVals,imageNames,savename,polyData=None)
     np.savez(savename.replace('.vtk','.npz'),j=j)
     return savename.replace('.vtk','.npz')
@@ -218,7 +218,7 @@ def writeParticleVTK(npzfile,condense=False,featNames=None):
     nuX = x[x.files[1]]
     
     imageNames = ['Weight','Maximum_Feature_Dimension','Entropy']
-    imageVals = [np.sum(nuX,axis=-1),np.argmax(nuX,axis=-1)]
+    imageVals = [np.sum(nuX,axis=-1),np.argmax(nuX,axis=-1)+1]
     zetaX = nuX/np.sum(nuX,axis=-1)[...,None]
     e = np.zeros_like(zetaX)
     e[zetaX > 0] = zetaX[zetaX > 0]*np.log(zetaX[zetaX > 0])
