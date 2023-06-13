@@ -14,7 +14,7 @@ import vtkFunctions as vtf
 
 import torch
 
-from crossModalityHamiltonianATSCalibrated import *
+from crossModalityHamiltonianATSCalibrated_Boundary import *
 from analyzeOutput import *
 
 # Set data type in: fromScratHamiltonianAT, analyzeOutput, getInput, initialize
@@ -29,7 +29,7 @@ def main():
     labS = 5 # template
     sigmaRKHS = [0.2] # as of 3/16, should be fraction of total domain of S+T #[10.0]
     sigmaVar = [0.5,0.2,0.05] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 150
+    its = 50
     alphaSt = 'AllenAtlas200ToBarSeq'
     beta = None
     res=1.0
@@ -39,6 +39,7 @@ def main():
     cT=1.0 # original is 0.5
     cS=10.0
     Csqpi=10000.0
+    eta0 = torch.tensor(torch.sqrt(0.1)).type(dtype)
     
     # Set these parameters according to relative decrease you expect in data attachment term
     # these should be based on approximately what the contribution compared to original cost is
@@ -97,7 +98,7 @@ def main():
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
     loadP = savedir.replace('_2_','_5_') + 'State__checkpoint.pth.tar'
-    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist, Tlist, nu_Tlist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=d,Csqpi=Csqpi)
+    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist, Tlist, nu_Tlist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=d,Csqpi=Csqpi,eta0=eta0)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
