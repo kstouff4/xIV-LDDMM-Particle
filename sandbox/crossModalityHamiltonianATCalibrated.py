@@ -255,7 +255,7 @@ def PiRegularizationSystem(zeta_S,nu_T,numS,d,norm=True):
     if (not norm):
         nu_Tprob = torch.sum(nu_T,dim=0)/torch.sum(nu_T) # compare to overall distribution of features
     else:
-        nu_Tprob = torch.ones((1,nu_T.shape[-1]))/nu_T.shape[-1] 
+        nu_Tprob = (torch.ones((1,nu_T.shape[-1]))/nu_T.shape[-1]).type(dtype) 
     
     def PiReg(q,pi_est):  
         qw = q[:numS].view(-1,1)

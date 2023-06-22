@@ -134,11 +134,14 @@ def getUdiv(sigma,d,uCoeff):
 
 def defineSupport(Ttilde,eps=0.001):
     # estimate normal vectors and points; assume coronal sections
-    zMin = torch.min(Ttilde[:,-1]).values
-    zMax = torch.max(Ttilde[:,-1]).values
+    zMin = torch.min(Ttilde[:,-1])
+    zMax = torch.max(Ttilde[:,-1])
     
-    sliceZMin = Ttilde[torch.squeeze(Ttilde[:,-1] < zMin + eps),...]
-    sliceZMax = Ttilde[torch.squeeze(Ttilde[:,-1] > zMax - eps),...]
+    print("zMin: ", zMin)
+    print("zMax: ", zMax)
+    
+    sliceZMin = Ttilde[torch.squeeze(Ttilde[:,-1] < (zMin + torch.tensor(eps).type(dtype))),...]
+    sliceZMax = Ttilde[torch.squeeze(Ttilde[:,-1] > (zMax - torch.tensor(eps).type(dtype))),...]
     
     tCenter = torch.mean(Ttilde,axis=0)
     
@@ -149,7 +152,7 @@ def defineSupport(Ttilde,eps=0.001):
     a0 = torch.mean(a0s,axis=0)
     a1 = torch.mean(a1s,axis=0)
     
-    n0 = torch.cross(a0s[1,..]-a0s[0,...],a0s[2,...] - a0s[0,...])
+    n0 = torch.cross(a0s[1,...]-a0s[0,...],a0s[2,...] - a0s[0,...])
     if (torch.dot(tCenter - a0,n0) < 0):
         n0 = -1.0*n0
     
@@ -157,10 +160,16 @@ def defineSupport(Ttilde,eps=0.001):
     if (torch.dot(tCenter - a1,n1) < 0):
         n1 = -1.0*n1
     
+    # normalize vectors
+    n0 = n0/torch.sqrt(torch.sum(n0**2))
+    n1 = n1/torch.sqrt(torch.sum(n1**2))
+    
     # ensure dot product with barycenter vector to point is positive, otherwise flip sign of normal
+    print("n0: ", n0)
+    print("n1: ", n1)
     
     def alphaSupportWeight(qx,lamb):
-        return 0.5*torch.tanh(torch.sum((qx-a0)*n0,axis=-1)/lamb) + 0.5*torch.tanh(torch.sum((qx-a1)*n1,axis=-1)/lamb)
+        return (0.5*torch.tanh(torch.sum((qx-a0)*n0,axis=-1)/lamb) + 0.5*torch.tanh(torch.sum((qx-a1)*n1,axis=-1)/lamb))[...,None]
     
     return alphaSupportWeight
     
@@ -286,8 +295,8 @@ def LDDMMloss(K0,sigma, d, numS,gamma,dataloss,piLoss,lambLoss,cA=1.0,cT=1.0,cPi
         p, q = Shooting(p0[:(d+1)*numS], q0, K0,sigma, d,numS,dimEff=dimEff,single=single)[-1]
         hLoss = (gamma * Hamiltonian(K0, sigma, d,numS,cA,cT,dimEff,single=single)(p0[:(d+1)*numS], q0))
         dLoss = dataloss(q,p0[(d+1)*numS:])
-        pLoss = gamma*torch.tensor(cPi).type(dtype)*piLoss(q,p0[(d+1)*numS:])
-        lLoss = lambLoss(p0[-1])
+        pLoss = gamma*torch.tensor(cPi).type(dtype)*piLoss(q,p0[(d+1)*numS:-1])
+        lLoss = gamma*lambLoss(p0[-1])
         return hLoss, dLoss, pLoss, lLoss
         #return dataloss(q)
 
@@ -317,9 +326,6 @@ def lossVarifoldNorm(T,w_T,zeta_T,zeta_S,K,d,numS,supportWeight):
         sSx = sS[numS:].view(-1,d)
         sSw = sS[:numS].view(-1,1)
         wSupport = supportWeight(sSx,pi_est[-1]**2)
-        print("shapes should be the same")
-        print(sSw.shape)
-        print(wSupport.shape)
         sSw = wSupport*sSw
         pi_ST = (pi_est[:-1].view(zeta_S.shape[-1],zeta_T.shape[-1]))**2
         nu_Spi = (sSw*zeta_S)@pi_ST # Ns x L * L x F                    
@@ -358,7 +364,7 @@ def PiRegularizationSystem(zeta_S,nu_T,numS,d,norm=True):
     return PiReg
 
 # boundary weight regularization 
-def supportRestrictionReg(eta0=torch.sqrt(0.1)):
+def supportRestrictionReg(eta0=torch.sqrt(torch.tensor(0.1))):
     def etaReg(eta):
         lamb = (eta/eta0)**2
         reg = lamb*torch.log(lamb) + 1.0 - lamb
@@ -410,13 +416,16 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
     f.savefig(savedir + 'pi_STiter' + str(itCurr) + '.png',dpi=300)
     
     q = pqList[-1][1]
-    D = q[numS:].detach().view(-1,d).cpu().numpy()
+    D = q[numS:].detach().view(-1,d)
+    wS = supportWeightF(D,p0Curr[-1].detach()**2)
+    D = D.cpu().numpy()
     muD = q[0:numS].detach().view(-1,1).cpu().numpy()
     nu_D = np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
     zeta_D = nu_D/np.sum(nu_D,axis=-1)[...,None]
     nu_Dpi = nu_D@pi_ST
     Ds = init.resizeData(D,s,m)
     zeta_Dpi = nu_Dpi/np.sum(nu_Dpi,axis=-1)[...,None]
+    print("nu_D shape original: ", nu_D.shape)
     
     imageNamesSpi = ['weights', 'maxImageVal']
     imageNamesS = ['weights', 'maxImageVal']
@@ -431,15 +440,17 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
     gO.writeVTK(Ds,imageValsS,imageNamesS,savedir+'testOutputiter' + str(itCurr) + '_D10.vtk',polyData=None)
     gO.writeVTK(Ds,imageValsSpi,imageNamesSpi,savedir+'testOutputiter' + str(itCurr) + '_Dpi10.vtk',polyData=None)
     
-    wS = supportWeightF(D,p0Curr[-1].detach()**2)
-    muD = muD*(wS.cpu().numpy())
-    nu_D = np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
+
+    nu_D = wS.cpu().numpy()*np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
+    print("nu_D shape: ", nu_D.shape)
     zeta_D = nu_D/np.sum(nu_D,axis=-1)[...,None]
     nu_Dpi = nu_D@pi_ST
     Ds = init.resizeData(D,s,m)
     zeta_Dpi = nu_Dpi/np.sum(nu_Dpi,axis=-1)[...,None]
-    imageValsSpi = [np.sum(nu_Dpi,axis=-1),np.argmax(nu_Dpi,axis=-1)]
-    imageValsS = [np.sum(nu_D,axis=-1),np.argmax(nu_D,axis=-1)]
+    imageValsSpi = [np.sum(nu_Dpi,axis=-1),np.argmax(nu_Dpi,axis=-1),wS]
+    imageValsS = [np.sum(nu_D,axis=-1),np.argmax(nu_D,axis=-1),wS]
+    imageNamesSpi = ['weights', 'maxImageVal','support_weights']
+    imageNamesS = ['weights', 'maxImageVal','support_weights']
     for i in range(zeta_Dpi.shape[-1]):
         imageValsSpi.append(zeta_Dpi[:,i])
         imageNamesSpi.append('zeta_' + str(i))
@@ -456,7 +467,7 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
 ###################################################################
 # Optimization
 
-def makePQ(S,nu_S,T,nu_T,Csqpi=torch.tensor(1.0).type(dtype),eta0=torch.tensor(torch.sqrt(0.1)).type(dtype),norm=True):
+def makePQ(S,nu_S,T,nu_T,Csqpi=torch.tensor(1.0).type(dtype),lambInit=torch.tensor(0.5).type(dtype),Csqlamb=torch.tensor(1.0).type(dtype),norm=True):
     # initialize state vectors based on normalization 
     w_S = nu_S.sum(axis=-1)[...,None].type(dtype)
     w_T = nu_T.sum(axis=-1)[...,None].type(dtype)
@@ -480,13 +491,13 @@ def makePQ(S,nu_S,T,nu_T,Csqpi=torch.tensor(1.0).type(dtype),eta0=torch.tensor(t
     print("initial Pi ", pi_STinit.detach().cpu().numpy())
     print("unique values in Pi ", np.unique(pi_STinit.detach().cpu().numpy()))
     
-    lamb0 = eta0**2
+    lamb0 = lambInit
     
-    p0 = torch.cat((torch.zeros_like(q0),(1.0/Csqpi)*torch.sqrt(pi_STinit).clone().detach().flatten(),torch.sqrt(lamb0).clone().detach().flatten()),0).requires_grad_(True).type(dtype)
+    p0 = torch.cat((torch.zeros_like(q0),(1.0/Csqpi)*torch.sqrt(pi_STinit).clone().detach().flatten(),(1.0/Csqlamb)*torch.sqrt(lamb0).clone().detach().flatten()),0).requires_grad_(True).type(dtype)
     
     return w_S,w_T,zeta_S,zeta_T,q0,p0,numS, Stilde, Ttilde, s, m, pi_STinit,lamb0
 
-def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100,kScale = torch.tensor(1.0).type(dtype),cA=1.0,cT=1.0,cS=10.0,cPi=1.0,dimEff=3,Csqpi=torch.tensor(1.0).type(dtype),eta0=torch.tensor(torch.sqrt(0.1)).type(dtype),single=False,beta=None,loadPrevious=None):
+def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100,kScale = torch.tensor(1.0).type(dtype),cA=1.0,cT=1.0,cS=10.0,cPi=1.0,dimEff=3,Csqpi=torch.tensor(1.0).type(dtype),Csqlamb=torch.tensor(1.0).type(dtype),eta0=torch.sqrt(torch.tensor(0.1)).type(dtype),lambInit=torch.tensor(0.5).type(dtype),single=False,beta=None,loadPrevious=None):
     '''
     Parameters:
         S, nu_S = source image varifold
@@ -504,7 +515,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         beta = computed to scale the varifold norm initially to 1; overridden with desired value if not None
         single = True if x,y,z should be same scaling 
     '''
-    w_S, w_T,zeta_S,zeta_T,q0,p0,numS,Stilde,Ttilde,s,m, pi_STinit, lamb0 = makePQ(S,nu_S,T,nu_T,Csqpi=Csqpi,eta0=eta0)
+    w_S, w_T,zeta_S,zeta_T,q0,p0,numS,Stilde,Ttilde,s,m, pi_STinit, lamb0 = makePQ(S,nu_S,T,nu_T,Csqpi=Csqpi,lambInit=lambInit,Csqlamb=Csqlamb)
     N = torch.tensor(S.shape[0]).type(dtype)
     s = s.cpu().numpy()
     m = m.cpu().numpy()
@@ -513,7 +524,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     pTilde[0:numS] = torch.squeeze(torch.tensor(1.0/(torch.sqrt(kScale)*dimEff*w_S))).type(dtype) #torch.sqrt(kScale)*torch.sqrt(kScale)
     pTilde[numS:numS*(d+1)] = torch.tensor(1.0/torch.sqrt(kScale)).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
     pTilde[(d+1)*numS:-1] = Csqpi
-    pTilde[-1] = torch.tensor(1.0).type(dtype)
+    pTilde[-1] = Csqlamb
     savepref = savedir + 'State_'
     
     supportWeights = defineSupport(Ttilde)
@@ -524,7 +535,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         if len(sigmaVar) == 1:
             Kinit = GaussLinKernelSingle(sig=sigmaVar[0],d=d,l=labs)
             cinit = Kinit(Ttilde,Ttilde,w_T*zeta_T,w_T*zeta_T).sum()
-            k1 = Kinit(Stilde, Stilde, (sW0*w_S*zeta_S)@pi_STinit, (w_S*zeta_S)@pi_STinit)
+            k1 = Kinit(Stilde, Stilde, (sW0*w_S*zeta_S)@pi_STinit, (sW0*w_S*zeta_S)@pi_STinit)
             k2 = Kinit(Stilde, Ttilde, (sW0*w_S*zeta_S)@pi_STinit, w_T*zeta_T)
             beta = torch.tensor(2.0/(cinit + k1.sum() - 2.0*k2.sum())).type(dtype)
             print("beta is ", beta.detach().cpu().numpy())
@@ -588,7 +599,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         lossListDA.append(np.copy(LDA.detach().cpu().numpy()))
         relLossList.append(np.copy(LDA.detach().cpu().numpy())/cst)
         lossListPI.append(np.copy(LPI.detach().cpu().numpy()))
-        lossListL.append(np.copy(LL.detach().cpu().numpy())
+        lossListL.append(np.copy(LL.detach().cpu().numpy()))
         L.backward()
         return L
     
@@ -599,6 +610,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA),label="Varifold Norm, Final = {0:.6f}".format(lossListDA[-1]))
         ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA)+np.asarray(lossListH),label="Total Cost, Final = {0:.6f}".format(lossListDA[-1]+lossListH[-1]+lossListPI[-1]))
         ax.plot(np.arange(len(lossListH)),np.asarray(lossListPI),label="Pi Cost, Final = {0:.6f}".format(lossListPI[-1]))
+        ax.plot(np.arange(len(lossListH)),np.asarray(lossListL),label="Lambda Cost, Final = {0:.6f}".format(lossListL[-1]))
         ax.set_title("Loss")
         ax.set_xlabel("Iterations")
         ax.set_ylabel("Cost")
@@ -619,6 +631,8 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         print("H loss: ", lossListH[-1])
         print("Var loss: ", lossListDA[-1])
         print("Pi lossL ", lossListPI[-1])
+        print("Lambda loss ", lossListL[-1])
+        
         osd = optimizer.state_dict()
         lossOnlyH.append(np.copy(osd['state'][0]['prev_loss']))
         saveState(osd,its,i,p0,savepref)
@@ -630,7 +644,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         if (np.mod(i,20) == 0):
             #p0Save = torch.clone(p0).detach()
             optimizer.zero_grad()
-            p1,q1 = printCurrentVariables(p0*pTilde,i,Kg,sigmaRKHS,uCoeff,q0,d,numS,zeta_S,labs,s,m,savedir)
+            p1,q1 = printCurrentVariables(p0*pTilde,i,Kg,sigmaRKHS,uCoeff,q0,d,numS,zeta_S,labs,s,m,savedir,supportWeights)
             printCost(i)
             checkEndPoint(dataloss,p0*pTilde,p1,q1,d,numS,savedir + 'it' + str(i))
             if (i > 0):

@@ -27,9 +27,9 @@ def main():
         os.mkdir(outpath) 
 
     imgfile = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/MRI/20161206Hip1_b0.img'
-    imgfile = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/newBrains/JOG57/MRI/JOG57_4_ap.nii.gz'
-    res = [0.125,0.125,0.125]
-    res = [1.0,1.0,1.0]
+    imgfile = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/newBrains/JOG57/MRI/JOG57_4_ap.nii._rotated.nii.gz'
+    res = [0.1,0.1,0.1]
+    #res = [1.0,1.0,1.0]
     #S,nu_S = gI.makeBinsFromMultiChannelImage(imgfile,res,3,1,ds=8,z=0,threshold=1,bins=25)
     S,nu_S = gI.makeFromSingleChannelImage(imgfile,res[0],bg=[0],ordering=[1,2,3],ds=1)
     

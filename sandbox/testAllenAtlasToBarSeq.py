@@ -27,19 +27,20 @@ def main():
     d = 3
     labs = 2 # in target 
     labS = 5 # template
-    sigmaRKHS = [0.2] # as of 3/16, should be fraction of total domain of S+T #[10.0]
-    sigmaVar = [0.5,0.2,0.05] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 50
+    sigmaRKHS = [0.5] # as of 3/16, should be fraction of total domain of S+T #[10.0]
+    sigmaVar = [0.5,0.2,0.05,0.02] # as of 3/16, should be fraction of total domain of S+T #10.0
+    its = 100
     alphaSt = 'AllenAtlas200ToBarSeq'
     beta = None
     res=1.0
     kScale=1
-    extra="flipFullAtlas"
+    extra="flipFullAtlasLamb"
     cA=1.0
     cT=1.0 # original is 0.5
-    cS=10.0
+    cS=1000.0
     Csqpi=10000.0
-    eta0 = torch.tensor(torch.sqrt(0.1)).type(dtype)
+    eta0 = torch.sqrt(torch.tensor(0.1)).type(dtype)
+    lamb0 = torch.tensor(1.0).type(dtype)
     
     # Set these parameters according to relative decrease you expect in data attachment term
     # these should be based on approximately what the contribution compared to original cost is

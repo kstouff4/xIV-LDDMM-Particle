@@ -204,7 +204,8 @@ def writeVTK(YXZ,features,featureNames,savename,polyData=None,fields=None,fieldN
         for f in range(len(fields)):
             f_out_data.append("VECTORS " + fieldNames[f] + " float\n")
             fieldCurr = fields[f]
-            #for pt in range(num_pts):
+            for pt in range(num_pts):
+                f_out_data.append("%f %f %f\n" % (fieldCurr[pt,1], fieldCurr[pt,0], fieldCurr[pt,2]))
                 
 
     # Write output data array to file
@@ -233,7 +234,25 @@ def writeParticleVTK(npzfile,condense=False,featNames=None):
     writeVTK(X,imageVals,imageNames,npzfile.replace('.npz','.vtk'))
     return
 
-
+def writeVectorField(Gs,Ge,outpath):
+    '''
+    Deformed grid coordinates (start and end).
+    '''
+    vec = np.sqrt(np.sum((Ge-Gs)**2,axis=-1))[...,None] # displacement
+    print("vec size is ", vec.shape)
+    polyData = np.zeros((Gs.shape[0],3))
+    polyData[:,0] = 2
+    polyData[:,1] = np.arange(Gs.shape[0])
+    polyData[:,2] = np.arange(Gs.shape[0])+Gs.shape[0]
+    
+    vec0 = np.zeros_like(vec)
+    vecTotal = np.vstack((vec0,vec))
+    print("vec Total size is, ", vecTotal.shape)
+    
+    writeVTK(np.vstack((Gs,Ge)),[vecTotal],['DISPLACEMENT'],outpath,polyData=polyData)
+    Gsmall = 0.1*(Ge-Gs) + Gs
+    writeVTK(np.vstack((Gs,Gsmall)),[vecTotal],['DISPLACEMENT'],outpath.replace('.vtk','_small.vtk'),polyData=polyData)
+    return
                    
                         
     
