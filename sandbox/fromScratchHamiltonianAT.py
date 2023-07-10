@@ -62,7 +62,7 @@ def GaussKernelHamiltonianExtra(sigma,d,gamma):
     print("h3, ", h3)
     return h3.sum_reduction() + h2.sum()
 
-def GaussKernelU(sigma,d):
+def GaussKernelU(sigma,d,uCoeff):
     xO,qyO,py,wpyO = Vi(0,d), Vj(1,d), Vj(2,d), Vj(3,1)
     #retVal = xO.sqdist(qyO)*torch.tensor(0).type(dtype)
     for sInd in range(len(sigma)):
@@ -72,12 +72,12 @@ def GaussKernelU(sigma,d):
         K = (-D2 * 0.5).exp() # G x N
         h = py + wpy*(x-qy) # 1 X N x 3
         if sInd == 0:
-            retVal = K*h
+            retVal = (1.0/uCoeff[sInd])*K*h
         else:
-            retVal += (K*h) #.sum_reduction(axis=1)
+            retVal += (1.0/uCoeff[sInd])*(K*h) #.sum_reduction(axis=1)
     return retVal.sum_reduction(axis=1) # G x 3
 
-def GaussKernelUdiv(sigma,d):
+def GaussKernelUdiv(sigma,d,uCoeff):
     xO,qyO,py,wpyO = Vi(0,d), Vj(1,d), Vj(2,d), Vj(3,1)
     #retVal = xO.sqdist(qyO)*torch.tensor(0).type(dtype)
     for sInd in range(len(sigma)):
@@ -87,9 +87,9 @@ def GaussKernelUdiv(sigma,d):
         K = (-D2 * 0.5).exp()
         h = d*wpy - (1.0/sig)*((x-qy)*py).sum() - (1.0/sig)*wpy*D2
         if sInd == 0:
-            retVal = K*h
+            retVal = (1.0/uCoeff[sInd])*K*h
         else:
-            retVal += (K*h) #.sum_reduction(axis=1)
+            retVal += (1.0/uCoeff[sInd])*(K*h) #.sum_reduction(axis=1)
     return retVal.sum_reduction(axis=1) # G x 1
 
 def GaussLinKernel(sigma,d,l,beta):
@@ -193,7 +193,7 @@ def Hamiltonian(K0, sigma, d,numS,gammaA,gammaT,gammaU):
         h = h.sum(dim=0) + hh
         '''
         #h = GaussKernelHamiltonianExtra(sigma=sigma,d=d,gamma=gamma)(qx,px,px,wpq,qc,pc)
-        print("k is ")
+        print("u norm cost is ")
         print(k.detach().cpu().numpy())
         #print("h is, ", h.detach())
         #print("h2 is, ", h2.detach())
@@ -229,7 +229,7 @@ def HamiltonianSystem(K0, sigma, d,numS,gammaA,gammaT,gammaU):
     return HS
 
 # Katie change this to include A and T for the grid 
-def HamiltonianSystemGrid(K0,sigma,d,numS,gammaA,gammaT,gammaU):
+def HamiltonianSystemGrid(K0,sigma,d,numS,gammaA,gammaT,gammaU,uCoeff):
     H = Hamiltonian(K0,sigma,d,numS,gammaA,gammaT,gammaU)
     def HS(p,q,qgrid,qgridw):
         px = p[numS:].view(-1,d)
@@ -255,8 +255,8 @@ def HamiltonianSystemGrid(K0,sigma,d,numS,gammaA,gammaT,gammaU):
         Gg = (GaussKernelU(sigma,d)(gx,qx,px,pw*qw) + (K2.sum()*pct).sum(dim=1) + gx@A.T + tau).flatten() # + A(qgrid-x_c) + tau
         Ggw = ((GaussKernelUdiv(sigma,d)(gx,qx,px,pw*qw) - (K2.sum()*Dc).sum(dim=1))*gw).flatten()
         '''
-        Gg = (GaussKernelU(sigma,d)(gx,qx,px,pw*qw) + (gx-xc)@A.T + tau).flatten()
-        Ggw = (GaussKernelUdiv(sigma,d)(gx,qx,px,pw*qw)*gw).flatten()
+        Gg = ((1.0/gammaU)*GaussKernelU(sigma,d,uCoeff)(gx,qx,px,pw*qw) + (gx-xc)@A.T + tau).flatten()
+        Ggw = ((1.0/gammaU)*GaussKernelUdiv(sigma,d,uCoeff)(gx,qx,px,pw*qw)*gw).flatten()
                                                    
         return -Gq,Gp,Gg,Ggw
     
@@ -278,8 +278,8 @@ def LDDMMloss(K0, K1, sigma, d, numS,gammaA,gammaT,gammaU,dataloss, c=1.0):
 
     return loss
 
-def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,gammaA,gammaT,gammaU,nt=10,Integrator=RalstonIntegrator()):
-    return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS,gammaA,gammaT,gammaU), (p0,q0,qGrid,qGridw),nt)
+def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,gammaA,gammaT,gammaU,uCoeff,nt=10,Integrator=RalstonIntegrator()):
+    return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS,gammaA,gammaT,gammaU,uCoeff), (p0,q0,qGrid,qGridw),nt)
 
 #################################################################
 # Data Attachment Term
@@ -353,7 +353,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, s
     print("sigmaVar, ", sigmaVar)
     pTilde = torch.zeros_like(p0).type(dtype)
     pTilde[0:numS] = kScale #torch.sqrt(kScale)*torch.sqrt(kScale)
-    pTilde[numS:] = torch.sqrt(gammaT).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
+    pTilde[numS:] = cScale #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
 
     
     if (beta is None):
@@ -365,7 +365,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, s
             k2 = Kinit(Stilde, Ttilde, w_S*zeta_S, w_T*zeta_T)
             beta = torch.tensor(2.0/(cinit + k1.sum() - 2*k2.sum())).type(dtype)
             print("beta is ", beta.detach().cpu().numpy())
-            beta = [torch.tensor(2.0/(cinit + k1.sum() - 2*k2.sum())).type(dtype)]
+            beta = [torch.clone(2.0/(cinit + k1.sum() - 2*k2.sum())).type(dtype)]
         
         # print out indiviual costs
         else:
@@ -377,15 +377,18 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, s
                 cinit = Kinit(Ttilde,Ttilde,w_T*zeta_T,w_T*zeta_T).sum()
                 k1 = Kinit(Stilde, Stilde, w_S*zeta_S, w_S*zeta_S).sum()
                 k2 = -2*Kinit(Stilde, Ttilde, w_S*zeta_S, w_T*zeta_T).sum()
-                beta.append(torch.tensor(2.0/(cinit + k1 + k2)).type(dtype))
+                beta.append(torch.clone(2.0/(cinit + k1 + k2)).type(dtype))
                 print("mu source norm ", k1.detach().cpu().numpy())
                 print("mu target norm ", cinit.detach().cpu().numpy())
                 print("total norm ", (cinit + k1 + k2).detach().cpu().numpy())
     # Compute constants to weigh each kernel norm in RKHS by
     uCoeff = []
     for sig in sigmaRKHS:
-        Kinit = GaussKernelSpace(sigma=sig,d=d)
-        uCoeff.append(torch.clone((1.0/(N*sig))*Kinit(Stilde,Stilde).sum()).type(dtype))
+        Kinit = GaussKernelSpace(sigma=[sig],d=d)
+        uCoeff.append(torch.clone((1.0/(N*N*sig*sig))*Kinit(Stilde,Stilde).sum()).type(dtype))
+    for ss in range(len(uCoeff)):
+        print("sig is ", sigmaRKHS[ss].detach().cpu().numpy())
+        print("uCoeff ", uCoeff[ss].detach().cpu().numpy())
 
     cst, dataloss = lossVarifoldNorm(Ttilde,w_T,zeta_T,zeta_S,GaussLinKernel(sigma=sigmaVar,d=d,l=labs,beta=beta),d,numS,beta=beta)
     Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d,uCoeff=uCoeff)
@@ -496,7 +499,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gammaA,gammaT,gammaU,d,labs, s
     qGrid = qGrid.flatten()
     qGridw = torch.ones((numG)).type(dtype)
 
-    listpq = ShootingGrid(p0*pTilde,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,gammaA,gammaT,gammaU)
+    listpq = ShootingGrid(p0*pTilde,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,gammaA,gammaT,gammaU,uCoeff)
     print("length of pq list is, ", len(listpq))
     Dlist = []
     nu_Dlist = []

@@ -26,7 +26,7 @@ def main():
     labs = 3
     sigmaRKHS = [0.1] # as of 3/16, should be fraction of total domain of S+T #[10.0]
     sigmaVar = [0.2,0.05] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 15
+    its = 8
     alphaSt = 'BEIALE-new'
     beta = None
     res=1.0

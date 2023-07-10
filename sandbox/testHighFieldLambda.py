@@ -15,7 +15,7 @@ import vtkFunctions as vtf
 
 import torch
 
-from fromScratchHamiltonianATCalibrated import *
+from fromScratchHamiltonianATSCalibrated import *
 from analyzeOutput import *
 
 np_dtype = "float32"
@@ -36,7 +36,7 @@ def main():
     beta = None
     res=1.0
     kScale=1
-    extra="170921"
+    extra="210929_scale"
     cA=1.0
     cT=1.0 # original is 0.5
     cS=10.0
@@ -53,7 +53,7 @@ def main():
     if (not os.path.exists(outpath)):
         os.mkdir(outpath) 
 
-    imgFile = imgPref+'170921/AMYGDALA+ERC+TEC.img' # WHITAM is 150929, 170921, 191001, 210929
+    imgFile = imgPref+'210929/AMYGDALA+ERC+TEC.img' # WHITAM is 150929, 170921, 191001, 210929
     im = nib.load(imgFile)
     imageO = np.asanyarray(im.dataobj).astype('float32')
     

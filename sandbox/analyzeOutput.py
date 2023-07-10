@@ -261,6 +261,7 @@ def interpolateWithImage(imgS,res,Tdgrid,Tgrid,savename,flip=False,ds=2):
     '''
     iS = nib.load(imgS)
     iSim = np.asarray(iS.dataobj)
+    print("shape of atlas: ", iSim.shape)
     iSim = iSim[0::ds,0::ds,0::ds,...]
     print("ranges of image")
     print(iSim.shape)
@@ -317,9 +318,11 @@ def interpolateWithImage(imgS,res,Tdgrid,Tgrid,savename,flip=False,ds=2):
     nu_TSim = np.reshape(nu_TS,(Tgrid.shape[0],Tgrid.shape[1],Tgrid.shape[2]))
     print("nu_TS shape image, ", nu_TSim.shape)
     np.savez(savename + '.npz',nu_TS=nu_TS,nu_TSim=nu_TSim)
-    f,ax = plt.subplots()
-    ax.imshow(nu_TSim,cmap='gray')
-    f.savefig(savename+'.png',dpi=300)
+    
+    if Tgrid.shape[2] < 2:
+        f,ax = plt.subplots()
+        ax.imshow(nu_TSim,cmap='gray')
+        f.savefig(savename+'.png',dpi=300)
     
     empty_header = nib.Nifti1Header()
     wIm = nib.Nifti1Image(nu_TSim[...,None], np.eye(4), empty_header)
