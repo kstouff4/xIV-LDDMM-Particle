@@ -282,6 +282,28 @@ def HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=3,single=F
             return -Gq,Gp,Gg,Ggw,Gt,Gtw
     
     return HS
+
+def HamiltonianSystemBackwards(K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=3,single=False):
+    # initial = integration from p0 and q0 just with negative velocity field and parameters (e.g. giving same p's)
+    # 06/25 = first try with just putting -px, -pw replacement only --> doesn't work (seems to give incorrect mapping)
+    # 06/26 = second try with just changing hamiltonian derivatives in terms of sign (change t --> 1 - t); scale off (too big)
+    # 7/01 = third try with starting with -p1, but keeping same integration scheme in terms of relation with hamiltonians
+    H = Hamiltonian(K0,sigma,d,numS,cA,cT,dimEff=dimEff,single=single)
+    def HS(p,q,T,wT):
+        px = p[numS:].view(-1,d)
+        pw = p[:numS].view(-1,1)
+        qx = q[numS:].view(-1,d)
+        qw = q[:numS].view(-1,1) #torch.squeeze(q[:numS])[...,None]
+        Gp,Gq = grad(H(p,q), (p,q), create_graph=True)
+        A,tau,Alpha = getATauAlpha(px,qx,pw,qw,dimEff=dimEff,single=single)
+        xc = (qw*qx).sum(dim=0)/(qw.sum(dim=0))
+        Tx = T.view(-1,d)
+        wTw = wT.view(-1,1)
+        Gt = (getU(sigma,d,uCoeff)(Tx,qx,px,pw*qw) + (Tx-xc)@A.T + tau + (Tx-xc)@Alpha).flatten()
+        Gtw = (getUdiv(sigma,d,uCoeff)(Tx,qx,px,pw*qw)*wTw + Alpha.sum()*wTw).flatten()
+        return -Gq,Gp,Gt,Gtw
+    
+    return HS
         
 ##################################################################
 # Shooting
@@ -313,6 +335,9 @@ def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=
         print(qGrid.detach().cpu().numpy().shape)
         print(qGridw.detach().cpu().numpy().shape)
         return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA,cT,dimEff,single=single), (p0[:(d+1)*numS],q0,qGrid,qGridw,T,wT),nt)
+    
+def ShootingBackwards(p1,q1,T,wT,K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=3,single=False,nt=10,Integrator=RalstonIntegrator()):
+    return Integrator(HamiltonianSystemBackwards(K0,sigma,d,numS,uCoeff,cA,cT,dimEff,single=single), (-p1[:(d+1)*numS],q1,T,wT),nt)
 
 #################################################################
 # Data Attachment Term
@@ -697,7 +722,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     qGrid = qGrid.flatten()
     qGridw = torch.ones((numG)).type(dtype)    
 
-    listpq = ShootingGrid(p0*pTilde,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,uCoeff,cA,cT,dimEff,single=single,T=Ttilde.flatten(),wT=w_T.flatten())
+    listpq = ShootingGrid(p0*pTilde,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,uCoeff,cA,cT,dimEff,single=single)
     print("length of pq list is, ", len(listpq))
     Dlist = []
     nu_Dlist = []
@@ -743,14 +768,19 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         Glist.append(init.resizeData(G,s,m))
         gw = listpq[t][3]
         W = gw.detach().cpu().numpy()
-        wGlist.append(W)
-        
-        Tt = listpq[t][4]
+        wGlist.append(W)        
+    
+    # Shoot Backwards
+    # 7/01 = negative of momentum is incorporated into Shooting Backwards function
+    listBack = ShootingBackwards(listpq[-1][0],listpq[-1][1],Ttilde.flatten(),w_T.flatten(),Kg,sigmaRKHS,d,numS,uCoeff)
+    
+    for t in range(len(listBack)):
+        Tt = listBack[t][2]
         Tlist.append(init.resizeData(Tt.detach().view(-1,d).cpu().numpy(),s,m))
-        wTt = listpq[t][5]
+        wTt = listBack[t][3]
         nuTlist.append(wTt.detach().cpu().numpy()[...,None]*zeta_T.detach().cpu().numpy())
-        
-        # plot p0 as arrows
+    
+    # plot p0 as arrows
     checkEndPoint(dataloss,p0T,listpq[-1][0],listpq[-1][1],d,numS,savedir)
     listSp0 = np.zeros((numS*2,3))
     polyListSp0 = np.zeros((numS,3))
