@@ -2,8 +2,12 @@ import numpy as np
 import matplotlib
 from matplotlib import pyplot as plt
 from sys import path as sys_path
-sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
-import vtkFunctions as vtf
+
+sys_path.append('../')
+sys_path.append('../xmodmap/')
+sys_path.append('../xmodmap/io/')
+import initialize as init
+import getOutput as gO
 
 import scipy as sp
 from scipy import linalg
@@ -15,7 +19,13 @@ import torch
 from pykeops.torch import Vi,Vj
 
 np_dtype = "float32" #"float64"
-dtype = torch.cuda.FloatTensor #DoubleTensor 
+use_cuda = torch.cuda.is_available()
+if use_cuda:
+    dtype = torch.cuda.FloatTensor #DoubleTensor 
+else:
+    dtype = torch.FloatTensor
+    
+    
 
 
 def getLocalDensity(Z,nu_Z,sigma,savename,coef=3):
@@ -58,7 +68,7 @@ def getLocalDensity(Z,nu_Z,sigma,savename,coef=3):
         for f in range(nu_Z.shape[-1]):
             imageNames.append('Feature' + str(f) + '_Density')
             imageDensity.append(cubes_mrna[:,f])
-    vtf.writeVTK(centroidsPlot,imageDensity,imageNames,savename,polyData=None)
+    gO.writeVTK(centroidsPlot,imageDensity,imageNames,savename,polyData=None)
     return
 
 def getCompareDensity(T,nu_T,D,nu_D,sigma,savedir,coef=3):
@@ -223,7 +233,7 @@ def interpolateNN(Td,T,S,nu_S,pi_ST,savename):
         imageVals.append(zeta_TSpi[:,f])
         imageNames.append('Zeta_' + str(f))
         
-    vtf.writeVTK(T,imageVals,imageNames,savename.replace('.npz','.vtk'),polyData=None)
+    gO.writeVTK(T,imageVals,imageNames,savename.replace('.npz','.vtk'),polyData=None)
     return T,nu_TSpi
 
 def removeZerosAndNormalize(imgT,imgD,norm=True):

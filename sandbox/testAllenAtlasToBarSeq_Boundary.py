@@ -9,9 +9,6 @@ import initialize as init
 import getInput as gI
 import getOutput as gO
 
-sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
-import vtkFunctions as vtf
-
 import torch
 
 from crossModalityHamiltonianATSCalibrated_Boundary import *
@@ -19,7 +16,11 @@ from analyzeOutput import *
 
 # Set data type in: fromScratHamiltonianAT, analyzeOutput, getInput, initialize
 np_dtype = "float32" # "float64"
-dtype = torch.cuda.FloatTensor #DoubleTensor 
+use_cuda = torch.cuda.is_available()
+if use_cuda:
+    dtype = torch.cuda.FloatTensor #DoubleTensor 
+else:
+    dtype = torch.FloatTensor
 
 import nibabel as nib
 
@@ -125,11 +126,11 @@ def main():
         imageValsS.append(zeta_S[:,i])
         imageNamesS.append('zeta_' + str(i))
 
-    vtf.writeVTK(S,imageValsS,imageNamesS,savedir+'testOutput_S.vtk',polyData=None)
-    vtf.writeVTK(T,imageValsT,imageNamesT,savedir+'testOutput_T.vtk',polyData=None)
+    gO.writeVTK(S,imageValsS,imageNamesS,savedir+'testOutput_S.vtk',polyData=None)
+    gO.writeVTK(T,imageValsT,imageNamesT,savedir+'testOutput_T.vtk',polyData=None)
     np.savez(savedir+'origST.npz',S=S,nu_S=nu_S,T=T,nu_T=nu_T,zeta_S=zeta_S,zeta_T=zeta_T)
     imageValsT[0] = np.sum(nu_Td,axis=-1)
-    vtf.writeVTK(Td,imageValsT,imageNamesT,savedir+'testOutput_Td.vtk',polyData=None)
+    gO.writeVTK(Td,imageValsT,imageNamesT,savedir+'testOutput_Td.vtk',polyData=None)
 
     pointList = np.zeros((S.shape[0]*len(Dlist),d))
     polyList = np.zeros((S.shape[0]*(len(Dlist)-1),3))
@@ -155,9 +156,9 @@ def main():
             imageValsDPi.append(zeta_Dpi[:,i])
         for i in range(zeta_D.shape[-1]):
             imageValsD.append(zeta_D[:,i])
-        vtf.writeVTK(D,imageValsD,imageNamesS,savedir+'testOutput_D' + str(t) + '.vtk',polyData=None)
-        vtf.writeVTK(D,imageValsDPi,imageNamesT,savedir+'testOutput_Dpi' + str(t) + '.vtk',polyData=None)
-        vtf.writeVTK(G,[nu_G],['Weights'],savedir+'testOutput_G' + str(t) + '.vtk',polyData=None)
+        gO.writeVTK(D,imageValsD,imageNamesS,savedir+'testOutput_D' + str(t) + '.vtk',polyData=None)
+        gO.writeVTK(D,imageValsDPi,imageNamesT,savedir+'testOutput_Dpi' + str(t) + '.vtk',polyData=None)
+        gO.writeVTK(G,[nu_G],['Weights'],savedir+'testOutput_G' + str(t) + '.vtk',polyData=None)
         if (t == len(Dlist) - 1):
             np.savez(savedir+'testOutput.npz',S=S, nu_S=nu_S,T=T,nu_T=nu_T,D=D,nu_D=nu_D,nu_Dpi=nu_Dpi)
             pointList[int(t*len(D)):int((t+1)*len(D))] = D
@@ -176,8 +177,8 @@ def main():
 
 
 
-    vtf.writeVTK(pointList,[featList],['Weights'],savedir+'testOutput_curves.vtk',polyData=polyList)
-    vtf.writeVTK(pointListG,[featListG],['Weights'],savedir+'testOutput_grid.vtk',polyData=polyListG)
+    gO.writeVTK(pointList,[featList],['Weights'],savedir+'testOutput_curves.vtk',polyData=polyList)
+    gO.writeVTK(pointListG,[featListG],['Weights'],savedir+'testOutput_grid.vtk',polyData=polyListG)
     volS = np.prod(np.max(S,axis=(0,1)) - np.min(S,axis=(0,1)))
     volT = np.prod(np.max(T,axis=(0,1)) - np.min(T,axis=(0,1)))
     volD = np.prod(np.max(Dlist[-1],axis=(0,1)) - np.min(Dlist[-1],axis=(0,1)))
@@ -213,7 +214,7 @@ def main():
     qw0 = np.reshape(q0[:N],(N,1))
     
     x = applyAandTau(qx0,qw0,A0,tau0)
-    vtf.writeVTK(x,[qw0],['weights'],savedir+'testOutput_D_ATau.vtk',polyData=None)
+    gO.writeVTK(x,[qw0],['weights'],savedir+'testOutput_D_ATau.vtk',polyData=None)
     getLocalDensity(x,nu_S,sigmaVar[0],savedir+'density_D_ATau.vtk',coef=0.25)
     
     sys.stdout = original

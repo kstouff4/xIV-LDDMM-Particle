@@ -5,7 +5,11 @@ sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
 import vtkFunctions as vtf
 
 import torch
-dtype = torch.cuda.FloatTensor # Double Tensor 
+use_cuda = torch.cuda.is_available()
+if use_cuda:
+    dtype = torch.cuda.FloatTensor #DoubleTensor 
+else:
+    dtype = torch.FloatTensor
 
 from matplotlib import pyplot as plt
 

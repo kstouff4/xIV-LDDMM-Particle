@@ -2,12 +2,16 @@ import numpy as np
 import torch
 from pykeops.torch import Vi,Vj
 np_dtype = "float32" #"float64"
-dtype = torch.cuda.FloatTensor #DoubleTensor 
+use_cuda = torch.cuda.is_available()
+if use_cuda:
+    dtype = torch.cuda.FloatTensor #DoubleTensor 
+else:
+    dtype = torch.FloatTensor
 
 import nibabel as nib
 
 
-from crossModalityHamiltonianATSCalibrated import GaussKernelHamiltonian, ShootingGrid
+from crossModalityHamiltonianATSCalibrated_Boundary import GaussKernelHamiltonian, ShootingGrid, ShootingBackwards
 from saveState import loadParams, loadVariables
 import sys
 from sys import path as sys_path
@@ -124,15 +128,16 @@ def shootBackwards(paramFile,variableFile,Z,w_Z,dimE=3):
     qGrid = qGrid.flatten()
     qGridw = torch.ones((numG)).type(dtype) 
 
-    listpq = ShootingGrid(p0,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,uCoeff,cA,cT,dimE,single=single,T=Z.flatten(),wT=w_Z.flatten())
+    listpq = ShootingGrid(p0,q0,qGrid,qGridw,Kg,sigmaRKHS,d,numS,uCoeff,cA,cT,dimE,single=single)
+    listBack = ShootingBackwards(listpq[-1][0],listpq[-1][1],Z.flatten(),w_Z.flatten(),Kg,sigmaRKHS,d,numS,uCoeff,cA,cT,dimE,single)
     
     Zlist = []
     wZlist = []
     
-    for t in range(len(listpq)):
-        Tt = listpq[t][4]
+    for t in range(len(listBack)):
+        Tt = listBack[t][2]
         Zlist.append(init.resizeData(Tt.detach().view(-1,d).cpu().numpy(),s,m))
-        wTt = listpq[t][5]
+        wTt = listBack[t][3]
         wZlist.append(wTt.detach().cpu().numpy())
     
     return Zlist[-1],wZlist[-1]

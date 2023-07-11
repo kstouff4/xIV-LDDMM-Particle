@@ -11,7 +11,11 @@ import pykeops
 from pykeops.torch import Vi, Vj
 
 np_dtype = "float32" #"float64"
-dtype = torch.cuda.FloatTensor #DoubleTensor 
+use_cuda = torch.cuda.is_available()
+if use_cuda:
+    dtype = torch.cuda.FloatTensor #DoubleTensor 
+else:
+    dtype = torch.FloatTensor
 
 from matplotlib import pyplot as plt
 import matplotlib

@@ -9,7 +9,7 @@ def saveState(osd,its,i,xopt,savepref):
     '''
 
     check_point = {'xopt':xopt, 'its': its-i-1, 'optimizer': osd}
-    filename = savepref + '_' + 'checkpoint.pth.tar'
+    filename = savepref + '_' + 'checkpoint.pt'
     torch.save(check_point, filename)
     return
 
@@ -27,7 +27,7 @@ def saveParams(uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,cPi
     save parameters in dictionary 
     '''
     params = {'uCoeff':uCoeff, 'sigmaRKHS':sigmaRKHS, 'sigmaVar':sigmaVar, 'beta':beta, 'd':d,'labs':labs,'numS':numS,'pTilde':pTilde,'gamma':gamma, 'cA':cA, 'cT':cT, 'cPi':cPi, 'single':single} 
-    filename = savepref + '_' + 'params.pth.tar'
+    filename = savepref + '_' + 'params.pt'
     torch.save(params,filename)
     return
 
@@ -39,7 +39,7 @@ def loadParams(filename):
 
 def saveVariables(q0,p0,Ttilde,wT,s,m,savepref):
     variables = {'q0':q0, 'p0':p0, 'Ttilde':Ttilde, 'wT':wT, 's':s, 'm':m}
-    filename = savepref + '_' + 'variables.pth.tar'
+    filename = savepref + '_' + 'variables.pt'
     torch.save(variables,filename)
     return
 
