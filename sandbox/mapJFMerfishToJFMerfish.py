@@ -16,7 +16,12 @@ from singleModalityHamiltonianATSCalibrated import *
 from analyzeOutput import *
 
 np_dtype = "float32" # "float64"
-dtype = torch.cuda.FloatTensor #DoubleTensor 
+use_cuda = torch.cuda.is_available()
+if use_cuda:
+    dtype = torch.cuda.FloatTensor #DoubleTensor 
+else:
+    dtype = torch.FloatTensor
+
 
 import nibabel as nib
 
@@ -29,7 +34,7 @@ def main():
     beta = None
     res=1.0
     kScale=1
-    extra=""
+    extra="sig0.2"
     cA=1.0
     cT=1.0 # original is 0.5
     cS=30.0
@@ -51,11 +56,13 @@ def main():
     if (not os.path.exists(outpath)):
         os.mkdir(outpath)
         
-    sourceImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/FanMERFISH/cell_S1R1.npz'
-    targetImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/FanMERFISH/cell_S1R2.npz'
+    sourceImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/FanMERFISH/sig0.2/cell_S1R1_US_optimal_all.npz'
+    targetImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/FanMERFISH/sig0.2/cell_S1R2_US_optimal_all.npz'
     
     S,nu_S = gI.getFromFile(sourceImage)
     T,nu_T = gI.getFromFile(targetImage)
+    torch.save([S,nu_S],'../data/source_2D_celltype.pt')
+    torch.save([T,nu_T],'../data/target_2D_celltype.pt')
     
     # test extra particles
     #S,nu_S = gI.returnMultiplesSpace(S,nu_S,kScale)
@@ -79,6 +86,7 @@ def main():
     print("beta: " + str(beta))
     
     print("N " + str(N))
+    dimEff=2
     
     #Dlist, nu_Dlist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),d,labs,savedir,its=its,beta=beta)
     sigmaRKHSlist = []
@@ -88,7 +96,9 @@ def main():
     for sigg in sigmaVar:
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
-    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,dimEff=2,single=single)
+    torch.save([sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,its,torch.tensor(kScale).type(dtype),torch.tensor(cA).type(dtype),torch.tensor(cT).type(dtype),cS,dimEff,single],'../data/parameters_2D_celltype.pt')
+        
+    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,dimEff=dimEff,single=single)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
