@@ -30,7 +30,7 @@ def main():
     labS = 28 # template
     sigmaRKHS = [0.2,0.1,0.05] #[0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
     sigmaVar = [0.5,0.2,0.05,0.02] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 90
+    its = 100
     alphaSt = 'AllenAtlas200ToBarSeq28'
     beta = None
     res=1.0
@@ -119,6 +119,11 @@ def main():
 
     zeta_S = nu_S/(np.sum(nu_S,axis=-1)[...,None])
     zeta_T = nu_T/(np.sum(nu_T,axis=-1)[...,None])
+    w_S = np.sum(nu_S,axis=-1)[...,None]
+    w_T = np.sum(nu_T,axis=-1)[...,None]
+    zeta_S[np.squeeze(w_S == 0),...] = 0
+    zeta_T[np.squeeze(w_T == 0),...] = 0
+    
     for i in range(labs):
         imageNamesT.append('zeta_' + str(i))
         imageValsT.append(zeta_T[:,i])

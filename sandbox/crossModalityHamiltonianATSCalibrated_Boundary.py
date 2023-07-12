@@ -148,11 +148,17 @@ def defineSupport(Ttilde,eps=0.001):
     sliceZMin = Ttilde[torch.squeeze(Ttilde[:,-1] < (zMin + torch.tensor(eps).type(dtype))),...]
     sliceZMax = Ttilde[torch.squeeze(Ttilde[:,-1] > (zMax - torch.tensor(eps).type(dtype))),...]
     
+    print("sliceZMin: ", sliceZMin)
+    print("sliceZMax: ", sliceZMax)
+    
     tCenter = torch.mean(Ttilde,axis=0)
     
     # pick 3 points on each approximate slice and take center and normal vector
     a0s = sliceZMin[torch.randint(sliceZMin.shape[0],[3]),...]
     a1s = sliceZMax[torch.randint(sliceZMax.shape[0],[3]),...]
+    
+    print("a0s: ", a0s)
+    print("a1s: ", a1s)
     
     a0 = torch.mean(a0s,axis=0)
     a1 = torch.mean(a1s,axis=0)
@@ -503,6 +509,8 @@ def makePQ(S,nu_S,T,nu_T,Csqpi=torch.tensor(1.0).type(dtype),lambInit=torch.tens
     w_T = nu_T.sum(axis=-1)[...,None].type(dtype)
     zeta_S = (nu_S/w_S).type(dtype)
     zeta_T = (nu_T/w_T).type(dtype)
+    zeta_S[torch.squeeze(w_S == 0),...] = torch.tensor(0.0).type(dtype)
+    zeta_T[torch.squeeze(w_T == 0),...] = torch.tensor(0.0).type(dtype)
     numS = w_S.shape[0]
     
     Stilde, Ttilde, s, m = init.rescaleData(S,T)
