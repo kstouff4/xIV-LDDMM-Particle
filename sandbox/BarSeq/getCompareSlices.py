@@ -20,11 +20,11 @@ else:
 import numpy as np
 
 def main():
-    index=39
+    indices=[0,9,19,29,39] # 0, 9, 19, 29, 39
     resAtlas = [0.01,0.01,0.01]
     imgS = '/cis/home/kstouff4/Documents/MeshRegistration/TestImages/Allen_10_anno_16bit_ap_672.img'
     res = 0.001 # TO DO --> check whether this refers to scale of 1 or in um 
-    savepref = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/AllenAtlas200ToBarSeq/output_dl_sig_its_albega_N-35_[0.2, 0.1, 0.05][0.5, 0.2, 0.05]_150_0.1None_67827flipFullAtlas/'
+    savepref = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/AllenAtlas200ToBarSeq/output_dl_sig_its_csgamma_N-35_[0.2, 0.1, 0.05][0.5, 0.2, 0.05, 0.02]_4_10.010000.00.1_67827flipFullAtlasLamb/'
     #savepref='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/AllenAtlas200ToBarSeq/output_dl_sig_its_csgamma_N-35_[0.2, 0.1, 0.05][0.5, 0.2, 0.05, 0.02]_2_10.010000.00.1_67827flipFullAtlasLamb/'
     paramsFile = savepref + 'State__params.pth.tar'
     
@@ -42,14 +42,15 @@ def main():
     
     #ss.saveVariables(torch.tensor(q0).type(dtype),torch.tensor(p0).type(dtype),Ttilde,wT,s,m,savepref + 'State_')
     
-    Xg,nu_Xg,X,nu_X = sp.shootTargetGridSlice(Ttilde,nu_T,index,res,savepref,paramsFile,variablesFile) # gives locations and feature values of target
-    interpolateWithImage(imgS,resAtlas,X,Xg,savepref + 'Slice' + str(index) + '_',flip=True)
-    info = np.load(savepref + 'Slice_' + str(index) + '_originalAndShot.npz')
-    Xo = init.resizeData(info['X'],s,m)
-    nuXo = info['nu_X']
-    Xog = np.reshape(Xo,Xg.shape)
-    nuXog = np.reshape(nuXo,nu_Xg.shape)
-    interpolateWithImage(imgS,resAtlas,Xo,Xog,savepref + 'Slice' + str(index) + '_startPosition_',flip=True)
+    for index in indices:
+        Xg,nu_Xg,X,nu_X = sp.shootTargetGridSlice(Ttilde,nu_T,index,res,savepref,paramsFile,variablesFile) # gives locations and feature values of target
+        interpolateWithImage(imgS,resAtlas,X,Xg,savepref + 'Slice' + str(index) + '_',flip=True)
+        info = np.load(savepref + 'Slice_' + str(index) + '_originalAndShot.npz')
+        Xo = init.resizeData(info['X'],s,m)
+        nuXo = info['nu_X']
+        Xog = np.reshape(Xo,Xg.shape)
+        nuXog = np.reshape(nuXo,nu_Xg.shape)
+        interpolateWithImage(imgS,resAtlas,Xo,Xog,savepref + 'Slice' + str(index) + '_startPosition_',flip=True)
     
     return
 

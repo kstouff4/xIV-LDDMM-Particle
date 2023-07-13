@@ -145,31 +145,71 @@ def defineSupport(Ttilde,eps=0.001):
     print("zMin: ", zMin)
     print("zMax: ", zMax)
     
-    sliceZMin = Ttilde[torch.squeeze(Ttilde[:,-1] < (zMin + torch.tensor(eps).type(dtype))),...]
-    sliceZMax = Ttilde[torch.squeeze(Ttilde[:,-1] > (zMax - torch.tensor(eps).type(dtype))),...]
-    
-    print("sliceZMin: ", sliceZMin)
-    print("sliceZMax: ", sliceZMax)
-    
-    tCenter = torch.mean(Ttilde,axis=0)
-    
-    # pick 3 points on each approximate slice and take center and normal vector
-    a0s = sliceZMin[torch.randint(sliceZMin.shape[0],[3]),...]
-    a1s = sliceZMax[torch.randint(sliceZMax.shape[0],[3]),...]
-    
-    print("a0s: ", a0s)
-    print("a1s: ", a1s)
-    
-    a0 = torch.mean(a0s,axis=0)
-    a1 = torch.mean(a1s,axis=0)
-    
-    n0 = torch.cross(a0s[1,...]-a0s[0,...],a0s[2,...] - a0s[0,...])
-    if (torch.dot(tCenter - a0,n0) < 0):
-        n0 = -1.0*n0
-    
-    n1 = torch.cross(a1s[1,...] - a1s[0,...],a1s[2,...] - a1s[0,...])
-    if (torch.dot(tCenter - a1,n1) < 0):
-        n1 = -1.0*n1
+    if zMin == zMax:
+        zMin = torch.min(Ttilde[:,-2])
+        zMax = torch.max(Ttilde[:,-2])
+        print("new Zmin: ", zMin)
+        print("new Zmax: ", zMax)
+        sh = 0
+        co = 1
+        while (sh < 2):
+            lineZMin = Ttilde[torch.squeeze(Ttilde[:,-2] < (zMin + torch.tensor(co*eps).type(dtype))),...]
+            lineZMax = Ttilde[torch.squeeze(Ttilde[:,-2] > (zMax - torch.tensor(co*eps).type(dtype))),...]
+            sh = min(lineZMin.shape[0],lineZMax.shape[0])
+            co += 1
+        
+        print("lineZMin: ", lineZMin)
+        print("lineZMax: ", lineZMax)
+        
+        tCenter = torch.mean(Ttilde,axis=0)
+
+        a0s = lineZMin[torch.randperm(lineZMin.shape[0])[0:2],...]
+        a1s = lineZMax[torch.randperm(lineZMax.shape[0])[0:2],...]
+        
+        print("a0s: ", a0s)
+        print("a1s: ", a1s)
+        
+        a0 = torch.mean(a0s,axis=0)
+        a1 = torch.mean(a1s,axis=0)
+        n0 = torch.tensor([-(a0s[1,0]-a0s[0,0]),(a0s[1,1] - a0s[0,1]),Ttilde[0,-1]]).type(dtype)
+        n1 = torch.tensor([-(a1s[1,0]-a1s[0,0]),(a1s[1,1] - a1s[0,1]),Ttilde[0,-1]]).type(dtype)
+        if (torch.dot(tCenter - a0,n0) < 0):
+            n0 = -1.0*n0
+
+        if (torch.dot(tCenter - a1,n1) < 0):
+            n1 = -1.0*n1
+ 
+    else:
+        sh = 0
+        co = 1
+        while (sh < 3):
+            sliceZMin = Ttilde[torch.squeeze(Ttilde[:,-1] < (zMin + torch.tensor(co*eps).type(dtype))),...]
+            sliceZMax = Ttilde[torch.squeeze(Ttilde[:,-1] > (zMax - torch.tensor(co*eps).type(dtype))),...]
+            sh = min(sliceZMin.shape[0],sliceZMax.shape[0])
+            co += 1
+
+        print("sliceZMin: ", sliceZMin)
+        print("sliceZMax: ", sliceZMax)
+
+        tCenter = torch.mean(Ttilde,axis=0)
+
+        # pick 3 points on each approximate slice and take center and normal vector
+        a0s = sliceZMin[torch.randperm(sliceZMin.shape[0])[0:3],...]
+        a1s = sliceZMax[torch.randperm(sliceZMax.shape[0])[0:3],...]
+
+        print("a0s: ", a0s)
+        print("a1s: ", a1s)
+
+        a0 = torch.mean(a0s,axis=0)
+        a1 = torch.mean(a1s,axis=0)
+
+        n0 = torch.cross(a0s[1,...]-a0s[0,...],a0s[2,...] - a0s[0,...])
+        if (torch.dot(tCenter - a0,n0) < 0):
+            n0 = -1.0*n0
+
+        n1 = torch.cross(a1s[1,...] - a1s[0,...],a1s[2,...] - a1s[0,...])
+        if (torch.dot(tCenter - a1,n1) < 0):
+            n1 = -1.0*n1
     
     # normalize vectors
     n0 = n0/torch.sqrt(torch.sum(n0**2))

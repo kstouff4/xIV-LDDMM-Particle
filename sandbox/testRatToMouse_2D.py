@@ -26,23 +26,25 @@ import nibabel as nib
 
 def main():
     d = 3
-    labs = 2 # in target 
-    labS = 5 # template
-    sigmaRKHS = [0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
+    dimEff = 2
+    labs = 34 # in target 
+    labS = 114 # template
+    sigmaRKHS = [0.2,0.1,0.05] #[0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
     sigmaVar = [0.5,0.2,0.05,0.02] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 90
-    alphaSt = 'AllenAtlas200ToBarSeq'
+    its = 100
+    alphaSt = 'sl536'
     beta = None
     res=1.0
     kScale=1
-    extra="flipFullAtlasLamb"
+    extra=""
     cA=1.0
     cT=1.0 # original is 0.5
-    cS=10000.0
+    cS=10.0
     Csqpi=10000.0
     Csqlamb=100.0
     eta0 = torch.sqrt(torch.tensor(0.2)).type(dtype)
     lamb0 = torch.tensor(0.4).type(dtype)
+    single=False
     
     # Set these parameters according to relative decrease you expect in data attachment term
     # these should be based on approximately what the contribution compared to original cost is
@@ -50,7 +52,7 @@ def main():
     
     original = sys.stdout
 
-    outpath='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/AllenMERFISH/'
+    outpath='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/RatToMouse/'
 
     if (not os.path.exists(outpath)):
         os.mkdir(outpath) 
@@ -60,16 +62,11 @@ def main():
     if (not os.path.exists(outpath)):
         os.mkdir(outpath)
     
-    atlasImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/downFromOld__optimalZnu_ZAllwC1.0_sig0.2_Nmax1500.0_Npart2000.0_BarSeqSlab.npz'
-    atlasImage='/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/sig0.4_its10-30__optimalZnu_ZAllwC8.0_sig[0.4]_Nmax1500.0_Npart2000.0.npz'
-    atlasImage='/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/downFromOld__optimalZnu_ZAllwC1.0_sig0.2_Nmax1500.0_Npart2000.0.npz'
-    targetImage='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/AllenMerfish/0.5/allSlices.npz'
-    
+    atlasImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/Atlas_2D_Slices/sig0.2/RatAtlas_US_optimal_all.npz'
+    targetImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/Atlas_2D_Slices/sig0.2/MouseAtlas_US_optimal_all.npz'
+        
     S,nu_S = gI.getFromFile(atlasImage)
     T,nu_T = gI.getFromFile(targetImage)
-    
-    # flip Allen atlas over z axis
-    S[:,-1] = -1.0*S[:,-1]
 
     labs = nu_T.shape[-1]
     labS = nu_S.shape[-1]
@@ -92,7 +89,6 @@ def main():
     
     print("N " + str(N))
     
-    #Dlist, nu_Dlist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),d,labs,savedir,its=its,beta=beta)
     sigmaRKHSlist = []
     sigmaVarlist = []
     for sigg in sigmaRKHS:
@@ -100,8 +96,11 @@ def main():
     for sigg in sigmaVar:
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
         
-    loadP = savedir.replace('_4_','_85_') + 'State__checkpoint.pth.tar'
-    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist, Tlist, nu_Tlist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=d,Csqpi=Csqpi,Csqlamb=Csqlamb,eta0=eta0,lambInit=lamb0,loadPrevious=None)
+    torch.save([S,nu_S],'../data/source_ratAtlas_2D.pt')
+    torch.save([T,nu_T],'../data/target_mouseAtlas_2D.pt')
+    torch.save([sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,its,torch.tensor(kScale).type(dtype),torch.tensor(cA).type(dtype),torch.tensor(cT).type(dtype),cS,cPi,dimEff,Csqpi,Csqlamb,eta0,lamb0,single],'../data/params_ratToMouseAtlas_2D.pts')
+    
+    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist, Tlist, nu_Tlist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=dimEff,Csqpi=Csqpi,Csqlamb=Csqlamb,eta0=eta0,lambInit=lamb0,loadPrevious=None,single=single)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
@@ -118,6 +117,11 @@ def main():
 
     zeta_S = nu_S/(np.sum(nu_S,axis=-1)[...,None])
     zeta_T = nu_T/(np.sum(nu_T,axis=-1)[...,None])
+    w_S = np.sum(nu_S,axis=-1)[...,None]
+    w_T = np.sum(nu_T,axis=-1)[...,None]
+    zeta_S[np.squeeze(w_S == 0),...] = 0
+    zeta_T[np.squeeze(w_T == 0),...] = 0
+    
     for i in range(labs):
         imageNamesT.append('zeta_' + str(i))
         imageValsT.append(zeta_T[:,i])
