@@ -171,8 +171,12 @@ def defineSupport(Ttilde,eps=0.001):
         
         a0 = torch.mean(a0s,axis=0)
         a1 = torch.mean(a1s,axis=0)
-        n0 = torch.tensor([-(a0s[1,0]-a0s[0,0]),(a0s[1,1] - a0s[0,1]),Ttilde[0,-1]]).type(dtype)
-        n1 = torch.tensor([-(a1s[1,0]-a1s[0,0]),(a1s[1,1] - a1s[0,1]),Ttilde[0,-1]]).type(dtype)
+        
+        print("a0: ", a0)
+        print("a1: ", a1)
+        
+        n0 = torch.tensor([-(a0s[1,1] - a0s[0,1]),(a0s[1,0]-a0s[0,0]),Ttilde[0,-1]]).type(dtype)
+        n1 = torch.tensor([-(a1s[1,1] - a1s[0,1]),(a1s[1,0]-a1s[0,0]),Ttilde[0,-1]]).type(dtype)
         if (torch.dot(tCenter - a0,n0) < 0):
             n0 = -1.0*n0
 
