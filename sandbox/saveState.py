@@ -22,11 +22,11 @@ def loadState(filename):
     print('new value of its', checkpoint['its'])
     return checkpoint
 
-def saveParams(uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,cPi,single,savepref):
+def saveParams(uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,cPi,dimEff,single,savepref):
     '''
     save parameters in dictionary 
     '''
-    params = {'uCoeff':uCoeff, 'sigmaRKHS':sigmaRKHS, 'sigmaVar':sigmaVar, 'beta':beta, 'd':d,'labs':labs,'numS':numS,'pTilde':pTilde,'gamma':gamma, 'cA':cA, 'cT':cT, 'cPi':cPi, 'single':single} 
+    params = {'uCoeff':uCoeff, 'sigmaRKHS':sigmaRKHS, 'sigmaVar':sigmaVar, 'beta':beta, 'd':d,'labs':labs,'numS':numS,'pTilde':pTilde,'gamma':gamma, 'cA':cA, 'cT':cT, 'cPi':cPi, 'dimEff':dimEff, 'single':single} 
     filename = savepref + '_' + 'params.pt'
     torch.save(params,filename)
     return
@@ -35,7 +35,7 @@ def loadParams(filename):
     params = torch.load(filename)
     if not 'single' in params:
         params['single'] = False
-    return params['uCoeff'],params['sigmaRKHS'],params['sigmaVar'],params['beta'],params['d'],params['labs'],params['numS'],params['pTilde'],params['gamma'],params['cA'],params['cT'],params['cPi'],params['single']
+    return params['uCoeff'],params['sigmaRKHS'],params['sigmaVar'],params['beta'],params['d'],params['labs'],params['numS'],params['pTilde'],params['gamma'],params['cA'],params['cT'],params['cPi'],params['dimEff'],params['single']
 
 def saveVariables(q0,p0,Ttilde,wT,s,m,savepref):
     variables = {'q0':q0, 'p0':p0, 'Ttilde':Ttilde, 'wT':wT, 's':s, 'm':m}

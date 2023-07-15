@@ -457,7 +457,7 @@ def supportRestrictionReg(eta0=torch.sqrt(torch.tensor(0.1))):
 
 def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S,labT,s,m,savedir,supportWeightF,dimEff=3,single=False):
     np.savez(savedir+'p0_iter' + str(itCurr) + '.npz',p0=p0Curr.detach().cpu().numpy())
-    pqList = Shooting(p0Curr[:(d+1)*numS], q0Curr, K0,sigmaRKHS, d,numS)
+    pqList = Shooting(p0Curr[:(d+1)*numS], q0Curr, K0,sigmaRKHS, d,numS,dimEff=dimEff,single=single)
     pi_ST = p0Curr[(d+1)*numS:-1].detach().view(zeta_S.shape[-1],labT)
     pi_ST = pi_ST**2
     pi_ST = pi_ST.cpu().numpy()
@@ -654,7 +654,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
 
     loss = LDDMMloss(Kg,sigmaRKHS,d, numS, gamma, dataloss,piLoss,lambLoss,cA,cT,cPi,dimEff,single=single)
     
-    saveParams(uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,cPi,single,savepref)
+    saveParams(uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,cPi,dimEff,single,savepref)
 
     optimizer = torch.optim.LBFGS([p0], max_eval=15, max_iter=10,line_search_fn = 'strong_wolfe',history_size=100,tolerance_grad=1e-8,tolerance_change=1e-10)
     print("performing optimization...")
@@ -830,7 +830,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     
     # Shoot Backwards
     # 7/01 = negative of momentum is incorporated into Shooting Backwards function
-    listBack = ShootingBackwards(listpq[-1][0],listpq[-1][1],Ttilde.flatten(),w_T.flatten(),Kg,sigmaRKHS,d,numS,uCoeff)
+    listBack = ShootingBackwards(listpq[-1][0],listpq[-1][1],Ttilde.flatten(),w_T.flatten(),Kg,sigmaRKHS,d,numS,uCoeff,dimEff=dimEff,single=single)
     
     for t in range(len(listBack)):
         Tt = listBack[t][2]
