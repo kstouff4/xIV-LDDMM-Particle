@@ -232,14 +232,15 @@ def defineSupport(Ttilde,eps=0.001):
 def checkEndPoint(lossFunction,p0,p1,q1,d,numS,savedir):
     q = torch.clone(q1).detach().requires_grad_(True).type(dtype)
     p0n = torch.clone(p0).detach().requires_grad_(False).type(dtype)
+    p1n = torch.clone(p1).detach().requires_grad_(False).type(dtype)
     
-    dLoss = lossFunction(q,p0[(d+1)*numS:])
+    dLoss = lossFunction(q,p0n[(d+1)*numS:])
     dLoss.backward() # gradient of loss at end point with respect to q1
     print("checking end point condition")
     print(q.grad)
     print(p1[:(d+1)*numS].detach().cpu().numpy())
     print("should equal zero")
-    ep = q.grad.detach().cpu().numpy() + p1[:(d+1)*numS].detach().cpu().numpy()
+    ep = q.grad.detach().cpu().numpy() + p1n[:(d+1)*numS].detach().cpu().numpy()
     print(ep)
     print(np.max(ep))
     print(np.min(ep))
@@ -726,9 +727,9 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         if (np.mod(i,20) == 0):
             #p0Save = torch.clone(p0).detach()
             optimizer.zero_grad()
-            p1,q1 = printCurrentVariables(p0*pTilde,i,Kg,sigmaRKHS,uCoeff,q0,d,numS,zeta_S,labs,s,m,savedir,supportWeights)
+            p1,q1 = printCurrentVariables(p0*pTilde,i,Kg,sigmaRKHS,uCoeff,q0,d,numS,zeta_S,labs,s,m,savedir,supportWeights,dimEff=dimEff,single=single)
             printCost(i)
-            checkEndPoint(dataloss,p0*pTilde,p1,q1,d,numS,savedir + 'it' + str(i))
+            #checkEndPoint(dataloss,p0*pTilde,p1,q1,d,numS,savedir + 'it' + str(i))
             if (i > 0):
                 if (np.allclose(lossListH[-1],lossListH[-2],atol=1e-6,rtol=1e-5) and np.allclose(lossListDA[-1],lossListDA[-2],atol=1e-6,rtol=1e-5)):
                     print("state of optimizer")
@@ -838,7 +839,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         nuTlist.append(wTt.detach().cpu().numpy()[...,None]*zeta_T.detach().cpu().numpy())
     
     # plot p0 as arrows
-    checkEndPoint(dataloss,p0T,listpq[-1][0],listpq[-1][1],d,numS,savedir)
+    #checkEndPoint(dataloss,p0T,listpq[-1][0],listpq[-1][1],d,numS,savedir)
     listSp0 = np.zeros((numS*2,3))
     polyListSp0 = np.zeros((numS,3))
     polyListSp0[:,0] = 2

@@ -31,7 +31,7 @@ def main():
     labS = 114 # template
     sigmaRKHS = [0.2,0.1,0.05] #[0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
     sigmaVar = [0.5,0.2,0.05,0.02] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 100
+    its = 81
     alphaSt = 'sl536'
     beta = None
     res=1.0
