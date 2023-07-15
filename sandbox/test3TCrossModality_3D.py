@@ -31,11 +31,11 @@ def main():
     sigmaRKHS = [0.2,0.1,0.05] #[0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
     sigmaVar = [0.5,0.2,0.05,0.02] # as of 3/16, should be fraction of total domain of S+T #10.0
     its = 100
-    alphaSt = 'AllenAtlas200ToBarSeq28'
+    alphaSt = 'B2toB5'
     beta = None
     res=1.0
     kScale=1
-    extra="flipFullAtlasLamb"
+    extra=""
     cA=1.0
     cT=1.0 # original is 0.5
     cS=10.0
@@ -50,7 +50,7 @@ def main():
     
     original = sys.stdout
 
-    outpath='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/'
+    outpath='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/HumanCrossModality/'
 
     if (not os.path.exists(outpath)):
         os.mkdir(outpath) 
@@ -60,18 +60,17 @@ def main():
     if (not os.path.exists(outpath)):
         os.mkdir(outpath)
     
-    atlasImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/downFromOld__optimalZnu_ZAllwC1.0_sig0.2_Nmax1500.0_Npart2000.0_BarSeqSlab.npz'
-    atlasImage='/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/sig0.4_its10-30__optimalZnu_ZAllwC8.0_sig[0.4]_Nmax1500.0_Npart2000.0.npz'
-    atlasImage='/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/downFromOld__optimalZnu_ZAllwC1.0_sig0.2_Nmax1500.0_Npart2000.0.npz'
-    targetImage = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeq/0.5/allSlices.npz'
-    targetImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/BarSeqAligned/top28MI/sig0.2/initialHigh_All_US_optimal_all.npz'
+    atlasImage = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain2/3DSegmentations/allMerge_smoothe.nii.gz'
+    atlasImage_a = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain2/3DSegmentations/AMYGDALA_SUBREGIONS.nii.gz'
     
-    S,nu_S = gI.getFromFile(atlasImage)
-    T,nu_T = gI.getFromFile(targetImage)
+    S,nu_S = gI.makeFromSingleChannelImage(atlasImage,0.125*4,bg=0,ordering=[3,8,7],ds=4,weights=torch.tensor(0.5**3).type(dtype))
+    targetImage = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain5/3DSegmentations/Brain5_allMerge_smoothe.nii.gz'
+    targetImage_a = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain5/3DSegmentations/Brain_5_amygdala_subregions_final.nii.gz'
     
-    # flip Allen atlas over z axis
-    S[:,-1] = -1.0*S[:,-1]
-
+    Tw,nu_Tw = gI.makeFromSingleChannelImage(targetImage,0.125*4,bg=0,ordering=[6,14],ds=4,weights=torch.tensor(0.5**3).type(dtype))
+    Ta,nu_Ta = gI.makeFromSingleChannelImage(targetImage_a,0.125*4,bg=0,ordering=[1,2,3,4],ds=4,weights=torch.tensor(0.5**3).type(dtype))
+    T,nu_T = gI.combineObjects([Tw,Ta],[nu_Tw,nu_Ta])
+    
     labs = nu_T.shape[-1]
     labS = nu_S.shape[-1]
     cPi=torch.tensor(0.1/np.log(labs)).type(dtype) #0.1
@@ -100,8 +99,11 @@ def main():
         sigmaRKHSlist.append(torch.tensor(sigg).type(dtype))
     for sigg in sigmaVar:
         sigmaVarlist.append(torch.tensor(sigg).type(dtype))
+    
+    torch.save([S,nu_S],'../data/source_B2_3regions_3D.pt')
+    torch.save([T,nu_T],'../data/target_B5_6regions_3D.pt')
+     torch.save([sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,its,torch.tensor(kScale).type(dtype),torch.tensor(cA).type(dtype),torch.tensor(cT).type(dtype),cS,cPi,dimEff,Csqpi,Csqlamb,eta0,lamb0,single],'../data/params_B2toB5_3D.pts')
         
-    loadP = savedir.replace('_4_','_85_') + 'State__checkpoint.pth.tar'
     Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist, Tlist, nu_Tlist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=d,Csqpi=Csqpi,Csqlamb=Csqlamb,eta0=eta0,lambInit=lamb0,loadPrevious=None)
     
     S=S.detach().cpu().numpy()
