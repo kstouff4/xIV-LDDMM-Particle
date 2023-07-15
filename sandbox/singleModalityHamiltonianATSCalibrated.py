@@ -288,7 +288,7 @@ def lossVarifoldNorm(T,w_T,zeta_T,zeta_S,K,d,numS):
 
 def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S,labT,s,m,savedir,dimEff=3,single=False):
     np.savez(savedir+'p0_iter' + str(itCurr) + '.npz',p0=p0Curr.detach().cpu().numpy())
-    pqList = Shooting(p0Curr[:(d+1)*numS], q0Curr, K0,sigmaRKHS, d,numS)
+    pqList = Shooting(p0Curr[:(d+1)*numS], q0Curr, K0,sigmaRKHS, d,numS,dimEff=dimEff,single=single)
     print("non diffeomorphism")
     totA = np.zeros((3,3))
     for i in range(len(pqList)):
@@ -412,7 +412,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d,uCoeff=uCoeff)
 
     loss = LDDMMloss(Kg,sigmaRKHS,d, numS, gamma, dataloss,cA,cT,dimEff,single=single)
-    saveParams(uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,0,single,savepref)
+    saveParams(uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,0,dimEff,single,savepref)
     
     optimizer = torch.optim.LBFGS([p0], max_eval=15, max_iter=10,line_search_fn = 'strong_wolfe',history_size=100,tolerance_grad=1e-8,tolerance_change=1e-10)
     print("performing optimization...")
@@ -470,9 +470,9 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         if (np.mod(i,10) == 0):
             #p0Save = torch.clone(p0).detach()
             optimizer.zero_grad()
-            p1,q1 = printCurrentVariables(p0*pTilde,i,Kg,sigmaRKHS,uCoeff,q0,d,numS,zeta_S,labs,s,m,savedir)
+            p1,q1 = printCurrentVariables(p0*pTilde,i,Kg,sigmaRKHS,uCoeff,q0,d,numS,zeta_S,labs,s,m,savedir,dimEff=dimEff,single=single)
             printCost(i)
-            checkEndPoint(dataloss,p0*pTilde,p1,q1,d,numS,savedir + 'it' + str(i))
+            #checkEndPoint(dataloss,p0*pTilde,p1,q1,d,numS,savedir + 'it' + str(i))
             if (i > 0):
                 if (np.allclose(lossListH[-1],lossListH[-2],atol=1e-6,rtol=1e-5) and np.allclose(lossListDA[-1],lossListDA[-2],atol=1e-6,rtol=1e-5)):
                     print("state of optimizer")
