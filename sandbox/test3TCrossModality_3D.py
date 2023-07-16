@@ -26,12 +26,14 @@ import nibabel as nib
 
 def main():
     d = 3
+    dimEff = 3
+    single = True
     labs = 2 # in target 
     labS = 28 # template
     sigmaRKHS = [0.2,0.1,0.05] #[0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
     sigmaVar = [0.5,0.2,0.05,0.02] # as of 3/16, should be fraction of total domain of S+T #10.0
     its = 100
-    alphaSt = 'B2toB5'
+    alphaSt = 'B2toB5_NoBoundary'
     beta = None
     res=1.0
     kScale=1
@@ -39,14 +41,15 @@ def main():
     cA=1.0
     cT=1.0 # original is 0.5
     cS=10.0
-    Csqpi=10000.0
+    Csqpi=100.0
     Csqlamb=100.0
     eta0 = torch.sqrt(torch.tensor(0.2)).type(dtype)
     lamb0 = torch.tensor(0.4).type(dtype)
+    lamb0 = torch.tensor(-1.0).type(dtype)
     
     # Set these parameters according to relative decrease you expect in data attachment term
     # these should be based on approximately what the contribution compared to original cost is
-    gamma = 0.1 #0.01 #10.0
+    gamma = 1.0 #0.01 #10.0
     
     original = sys.stdout
 
@@ -63,18 +66,21 @@ def main():
     atlasImage = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain2/3DSegmentations/allMerge_smoothe.nii.gz'
     atlasImage_a = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain2/3DSegmentations/AMYGDALA_SUBREGIONS.nii.gz'
     
-    S,nu_S = gI.makeFromSingleChannelImage(atlasImage,0.125*4,bg=0,ordering=[3,8,7],ds=4,weights=torch.tensor(0.5**3).type(dtype))
+    S,nu_S = gI.makeFromSingleChannelImage(atlasImage,0.125*8,bg=0,ordering=[3,8,7],ds=8,weights=torch.tensor(1.0**3).type(dtype))
     targetImage = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain5/3DSegmentations/Brain5_allMerge_smoothe.nii.gz'
     targetImage_a = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain5/3DSegmentations/Brain_5_amygdala_subregions_final.nii.gz'
     
-    Tw,nu_Tw = gI.makeFromSingleChannelImage(targetImage,0.125*4,bg=0,ordering=[6,14],ds=4,weights=torch.tensor(0.5**3).type(dtype))
-    Ta,nu_Ta = gI.makeFromSingleChannelImage(targetImage_a,0.125*4,bg=0,ordering=[1,2,3,4],ds=4,weights=torch.tensor(0.5**3).type(dtype))
+    Tw,nu_Tw = gI.makeFromSingleChannelImage(targetImage,0.125*8,bg=0,ordering=[6,14],ds=8,weights=torch.tensor(1.0**3).type(dtype))
+    Ta,nu_Ta = gI.makeFromSingleChannelImage(targetImage_a,0.125*8,bg=0,ordering=[1,2,3,4],ds=8,weights=torch.tensor(1.0**3).type(dtype))
     T,nu_T = gI.combineObjects([Tw,Ta],[nu_Tw,nu_Ta])
     
     labs = nu_T.shape[-1]
     labS = nu_S.shape[-1]
     cPi=torch.tensor(0.1/np.log(labs)).type(dtype) #0.1
     N = S.shape[0]
+    
+    # Reverse X coordinate (x1) in source
+    S[:,1] = -1.0*S[:,1]
 
     savedir = outpath + '/output_dl_sig_its_csgamma_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(cS) + str(Csqpi) + str(gamma) + '_' + str(N) + extra + '/'
     if (not os.path.exists(savedir)):
@@ -102,7 +108,7 @@ def main():
     
     torch.save([S,nu_S],'../data/source_B2_3regions_3D.pt')
     torch.save([T,nu_T],'../data/target_B5_6regions_3D.pt')
-     torch.save([sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,its,torch.tensor(kScale).type(dtype),torch.tensor(cA).type(dtype),torch.tensor(cT).type(dtype),cS,cPi,dimEff,Csqpi,Csqlamb,eta0,lamb0,single],'../data/params_B2toB5_3D.pts')
+    torch.save([sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,its,torch.tensor(kScale).type(dtype),torch.tensor(cA).type(dtype),torch.tensor(cT).type(dtype),cS,cPi,dimEff,Csqpi,Csqlamb,eta0,lamb0,single],'../data/params_B2toB5_3D.pts')
         
     Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist, Tlist, nu_Tlist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=d,Csqpi=Csqpi,Csqlamb=Csqlamb,eta0=eta0,lambInit=lamb0,loadPrevious=None)
     

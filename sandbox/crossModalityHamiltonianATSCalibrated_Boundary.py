@@ -227,6 +227,12 @@ def defineSupport(Ttilde,eps=0.001):
         return (0.5*torch.tanh(torch.sum((qx-a0)*n0,axis=-1)/lamb) + 0.5*torch.tanh(torch.sum((qx-a1)*n1,axis=-1)/lamb))[...,None]
     
     return alphaSupportWeight
+
+def noSupportEstimation(Ttilde):
+    
+    def alphaSupportWeight(qx,lamb):
+        return torch.ones((qx.shape[0],1)).type(dtype)
+    return alphaSupportWeight
     
 ###################################################################
 def checkEndPoint(lossFunction,p0,p1,q1,d,numS,savedir):
@@ -373,8 +379,12 @@ def LDDMMloss(K0,sigma, d, numS,gamma,dataloss,piLoss,lambLoss,cA=1.0,cT=1.0,cPi
         p, q = Shooting(p0[:(d+1)*numS], q0, K0,sigma, d,numS,dimEff=dimEff,single=single)[-1]
         hLoss = (gamma * Hamiltonian(K0, sigma, d,numS,cA,cT,dimEff,single=single)(p0[:(d+1)*numS], q0))
         dLoss = dataloss(q,p0[(d+1)*numS:])
-        pLoss = gamma*torch.tensor(cPi).type(dtype)*piLoss(q,p0[(d+1)*numS:-1])
-        lLoss = gamma*lambLoss(p0[-1])
+        if lambLoss is not None:
+            pLoss = gamma*torch.tensor(cPi).type(dtype)*piLoss(q,p0[(d+1)*numS:-1])
+            lLoss = gamma*lambLoss(p0[-1])
+        else:
+            pLoss = gamma*torch.tensor(cPi).type(dtype)*piLoss(q,p0[(d+1)*numS:])
+            lLoss = torch.tensor(0.0).type(dtype)
         return hLoss, dLoss, pLoss, lLoss
         #return dataloss(q)
 
@@ -406,9 +416,12 @@ def lossVarifoldNorm(T,w_T,zeta_T,zeta_S,K,d,numS,supportWeight):
         # sS will be in the form of q (w_S,S,x_c)
         sSx = sS[numS:].view(-1,d)
         sSw = sS[:numS].view(-1,1)
-        wSupport = supportWeight(sSx,pi_est[-1]**2)
-        sSw = wSupport*sSw
-        pi_ST = (pi_est[:-1].view(zeta_S.shape[-1],zeta_T.shape[-1]))**2
+        if supportWeight is not None:
+            wSupport = supportWeight(sSx,pi_est[-1]**2)
+            sSw = wSupport*sSw
+            pi_ST = (pi_est[:-1].view(zeta_S.shape[-1],zeta_T.shape[-1]))**2
+        else:
+            pi_ST = (pi_est.view(zeta_S.shape[-1],zeta_T.shape[-1]))**2
         nu_Spi = (sSw*zeta_S)@pi_ST # Ns x L * L x F                    
             
      
@@ -458,14 +471,19 @@ def supportRestrictionReg(eta0=torch.sqrt(torch.tensor(0.1))):
 def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S,labT,s,m,savedir,supportWeightF,dimEff=3,single=False):
     np.savez(savedir+'p0_iter' + str(itCurr) + '.npz',p0=p0Curr.detach().cpu().numpy())
     pqList = Shooting(p0Curr[:(d+1)*numS], q0Curr, K0,sigmaRKHS, d,numS,dimEff=dimEff,single=single)
-    pi_ST = p0Curr[(d+1)*numS:-1].detach().view(zeta_S.shape[-1],labT)
+    if supportWeightF is not None:
+        pi_ST = p0Curr[(d+1)*numS:-1].detach().view(zeta_S.shape[-1],labT)
+        print("lambda: ", (p0Curr[-1].detach().cpu().numpy())**2)
+    else:
+        pi_ST = p0Curr[(d+1)*numS:].detach().view(zeta_S.shape[-1],labT)
+
     pi_ST = pi_ST**2
     pi_ST = pi_ST.cpu().numpy()
     print("pi iter " + str(itCurr) + ", ", pi_ST)
     print(np.unique(pi_ST))
     print("non diffeomorphism")
     totA = np.zeros((3,3))
-    print("lambda: ", (p0Curr[-1].detach().cpu().numpy())**2)
+
     for i in range(len(pqList)):
         p = pqList[i][0]
         q = pqList[i][1]
@@ -498,7 +516,6 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
     
     q = pqList[-1][1]
     D = q[numS:].detach().view(-1,d)
-    wS = supportWeightF(D,p0Curr[-1].detach()**2)
     D = D.cpu().numpy()
     muD = q[0:numS].detach().view(-1,1).cpu().numpy()
     nu_D = np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
@@ -522,25 +539,26 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
     gO.writeVTK(Ds,imageValsSpi,imageNamesSpi,savedir+'testOutputiter' + str(itCurr) + '_Dpi10.vtk',polyData=None)
     
 
-    nu_D = wS.cpu().numpy()*np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
-    print("nu_D shape: ", nu_D.shape)
-    zeta_D = nu_D/np.sum(nu_D,axis=-1)[...,None]
-    nu_Dpi = nu_D@pi_ST
-    Ds = init.resizeData(D,s,m)
-    zeta_Dpi = nu_Dpi/np.sum(nu_Dpi,axis=-1)[...,None]
-    imageValsSpi = [np.sum(nu_Dpi,axis=-1),np.argmax(nu_Dpi,axis=-1),wS]
-    imageValsS = [np.sum(nu_D,axis=-1),np.argmax(nu_D,axis=-1),wS]
-    imageNamesSpi = ['weights', 'maxImageVal','support_weights']
-    imageNamesS = ['weights', 'maxImageVal','support_weights']
-    for i in range(zeta_Dpi.shape[-1]):
-        imageValsSpi.append(zeta_Dpi[:,i])
-        imageNamesSpi.append('zeta_' + str(i))
-    for i in range(zeta_D.shape[-1]):
-        imageValsS.append(zeta_D[:,i])
-        imageNamesS.append('zeta_' + str(i))
+    if supportWeightF is not None:
+        wS = supportWeightF(D,p0Curr[-1].detach()**2)
+        nu_D = wS.cpu().numpy()*np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
+        zeta_D = nu_D/np.sum(nu_D,axis=-1)[...,None]
+        nu_Dpi = nu_D@pi_ST
+        Ds = init.resizeData(D,s,m)
+        zeta_Dpi = nu_Dpi/np.sum(nu_Dpi,axis=-1)[...,None]
+        imageValsSpi = [np.sum(nu_Dpi,axis=-1),np.argmax(nu_Dpi,axis=-1),wS]
+        imageValsS = [np.sum(nu_D,axis=-1),np.argmax(nu_D,axis=-1),wS]
+        imageNamesSpi = ['weights', 'maxImageVal','support_weights']
+        imageNamesS = ['weights', 'maxImageVal','support_weights']
+        for i in range(zeta_Dpi.shape[-1]):
+            imageValsSpi.append(zeta_Dpi[:,i])
+            imageNamesSpi.append('zeta_' + str(i))
+        for i in range(zeta_D.shape[-1]):
+            imageValsS.append(zeta_D[:,i])
+            imageNamesS.append('zeta_' + str(i))
 
-    gO.writeVTK(Ds,imageValsS,imageNamesS,savedir+'testOutputiter' + str(itCurr) + '_D10Support.vtk',polyData=None)
-    gO.writeVTK(Ds,imageValsSpi,imageNamesSpi,savedir+'testOutputiter' + str(itCurr) + '_Dpi10Support.vtk',polyData=None)
+        gO.writeVTK(Ds,imageValsS,imageNamesS,savedir+'testOutputiter' + str(itCurr) + '_D10Support.vtk',polyData=None)
+        gO.writeVTK(Ds,imageValsSpi,imageNamesSpi,savedir+'testOutputiter' + str(itCurr) + '_Dpi10Support.vtk',polyData=None)
 
     return pqList[-1][0],pqList[-1][1]
                             
@@ -573,10 +591,11 @@ def makePQ(S,nu_S,T,nu_T,Csqpi=torch.tensor(1.0).type(dtype),lambInit=torch.tens
     print("pi shape ", pi_STinit.shape)
     print("initial Pi ", pi_STinit.detach().cpu().numpy())
     print("unique values in Pi ", np.unique(pi_STinit.detach().cpu().numpy()))
-    
     lamb0 = lambInit
-    
-    p0 = torch.cat((torch.zeros_like(q0),(1.0/Csqpi)*torch.sqrt(pi_STinit).clone().detach().flatten(),(1.0/Csqlamb)*torch.sqrt(lamb0).clone().detach().flatten()),0).requires_grad_(True).type(dtype)
+    if lambInit < 0:
+        p0 = torch.cat((torch.zeros_like(q0),(1.0/Csqpi)*torch.sqrt(pi_STinit).clone().detach().flatten()),0).requires_grad_(True).type(dtype)
+    else:
+        p0 = torch.cat((torch.zeros_like(q0),(1.0/Csqpi)*torch.sqrt(pi_STinit).clone().detach().flatten(),(1.0/Csqlamb)*torch.sqrt(lamb0).clone().detach().flatten()),0).requires_grad_(True).type(dtype)
     
     return w_S,w_T,zeta_S,zeta_T,q0,p0,numS, Stilde, Ttilde, s, m, pi_STinit,lamb0
 
@@ -606,12 +625,19 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     pTilde = torch.zeros_like(p0).type(dtype)
     pTilde[0:numS] = torch.squeeze(torch.tensor(1.0/(torch.sqrt(kScale)*dimEff*w_S))).type(dtype) #torch.sqrt(kScale)*torch.sqrt(kScale)
     pTilde[numS:numS*(d+1)] = torch.tensor(1.0/torch.sqrt(kScale)).type(dtype) #torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
-    pTilde[(d+1)*numS:-1] = Csqpi
-    pTilde[-1] = Csqlamb
+    if lamb0 < 0:
+        pTilde[(d+1)*numS:] = Csqpi
+    else:
+        pTilde[(d+1)*numS:-1] = Csqpi
+        pTilde[-1] = Csqlamb
     savepref = savedir + 'State_'
     
-    supportWeights = defineSupport(Ttilde)
-    sW0 = supportWeights(Stilde,lamb0)
+    if lamb0 < 0:
+        supportWeights = None
+        sW0 = torch.ones((Stilde.shape[0],1)).type(dtype)
+    else:
+        supportWeights = defineSupport(Ttilde)
+        sW0 = supportWeights(Stilde,lamb0)
     
     if (beta is None):
         # set beta to make ||mu_S - mu_T||^2 = 1
@@ -650,7 +676,10 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     cst, dataloss = lossVarifoldNorm(Ttilde,w_T,zeta_T,zeta_S,GaussLinKernel(sigma=sigmaVar,d=d,l=labs,beta=beta),d,numS,supportWeights)
     piLoss = PiRegularizationSystem(zeta_S,nu_T,numS,d)
     Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d,uCoeff=uCoeff)
-    lambLoss = supportRestrictionReg(eta0)
+    if (lamb0 < 0):
+        lambLoss = None
+    else:
+        lambLoss = supportRestrictionReg(eta0)
 
     loss = LDDMMloss(Kg,sigmaRKHS,d, numS, gamma, dataloss,piLoss,lambLoss,cA,cT,cPi,dimEff,single=single)
     
@@ -791,7 +820,10 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     nuTlist = []
     
     p0T = p0*pTilde
-    pi_STfinal = p0T[(d+1)*numS:-1].detach().view(zeta_S.shape[-1],zeta_T.shape[-1]) # shouldn't matter multiplication by pTilde
+    if lamb0 < 0:
+        pi_STfinal = p0T[(d+1)*numS:].detach().view(zeta_S.shape[-1],zeta_T.shape[-1]) # shouldn't matter multiplication by pTilde
+    else:
+        pi_STfinal = p0T[(d+1)*numS:-1].detach().view(zeta_S.shape[-1],zeta_T.shape[-1]) # shouldn't matter multiplication by pTilde
     pi_STfinal = pi_STfinal**2
     pi_STfinal = pi_STfinal.cpu().numpy()
     print("pi final, ", pi_STfinal)
