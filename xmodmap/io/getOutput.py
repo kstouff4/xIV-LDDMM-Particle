@@ -1,16 +1,5 @@
 import numpy as np
-from sys import path as sys_path
-
-sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
-import vtkFunctions as vtf
-
-import torch
-use_cuda = torch.cuda.is_available()
-if use_cuda:
-    dtype = torch.cuda.FloatTensor #DoubleTensor 
-else:
-    dtype = torch.FloatTensor
-
+import xmodmap.io.vtkFunctions as vtf
 from matplotlib import pyplot as plt
 
 def computeRegionStatisticsImage(npzFile,labels,plotOriginal=False):

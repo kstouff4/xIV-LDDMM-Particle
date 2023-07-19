@@ -9,8 +9,6 @@ if use_cuda:
 else:
     dtype = torch.FloatTensor
 
-import nibabel as nib
-import pandas as pd
 
 
 

@@ -25,16 +25,10 @@ if 'DISPLAY' in os.environ:
 else:
     matplotlib.use("Agg")
     
-import sys
-from sys import path as sys_path
-#sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
-#import vtkFunctions as vtf
-sys_path.append('..')
-sys_path.append('../xmodmap')
-sys_path.append('../xmodmap/io')
-import initialize as init
-from saveState import *
-import getOutput as gO
+
+import xmodmap.io.initialize as init
+from sandbox.saveState import *
+import xmodmap.io.getOutput as gO
 
 #################################################################################
 # Kernels
