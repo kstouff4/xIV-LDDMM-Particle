@@ -1,13 +1,17 @@
-import os
 import sys
 from sys import path as sys_path
 sys_path.append('..')
 
-import xmodmap.io.getOutput as gO
-
 import torch
 
-from sandbox.crossModalityHamiltonianATSCalibrated_Boundary import *
+legacy = False
+
+if legacy:
+    from sandbox.crossModalityHamiltonianATSCalibrated_Boundary_legacy import *
+else:
+    from sandbox.crossModalityHamiltonianATSCalibrated_Boundary import *
+
+
 from sandbox.analyzeOutput import *
 
 # Set data type in: fromScratHamiltonianAT, analyzeOutput, getInput, initialize
@@ -25,7 +29,7 @@ torch.set_default_tensor_type(dtype)
 def main():
     original = sys.stdout
 
-    savedir = os.path.join('output', 'RatToMouse', '2DdefaultParameters')
+    savedir = os.path.join('output', 'RatToMouse', f'2DdefaultParameters_{legacy}')
     datadir = os.path.join('..', 'data', '2D_cross_ratToMouseAtlas')
 
     os.makedirs(savedir, exist_ok=True)

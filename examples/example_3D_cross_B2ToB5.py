@@ -1,49 +1,46 @@
-import numpy as np
-import matplotlib
-from matplotlib import pyplot as plt
+import sys
 from sys import path as sys_path
 sys_path.append('..')
-sys_path.append('../xmodmap')
-sys_path.append('../xmodmap/io')
-import initialize as init
-import getInput as gI
-import getOutput as gO
 
 import torch
 
-from sandbox.crossModalityHamiltonianATSCalibrated_Boundary import *
+legacy = False
+
+if legacy:
+    from sandbox.crossModalityHamiltonianATSCalibrated_Boundary_legacy import *
+else:
+    from sandbox.crossModalityHamiltonianATSCalibrated_Boundary import *
+
 from sandbox.analyzeOutput import *
 
 # Set data type in: fromScratHamiltonianAT, analyzeOutput, getInput, initialize
 np_dtype = "float32" # "float64"
 use_cuda = torch.cuda.is_available()
 if use_cuda:
-    dtype = torch.cuda.FloatTensor #DoubleTensor 
+    dtype = torch.cuda.FloatTensor #DoubleTensor
+    map_location = lambda storage, loc: storage.cuda(0)
 else:
     dtype = torch.FloatTensor
+    map_location = torch.device('cpu')
 
-import nibabel as nib
+torch.set_default_tensor_type(dtype)
 
 def main():
     original = sys.stdout
 
-    outpath='output/HumanCrossModality/'
+    savedir = os.path.join('output', 'HumanCrossModality',  f'3DdefaultParameters_B2toB5_{legacy}')
+    datadir = os.path.join('..', 'data', '3D_cross_B2ToB5')
 
-    if (not os.path.exists(outpath)):
-        os.mkdir(outpath) 
-        
-    savedir = outpath + '3DdefaultParameters_B2toB5/'
-    
-    if (not os.path.exists(savedir)):
-        os.mkdir(savedir)
-        
-    S,nu_S = torch.load('../data/3D_cross_B2ToB5/source_3D_B2_3regions.pt')
-    T,nu_T = torch.load('../data/3D_cross_B2ToB5/target_3D_B5_6regions.pt')
+    os.makedirs(savedir, exist_ok=True)
+
+    S, nu_S = torch.load(os.path.join(datadir, 'source_3D_B2_3regions.pt'), map_location=map_location)
+    T, nu_T = torch.load(os.path.join(datadir, 'target_3D_B5_6regions.pt'), map_location=map_location)
+
     N = S.shape[0]
-    sigmaRKHSlist,sigmaVarlist,gamma,d,labs,its,kScale,cA,cT,cS,cPi,dimEff,Csqpi,Csqlamb,eta0,lamb0,single = torch.load('../data/3D_cross_B2ToB5/parameters_3D_B2ToB5.pt')
+    sigmaRKHSlist,sigmaVarlist,gamma,d,labs,its,kScale,cA,cT,cS,cPi,dimEff,Csqpi,Csqlamb,eta0,lamb0,single=torch.load(os.path.join(datadir, 'parameters_3D_B2ToB5.pt'))
 
     
-    sys.stdout = open(savedir+'test.txt','w')
+    # sys.stdout = open(savedir+'test.txt','w')
     print("Parameters")
     print("d: " + str(d))
     print("labs: " + str(labs))

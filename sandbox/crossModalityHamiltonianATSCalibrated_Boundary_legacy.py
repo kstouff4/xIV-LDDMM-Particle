@@ -1,5 +1,8 @@
 import os
 import time
+import numpy as np
+from numpy import random
+import scipy as sp
 
 import torch
 from torch.autograd import grad
@@ -235,17 +238,17 @@ def checkEndPoint(lossFunction,p0,p1,q1,d,numS,savedir):
     dLoss.backward() # gradient of loss at end point with respect to q1
     print("checking end point condition")
     print(q.grad)
-    print(p1[:(d+1)*numS])
+    print(p1[:(d+1)*numS].detach().cpu().numpy())
     print("should equal zero")
-    ep = q.grad.detach() + p1n[:(d+1)*numS].detach()
+    ep = q.grad.detach().cpu().numpy() + p1n[:(d+1)*numS].detach().cpu().numpy()
     print(ep)
-    print(torch.max(ep))
-    print(torch.min(ep))
+    print(np.max(ep))
+    print(np.min(ep))
     f,ax = plt.subplots()
-    ax.plot(torch.arange(numS),ep[:numS],label='x_diff')
-    ax.plot(torch.arange(numS),ep[numS:2*numS],label='y_diff')
-    ax.plot(torch.arange(numS),ep[2*numS:3*numS],label='z_diff')
-    ax.plot(torch.arange(numS),ep[3*numS:],label='w_diff')
+    ax.plot(np.arange(numS),ep[:numS],label='x_diff')
+    ax.plot(np.arange(numS),ep[numS:2*numS],label='y_diff')
+    ax.plot(np.arange(numS),ep[2*numS:3*numS],label='z_diff')
+    ax.plot(np.arange(numS),ep[3*numS:],label='w_diff')
     ax.legend()
     f.savefig(savedir+'checkPoint.png',dpi=300)
     
@@ -386,11 +389,11 @@ def ShootingGrid(p0,q0,qGrid,qGridw,K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=
         return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA,cT,dimEff,single=single), (p0[:(d+1)*numS],q0,qGrid,qGridw),nt)
     else:
         print("T shape adn wT shape")
-        print(T.shape)
-        print(wT.shape)
+        print(T.detach().cpu().numpy().shape)
+        print(wT.detach().cpu().numpy().shape)
         print("G and wG shape")
-        print(qGrid.shape)
-        print(qGridw.shape)
+        print(qGrid.detach().cpu().numpy().shape)
+        print(qGridw.detach().cpu().numpy().shape)
         return Integrator(HamiltonianSystemGrid(K0,sigma,d,numS,uCoeff,cA,cT,dimEff,single=single), (p0[:(d+1)*numS],q0,qGrid,qGridw,T,wT),nt)
     
 def ShootingBackwards(p1,q1,T,wT,K0,sigma,d,numS,uCoeff,cA=1.0,cT=1.0,dimEff=3,single=False,nt=10,Integrator=RalstonIntegrator()):
@@ -425,7 +428,7 @@ def lossVarifoldNorm(T,w_T,zeta_T,zeta_S,K,d,numS,supportWeight):
             - 2.0 * k2.sum())
         )
 
-    return cst.detach(), loss
+    return cst.detach().cpu().numpy(), loss
 
 # pi regularization (KL divergence)
 def PiRegularizationSystem(zeta_S,nu_T,numS,d,norm=True):
@@ -460,21 +463,20 @@ def supportRestrictionReg(eta0=torch.sqrt(torch.tensor(0.1))):
 # Print out Functions
 
 def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S,labT,s,m,savedir,supportWeightF,dimEff=3,single=False):
-    p0 = p0Curr
-    torch.save(p0, os.path.join(savedir, f'p0_iter{itCurr}.pt'))
-
+    np.savez(savedir+'p0_iter' + str(itCurr) + '.npz',p0=p0Curr.detach().cpu().numpy())
     pqList = Shooting(p0Curr[:(d+1)*numS], q0Curr, K0,sigmaRKHS, d,numS,dimEff=dimEff,single=single)
     if supportWeightF is not None:
         pi_ST = p0Curr[(d+1)*numS:-1].detach().view(zeta_S.shape[-1],labT)
-        print("lambda: ", p0Curr[-1] ** 2)
+        print("lambda: ", (p0Curr[-1].detach().cpu().numpy())**2)
     else:
-        pi_ST = p0Curr[(d + 1) * numS:].detach().view(zeta_S.shape[-1], labT)
+        pi_ST = p0Curr[(d+1)*numS:].detach().view(zeta_S.shape[-1],labT)
 
     pi_ST = pi_ST**2
+    pi_ST = pi_ST.cpu().numpy()
     print("pi iter " + str(itCurr) + ", ", pi_ST)
-    print(torch.unique(pi_ST))
+    print(np.unique(pi_ST))
     print("non diffeomorphism")
-    totA = torch.zeros((3,3))
+    totA = np.zeros((3,3))
 
     for i in range(len(pqList)):
         p = pqList[i][0]
@@ -484,24 +486,23 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
         qx = q[numS:].view(-1,d)
         qw = q[:numS].view(-1,1) #torch.squeeze(q[:numS])[...,None]
         A,tau,Alpha = getATauAlpha(px,qx,pw,qw,dimEff=dimEff,single=single)
-        totA += (0.1) * A # assume 10 time steps?
+        totA += (0.1)*A.detach().cpu().numpy() # assume 10 time steps?
         print("A, ", A.detach().cpu().numpy())
         print("tau, ", tau.detach().cpu().numpy())
         print("alpha, ", Alpha.detach().cpu().numpy())
-
-    R = torch.linalg.matrix_exp(totA)
+    R = sp.linalg.expm(totA)
     print("R, ", R)
-    print("det(R), ", torch.linalg.det(R))
+    print("det(R), ", np.linalg.det(R))
     
     if (pi_ST.shape[0] > pi_ST.shape[1]*10):
-        rat = torch.round(pi_ST.shape[0]/pi_ST.shape[1]).type(torch.IntTensor)
-        pi_STplot = torch.zeros((pi_ST.shape[0],rat*pi_ST.shape[1]))
+        rat = np.round(pi_ST.shape[0]/pi_ST.shape[1]).astype(int)
+        pi_STplot = np.zeros((pi_ST.shape[0],rat*pi_ST.shape[1]))
         for j in range(pi_ST.shape[1]):
-            pi_STplot[:,j*rat:(j+1)*rat] = torch.squeeze(pi_ST[:,j])[...,None]
+            pi_STplot[:,j*rat:(j+1)*rat] = np.squeeze(pi_ST[:,j])[...,None]
     else:
         pi_STplot = pi_ST
     f,ax = plt.subplots()
-    im = ax.imshow(pi_STplot.detach().cpu().numpy())
+    im = ax.imshow(pi_STplot)
     f.colorbar(im,ax=ax)
     ax.set_ylabel("Source Labels")
     ax.set_xlabel("Target Label Replicates")
@@ -509,46 +510,38 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
     
     q = pqList[-1][1]
     D = q[numS:].detach().view(-1,d)
-    muD = q[0:numS].detach().view(-1,1)
-    nu_D = torch.squeeze(muD[0:numS])[...,None] * zeta_S
-    zeta_D = nu_D / torch.sum(nu_D, axis=-1)[..., None]
+    D = D.cpu().numpy()
+    muD = q[0:numS].detach().view(-1,1).cpu().numpy()
+    nu_D = np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
+    zeta_D = nu_D/np.sum(nu_D,axis=-1)[...,None]
     nu_Dpi = nu_D@pi_ST
     Ds = init.resizeData(D,s,m)
-    zeta_Dpi = nu_Dpi / torch.sum(nu_Dpi,axis=-1)[..., None]
+    zeta_Dpi = nu_Dpi/np.sum(nu_Dpi,axis=-1)[...,None]
     print("nu_D shape original: ", nu_D.shape)
     
     imageNamesSpi = ['weights', 'maxImageVal']
     imageNamesS = ['weights', 'maxImageVal']
-    imageValsSpi = [torch.sum(nu_Dpi, axis=-1), torch.argmax(nu_Dpi, axis=-1)]
-    imageValsS = [torch.sum(nu_D, axis=-1), torch.argmax(nu_D, axis=-1)]
+    imageValsSpi = [np.sum(nu_Dpi,axis=-1),np.argmax(nu_Dpi,axis=-1)]
+    imageValsS = [np.sum(nu_D,axis=-1),np.argmax(nu_D,axis=-1)]
     for i in range(zeta_Dpi.shape[-1]):
         imageValsSpi.append(zeta_Dpi[:,i])
         imageNamesSpi.append('zeta_' + str(i))
     for i in range(zeta_D.shape[-1]):
         imageValsS.append(zeta_D[:,i])
         imageNamesS.append('zeta_' + str(i))
-
-    gO.writeVTK(Ds.cpu().numpy(),
-                [i.cpu().numpy() for i in imageValsS],
-                imageNamesS,
-                os.path.join(savedir, f'testOutputiter{itCurr}_D10.vtk'),
-                polyData=None)
-    gO.writeVTK(Ds.cpu().numpy(),
-                [i.cpu().numpy() for i in imageValsSpi],
-                imageNamesSpi,
-                os.path.join(savedir, f'testOutputiter{itCurr}_Dpi10.vtk'),
-                polyData=None)
+    gO.writeVTK(Ds,imageValsS,imageNamesS,savedir+'testOutputiter' + str(itCurr) + '_D10.vtk',polyData=None)
+    gO.writeVTK(Ds,imageValsSpi,imageNamesSpi,savedir+'testOutputiter' + str(itCurr) + '_Dpi10.vtk',polyData=None)
     
 
     if supportWeightF is not None:
         wS = supportWeightF(q[numS:].detach().view(-1,d),p0Curr[-1].detach()**2)
-        nu_D = wS * torch.squeeze(muD[0:numS])[...,None] * zeta_S
-        zeta_D = nu_D / torch.sum(nu_D, axis=-1)[...,None]
+        nu_D = wS.cpu().numpy()*np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
+        zeta_D = nu_D/np.sum(nu_D,axis=-1)[...,None]
         nu_Dpi = nu_D@pi_ST
         Ds = init.resizeData(D,s,m)
-        zeta_Dpi = nu_Dpi / torch.sum(nu_Dpi, axis=-1)[...,None]
-        imageValsSpi = [torch.sum(nu_Dpi, axis=-1), torch.argmax(nu_Dpi,axis=-1), wS]
-        imageValsS = [torch.sum(nu_D, axis=-1), torch.argmax(nu_D, axis=-1), wS]
+        zeta_Dpi = nu_Dpi/np.sum(nu_Dpi,axis=-1)[...,None]
+        imageValsSpi = [np.sum(nu_Dpi,axis=-1),np.argmax(nu_Dpi,axis=-1),wS]
+        imageValsS = [np.sum(nu_D,axis=-1),np.argmax(nu_D,axis=-1),wS]
         imageNamesSpi = ['weights', 'maxImageVal','support_weights']
         imageNamesS = ['weights', 'maxImageVal','support_weights']
         for i in range(zeta_Dpi.shape[-1]):
@@ -558,16 +551,8 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
             imageValsS.append(zeta_D[:,i])
             imageNamesS.append('zeta_' + str(i))
 
-        gO.writeVTK(Ds.cpu().numpy(),
-                    [i.cpu().numpy() for i in imageValsS],
-                    imageNamesS,
-                    os.path.join(savedir, f'testOutputiter{itCurr}_D10Support.vtk'),
-                    polyData=None)
-        gO.writeVTK(Ds.cpu().numpy(),
-                    [i.cpu().numpy() for i in imageValsSpi],
-                    imageNamesSpi,
-                    os.path.join(savedir, f'testOutputiter{itCurr}_Dpi10Support.vtk'),
-                    polyData=None)
+        gO.writeVTK(Ds,imageValsS,imageNamesS,savedir+'testOutputiter' + str(itCurr) + '_D10Support.vtk',polyData=None)
+        gO.writeVTK(Ds,imageValsSpi,imageNamesSpi,savedir+'testOutputiter' + str(itCurr) + '_Dpi10Support.vtk',polyData=None)
 
     return pqList[-1][0],pqList[-1][1]
                             
@@ -598,8 +583,8 @@ def makePQ(S,nu_S,T,nu_T,Csqpi=torch.tensor(1.0).type(dtype),lambInit=torch.tens
         pi_STinit[:,:] = torch.ones((1,nu_T.shape[-1]))/nu_T.shape[-1]
         pi_STinit = pi_STinit*nuSTtot
     print("pi shape ", pi_STinit.shape)
-    print("initial Pi ", pi_STinit)
-    print("unique values in Pi ", torch.unique(pi_STinit))
+    print("initial Pi ", pi_STinit.detach().cpu().numpy())
+    print("unique values in Pi ", np.unique(pi_STinit.detach().cpu().numpy()))
     lamb0 = lambInit
     if lambInit < 0:
         p0 = torch.cat((torch.zeros_like(q0),(1.0/Csqpi)*torch.sqrt(pi_STinit).clone().detach().flatten()),0).requires_grad_(True).type(dtype)
@@ -628,6 +613,8 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     '''
     w_S, w_T,zeta_S,zeta_T,q0,p0,numS,Stilde,Ttilde,s,m, pi_STinit, lamb0 = makePQ(S,nu_S,T,nu_T,Csqpi=Csqpi,lambInit=lambInit,Csqlamb=Csqlamb)
     N = torch.tensor(S.shape[0]).type(dtype)
+    s = s.cpu().numpy()
+    m = m.cpu().numpy()
 
     pTilde = torch.zeros_like(p0).type(dtype)
     pTilde[0:numS] = torch.squeeze(torch.tensor(1.0/(torch.sqrt(kScale)*dimEff*w_S))).type(dtype) #torch.sqrt(kScale)*torch.sqrt(kScale)
@@ -714,25 +701,22 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         print("loss LDA ", LDA.detach().cpu().numpy())
         print("loss LPI ", LPI.detach().cpu().numpy())
         '''
-
-        # move the value to cpu() to be matplotlib compatible
-        lossListH.append(LH.detach().clone().cpu())
-        lossListDA.append(LDA.detach().clone().cpu())
-        relLossList.append(LDA.detach().clone().cpu()/cst.clone().cpu())
-        lossListPI.append(LPI.detach().clone().cpu())
-        lossListL.append(LL.detach().clone().cpu())
-
+        lossListH.append(np.copy(LH.detach().cpu().numpy()))
+        lossListDA.append(np.copy(LDA.detach().cpu().numpy()))
+        relLossList.append(np.copy(LDA.detach().cpu().numpy())/cst)
+        lossListPI.append(np.copy(LPI.detach().cpu().numpy()))
+        lossListL.append(np.copy(LL.detach().cpu().numpy()))
         L.backward()
         return L
     
     def printCost(currIt):    
         # save p0 for every 50th iteration and pi
         f,ax = plt.subplots()
-        ax.plot(lossListH, label="H($q_0$,$p_0$), Final = {0:.6f}".format(lossListH[-1]))
-        ax.plot(lossListDA,label="Varifold Norm, Final = {0:.6f}".format(lossListDA[-1]))
-        ax.plot(torch.tensor(lossListDA).cpu() + torch.tensor(lossListH).cpu(), label="Total Cost, Final = {0:.6f}".format(lossListDA[-1]+lossListH[-1]+lossListPI[-1]))
-        ax.plot(lossListPI,label="Pi Cost, Final = {0:.6f}".format(lossListPI[-1]))
-        ax.plot(lossListL,label="Lambda Cost, Final = {0:.6f}".format(lossListL[-1]))
+        ax.plot(np.arange(len(lossListH)),np.asarray(lossListH),label="H($q_0$,$p_0$), Final = {0:.6f}".format(lossListH[-1]))
+        ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA),label="Varifold Norm, Final = {0:.6f}".format(lossListDA[-1]))
+        ax.plot(np.arange(len(lossListH)),np.asarray(lossListDA)+np.asarray(lossListH),label="Total Cost, Final = {0:.6f}".format(lossListDA[-1]+lossListH[-1]+lossListPI[-1]))
+        ax.plot(np.arange(len(lossListH)),np.asarray(lossListPI),label="Pi Cost, Final = {0:.6f}".format(lossListPI[-1]))
+        ax.plot(np.arange(len(lossListH)),np.asarray(lossListL),label="Lambda Cost, Final = {0:.6f}".format(lossListL[-1]))
         ax.set_title("Loss")
         ax.set_xlabel("Iterations")
         ax.set_ylabel("Cost")
@@ -756,24 +740,21 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         print("Lambda loss ", lossListL[-1])
         
         osd = optimizer.state_dict()
-        lossOnlyH.append(osd['state'][0]['prev_loss'])
-
+        lossOnlyH.append(np.copy(osd['state'][0]['prev_loss']))
         saveState(osd,its,i,p0,savepref)
-        if (i > 0 and torch.isnan(lossListH[-1]) or torch.isnan(lossListDA[-1])):
+        if (i > 0 and np.isnan(lossListH[-1]) or np.isnan(lossListDA[-1])):
             print("Exiting with detected NaN in Loss")
             print("state of optimizer")
             print(osd)
             break
-        if (i % 20 == 0):
+        if (np.mod(i,20) == 0):
             #p0Save = torch.clone(p0).detach()
             optimizer.zero_grad()
             p1,q1 = printCurrentVariables(p0*pTilde,i,Kg,sigmaRKHS,uCoeff,q0,d,numS,zeta_S,labs,s,m,savedir,supportWeights,dimEff=dimEff,single=single)
             printCost(i)
             #checkEndPoint(dataloss,p0*pTilde,p1,q1,d,numS,savedir + 'it' + str(i))
             if (i > 0):
-                if (torch.allclose(lossListH[-1], lossListH[-2], atol=1e-6, rtol=1e-5)
-                        and torch.allclose(lossListDA[-1], lossListDA[-2], atol=1e-6, rtol=1e-5)
-                ):
+                if (np.allclose(lossListH[-1],lossListH[-2],atol=1e-6,rtol=1e-5) and np.allclose(lossListDA[-1],lossListDA[-2],atol=1e-6,rtol=1e-5)):
                     print("state of optimizer")
                     print(osd)
                     break
@@ -784,7 +765,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     printCost(its)
     
     f,ax = plt.subplots()
-    ax.plot(lossOnlyH, label="TotLoss, Final = {0:.6f}".format(lossOnlyH[-1]))
+    ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyH),label="TotLoss, Final = {0:.6f}".format(lossOnlyH[-1]))
     #ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyDA),label="Varifold Norm, Final = {0:.2f}".format(lossOnlyDA[-1]))
     #ax.plot(np.arange(len(lossOnlyH)),np.asarray(lossOnlyDA)+np.asarray(lossOnlyH),label="Total Cost, Final = {0:.2f}".format(lossOnlyDA[-1]+lossOnlyH[-1]))
     ax.set_title("Loss")
@@ -838,17 +819,17 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     else:
         pi_STfinal = p0T[(d+1)*numS:-1].detach().view(zeta_S.shape[-1],zeta_T.shape[-1]) # shouldn't matter multiplication by pTilde
     pi_STfinal = pi_STfinal**2
+    pi_STfinal = pi_STfinal.cpu().numpy()
     print("pi final, ", pi_STfinal)
-    print(torch.unique(pi_STfinal))
+    print(np.unique(pi_STfinal))
     
     if (pi_STfinal.shape[0] > pi_STfinal.shape[1]*10):
-        rat = torch.round(pi_STfinal.shape[0] / pi_STfinal.shape[1]).type(torch.IntTensor)
-        pi_STplot = torch.zeros((pi_STfinal.shape[0], rat * pi_STfinal.shape[1]))
+        rat = np.round(pi_STfinal.shape[0]/pi_STfinal.shape[1]).astype(int)
+        pi_STplot = np.zeros((pi_STfinal.shape[0],rat*pi_STfinal.shape[1]))
         for j in range(pi_STfinal.shape[1]):
-            pi_STplot[:, j * rat:(j + 1) * rat] = torch.squeeze(pi_STfinal[:, j])[..., None]
+            pi_STplot[:,j*rat:(j+1)*rat] = np.squeeze(pi_STfinal[:,j])[...,None]
     else:
         pi_STplot = pi_STfinal
-
     f,ax = plt.subplots()
     im = ax.imshow(pi_STplot)
     f.colorbar(im,ax=ax)
@@ -858,19 +839,20 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     
     for t in range(len(listpq)):
         qnp = listpq[t][1]
-        D = qnp[numS:].detach().view(-1,d)
-        muD = qnp.detach()
-        nu_D = torch.squeeze(muD[0:numS])[...,None] * zeta_S.detach()
+        D = qnp[numS:].detach().view(-1,d).cpu().numpy()
+        muD = qnp.detach().cpu().numpy()
+        nu_D = np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
         nu_Dpi = nu_D@pi_STfinal
         Dlist.append(init.resizeData(D,s,m))
         nu_Dlist.append(nu_D)
         nu_DPilist.append(nu_Dpi)
         
         gt = listpq[t][2]
-        G = gt.detach().view(-1,d)
-        Glist.append(init.resizeData(G, s, m))
+        G = gt.detach().view(-1,d).cpu().numpy()
+        Glist.append(init.resizeData(G,s,m))
         gw = listpq[t][3]
-        wGlist.append(gw.detach())
+        W = gw.detach().cpu().numpy()
+        wGlist.append(W)        
     
     # Shoot Backwards
     # 7/01 = negative of momentum is incorporated into Shooting Backwards function
@@ -878,52 +860,29 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     
     for t in range(len(listBack)):
         Tt = listBack[t][2]
-        Tlist.append(init.resizeData(Tt.detach().view(-1, d), s, m))
+        Tlist.append(init.resizeData(Tt.detach().view(-1,d).cpu().numpy(),s,m))
         wTt = listBack[t][3]
-        nuTlist.append(wTt.detach()[...,None] * zeta_T.detach())
+        nuTlist.append(wTt.detach().cpu().numpy()[...,None]*zeta_T.detach().cpu().numpy())
     
     # plot p0 as arrows
     #checkEndPoint(dataloss,p0T,listpq[-1][0],listpq[-1][1],d,numS,savedir)
-    listSp0 = torch.zeros((numS*2,3))
-    polyListSp0 = torch.zeros((numS,3))
+    listSp0 = np.zeros((numS*2,3))
+    polyListSp0 = np.zeros((numS,3))
     polyListSp0[:,0] = 2
-    polyListSp0[:,1] = torch.arange(numS)# +1
-    polyListSp0[:,2] = numS + time.arange(numS) #+ 1
-
-    listSp0[0:numS, :] = S.detach()
-    listSp0[numS:, :] = p0T[numS:(d + 1) * numS].detach().view(-1,d) + listSp0[0:numS, :]
-    featsp0 = torch.zeros((numS * 2, 1))
-    featsp0[numS:, :] = p0T[0:numS].detach().view(-1,1)
-    gO.writeVTK(listSp0,
-                [featsp0],
-                ['p0_w'],
-                os.path.join(savedir, 'testOutput_p0.vtk'),
-                polyData=polyListSp0)
-
+    polyListSp0[:,1] = np.arange(numS)# +1
+    polyListSp0[:,2] = numS + np.arange(numS) #+ 1
+    listSp0[0:numS,:] = S.detach().cpu().numpy()
+    listSp0[numS:,:] = p0T[numS:(d+1)*numS].detach().view(-1,d).cpu().numpy() + listSp0[0:numS,:]
+    featsp0 = np.zeros((numS*2,1))
+    featsp0[numS:,:] = p0T[0:numS].detach().view(-1,1).cpu().numpy()
+    gO.writeVTK(listSp0,[featsp0],['p0_w'],savedir + 'testOutput_p0.vtk',polyData=polyListSp0)
     pNew = pTilde*p0
     A,tau,Alpha = getATauAlpha(pNew[numS:(d+1)*numS].view(-1,d),q0[numS:].view(-1,d),pNew[:numS].view(-1,1),q0[:numS].view(-1,1),dimEff=dimEff,single=single)
-
-    print("A final, ", A)
-    print("tau final, ", tau)
-    print("Alpha final, ", Alpha)
-
-    A0 = A
-    tau0 = tau
-    p0 = pNew
-    q0 = q0
-    alpha0 = Alpha
-    pTilde = pTilde
-    pi_ST = pi_STfinal
-    torch.save([A0, tau0, p0, q0, alpha0, pTilde, pi_ST], os.path.join(savedir, 'testOutput_values.pt'))
-
-    T = Ttilde
-    torch.save([T, w_T, zeta_T, s, m], os.path.join(savedir, 'testOutput_target.pt'))
-
-    D = Dlist[-1]
-    nu_D = nu_Dlist[-1]
-    nu_Dpi = nu_DPilist[-1]
-    Td = Tlist[-1]
-    nu_Td = nuTlist[-1]
-    torch.save([D, nu_D, nu_Dpi, Td, nu_Td], os.path.join(savedir, 'testOutput_Dvars.pt'))
-
+    print("A final, ", A.detach().cpu().numpy())
+    print("tau final, ", tau.detach().cpu().numpy())
+    print("Alpha final, ", Alpha.detach().cpu().numpy())
+    np.savez(savedir + 'testOutput_values.npz',A0=A.detach().cpu().numpy(),tau0=tau.detach().cpu().numpy(),p0=pNew.detach().cpu().numpy(),q0=q0.detach().cpu().numpy(),alpha0=Alpha.detach().cpu().numpy(),pTilde=pTilde.detach().cpu().numpy(),pi_ST=pi_STfinal)
+    np.savez(savedir + 'testOutput_targetScaled.npz',T=Ttilde.detach().cpu().numpy(),w_T=w_T.detach().cpu().numpy(),zeta_T=zeta_T.detach().cpu().numpy(),s=s,m=m)
+    np.savez(savedir + 'testOutput_Dvars.npz',D=Dlist[-1],nu_D=nu_Dlist[-1],nu_Dpi=nu_DPilist[-1],Td=Tlist[-1],nu_Td=nuTlist[-1])
+    
     return Dlist, nu_Dlist, nu_DPilist, Glist, wGlist, Tlist, nuTlist

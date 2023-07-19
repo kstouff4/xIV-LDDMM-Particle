@@ -118,11 +118,11 @@ def rescaleDataList(Slist):
         Stilde.append((Slist[i] - m)*(1.0/s))
     return Stilde,s,m
 
-def resizeData(Xtilde,s,m):
+def resizeData(Xtilde, s, m):
     '''
     Inverse of rescaleData. Takes coefficient of scaling s and rescales it appropriately.
     '''
-    X = Xtilde*s + m
+    X = Xtilde * s + m
     return X
 
 def scaleDataByVolumes(S,nuS,T,nuT,dRel=3):

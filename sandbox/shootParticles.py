@@ -11,7 +11,7 @@ else:
 import nibabel as nib
 
 
-from crossModalityHamiltonianATSCalibrated_Boundary import GaussKernelHamiltonian, ShootingGrid, ShootingBackwards
+from crossModalityHamiltonianATSCalibrated_Boundary_legacy import GaussKernelHamiltonian, ShootingGrid, ShootingBackwards
 from saveState import loadParams, loadVariables
 import sys
 from sys import path as sys_path

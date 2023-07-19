@@ -19,7 +19,7 @@ sys_path.append('../xmodmap/io/')
 import initialize as init
 import getOutput as gO
 
-from sandbox.crossModalityHamiltonianATSCalibrated_Boundary import GaussKernelHamiltonian, ShootingGrid, ShootingBackwards
+from sandbox.crossModalityHamiltonianATSCalibrated_Boundary_legacy import GaussKernelHamiltonian, ShootingGrid, ShootingBackwards
 from sandbox.saveState import loadParams, loadVariables
 
 def main():

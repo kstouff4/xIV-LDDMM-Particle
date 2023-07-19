@@ -14,7 +14,7 @@ import vtkFunctions as vtf
 
 import torch
 
-from crossModalityHamiltonianATSCalibrated_Boundary import *
+from crossModalityHamiltonianATSCalibrated_Boundary_legacy import *
 from analyzeOutput import *
 
 # Set data type in: fromScratHamiltonianAT, analyzeOutput, getInput, initialize
