@@ -26,16 +26,17 @@ import nibabel as nib
 
 def main():
     d = 3
-    labs = 2 # in target 
-    labS = 28 # template
+    dimEff = 2
+    labs = 34 # in target 
+    labS = 114 # template
     sigmaRKHS = [0.2,0.1,0.05] #[0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
     sigmaVar = [0.5,0.2,0.05,0.02] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 100
-    alphaSt = 'AllenAtlas200ToBarSeq28'
+    its = 81
+    alphaSt = 'sl536'
     beta = None
     res=1.0
     kScale=1
-    extra="flipFullAtlasLamb"
+    extra=""
     cA=1.0
     cT=1.0 # original is 0.5
     cS=10.0
@@ -43,6 +44,7 @@ def main():
     Csqlamb=100.0
     eta0 = torch.sqrt(torch.tensor(0.2)).type(dtype)
     lamb0 = torch.tensor(0.4).type(dtype)
+    single=False
     
     # Set these parameters according to relative decrease you expect in data attachment term
     # these should be based on approximately what the contribution compared to original cost is
@@ -50,33 +52,15 @@ def main():
     
     original = sys.stdout
 
-    outpath='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/'
+    outpath='../sandbox/RatToMouse/'
 
     if (not os.path.exists(outpath)):
         os.mkdir(outpath) 
         
-    outpath = outpath + alphaSt + '/'
+    S,nu_S = torch.load('../data/2D_cross_ratToMouseAtlas/source_2D_ratAtlas.pt')
+    T,nu_T = torch.load('../data/2D_cross_ratToMouseAtlas/target_2D_mouseAtlas.pt')
+    sigmaRKHSlist,sigmaVarlist,gamma,d,labs,its,kScale,torch.tensor(cA).type(dtype),torch.tensor(cT).type(dtype),cS,cPi,dimEff,Csqpi,Csqlamb,eta0,lamb0,single = torch.load('../data/2D_cross_ratToMouseAtlas/parameters_2D_ratToMouseAtlas.pt')
     
-    if (not os.path.exists(outpath)):
-        os.mkdir(outpath)
-    
-    atlasImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/downFromOld__optimalZnu_ZAllwC1.0_sig0.2_Nmax1500.0_Npart2000.0_BarSeqSlab.npz'
-    atlasImage='/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/sig0.4_its10-30__optimalZnu_ZAllwC8.0_sig[0.4]_Nmax1500.0_Npart2000.0.npz'
-    atlasImage='/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/downFromOld__optimalZnu_ZAllwC1.0_sig0.2_Nmax1500.0_Npart2000.0.npz'
-    targetImage = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeq/0.5/allSlices.npz'
-    targetImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/BarSeqAligned/top28MI/sig0.2/initialHigh_All_US_optimal_all.npz'
-    
-    S,nu_S = gI.getFromFile(atlasImage)
-    T,nu_T = gI.getFromFile(targetImage)
-    
-    # flip Allen atlas over z axis
-    S[:,-1] = -1.0*S[:,-1]
-
-    labs = nu_T.shape[-1]
-    labS = nu_S.shape[-1]
-    cPi=torch.tensor(0.1/np.log(labs)).type(dtype) #0.1
-    N = S.shape[0]
-
     savedir = outpath + '/output_dl_sig_its_csgamma_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(cS) + str(Csqpi) + str(gamma) + '_' + str(N) + extra + '/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
@@ -93,16 +77,7 @@ def main():
     
     print("N " + str(N))
     
-    #Dlist, nu_Dlist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),d,labs,savedir,its=its,beta=beta)
-    sigmaRKHSlist = []
-    sigmaVarlist = []
-    for sigg in sigmaRKHS:
-        sigmaRKHSlist.append(torch.tensor(sigg).type(dtype))
-    for sigg in sigmaVar:
-        sigmaVarlist.append(torch.tensor(sigg).type(dtype))
-        
-    loadP = savedir.replace('_1_','_100_') + 'State__checkpoint.pt'
-    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist, Tlist, nu_Tlist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=d,Csqpi=Csqpi,Csqlamb=Csqlamb,eta0=eta0,lambInit=lamb0,loadPrevious=loadP)
+    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist, Tlist, nu_Tlist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=kScale,cA=cA,cT=cT,cS=cS,cPi=cPi,dimEff=dimEff,Csqpi=Csqpi,Csqlamb=Csqlamb,eta0=eta0,lambInit=lamb0,loadPrevious=None,single=single)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
@@ -220,7 +195,7 @@ def main():
     
     x = applyAandTau(qx0,qw0,A0,tau0)
     gO.writeVTK(x,[qw0],['weights'],savedir+'testOutput_D_ATau.vtk',polyData=None)
-    getLocalDensity(x,nu_S,sigmaVar[0],savedir+'density_D_ATau.vtk',coef=0.25)
+    getLocalDensity(x,nu_S,sigmaVar[0],savedir+'density_D_ATau.vtk',coef=2.0)
     
     sys.stdout = original
     return
