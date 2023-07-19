@@ -1,10 +1,6 @@
 import numpy as np
-from sys import path as sys_path
-
-sys_path.append('/cis/home/kstouff4/Documents/SurfaceTools/')
-import vtkFunctions as vtf
-
 import torch
+
 dtype = torch.cuda.FloatTensor # Double Tensor 
 
 import nibabel as nib

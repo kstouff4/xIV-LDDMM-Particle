@@ -1,5 +1,4 @@
 import numpy as np
-import xmodmap.io.vtkFunctions as vtf
 from matplotlib import pyplot as plt
 
 def computeRegionStatisticsImage(npzFile,labels,plotOriginal=False):
@@ -33,8 +32,8 @@ def computeRegionStatisticsImage(npzFile,labels,plotOriginal=False):
         imageNames.append(labels[l])
         imageVals.append(nu_Dcomb[:,l])
     
-    vtf.writeVTK(D,imageVals,imageNames,npzFile.replace('.npz','_regions.vtk'),polyData=None)
-    vtf.writeVTK(info['S'],imageVals,imageNames,npzFile.replace('.npz','_regionsInOrigCoords.vtk'),polyData=None)
+    writeVTK(D,imageVals,imageNames,npzFile.replace('.npz','_regions.vtk'),polyData=None)
+    writeVTK(info['S'],imageVals,imageNames,npzFile.replace('.npz','_regionsInOrigCoords.vtk'),polyData=None)
     f,ax = plt.subplots(3,1,figsize=(6,10))
     yErrMass = np.std(nu_Dcomb,axis=0)
     yMeanMass = np.sum(nu_Dcomb,axis=0)
@@ -58,7 +57,7 @@ def computeRegionStatisticsImage(npzFile,labels,plotOriginal=False):
     f.savefig(npzFile.replace('.npz','_regionsStats.png'),dpi=300)
     
     if plotOriginal:
-        vtf.writeVTK(info['S'],[np.argmax(nu_Scomb,axis=-1),np.sum(nu_Scomb,axis=-1)],['MaxVal','TotalMass'],npzFile.replace('.npz','_origNu_Scomb.vtk'),polyData=None)
+        writeVTK(info['S'],[np.argmax(nu_Scomb,axis=-1),np.sum(nu_Scomb,axis=-1)],['MaxVal','TotalMass'],npzFile.replace('.npz','_origNu_Scomb.vtk'),polyData=None)
     return info['S'], nu_Dcomb
 
 def analyzeLongitudinalMass(listOfNu,S,ages,savename,labels):
@@ -84,7 +83,7 @@ def analyzeLongitudinalMass(listOfNu,S,ages,savename,labels):
     imageVals.append((100.0*(Y[-1,:]-Y[0,:])/((Y[0,:])*(ages[-1]-ages[0]))).T)
     imageNames.append("ChangeInMassPerYear")
     imageVals.append(((Y[-1,:]-Y[0,:])/((ages[-1]-ages[0]))).T)
-    vtf.writeVTK(S,imageVals,imageNames,savename,polyData=None)
+    writeVTK(S,imageVals,imageNames,savename,polyData=None)
     
     f,ax = plt.subplots(len(labels),1,figsize=(6,12))
     slopes = beta[1,:]
@@ -105,7 +104,7 @@ def getJacobian(D,nu_S,nu_D,savename):
     j = np.sum(nu_D,axis=-1)/np.sum(nu_S,axis=-1)
     imageNames = ['maxVal','totalMass','jacobian']
     imageVals = [np.argmax(nu_D,axis=-1)+1, np.sum(nu_D,axis=-1), j]
-    vtf.writeVTK(D,imageVals,imageNames,savename,polyData=None)
+    writeVTK(D,imageVals,imageNames,savename,polyData=None)
     np.savez(savename.replace('.vtk','.npz'),j=j)
     return savename.replace('.vtk','.npz')
 
@@ -141,7 +140,7 @@ def splitZs(T,nu_T,D,nu_D,savename,units=10,jac=None):
         zeta_Ts = nu_Ts/np.sum(nu_Ts,axis=-1)[...,None]
         for f in range(nu_T.shape[-1]):
             imageVals.append(zeta_Ts[:,f])
-        vtf.writeVTK(T[iT,...],imageVals,imageNamesT,savename+'T_zunit' + str(i) + '.vtk',polyData=None)
+        writeVTK(T[iT,...],imageVals,imageNamesT,savename+'T_zunit' + str(i) + '.vtk',polyData=None)
         iD = (D[...,-1] >= mi + i*interval)*(D[...,-1] < mi + (i+1)*interval)
         nu_Ds = nu_D[iD,...]
         imageVals = [np.argmax(nu_Ds,axis=-1),np.sum(nu_Ds,axis=-1)]
@@ -150,7 +149,7 @@ def splitZs(T,nu_T,D,nu_D,savename,units=10,jac=None):
             imageVals.append(zeta_Ds[:,f])
         if jac is not None:
             imageVals.append(j[iD])
-        vtf.writeVTK(D[iD,...],imageVals,imageNamesD,savename+'D_zunit'+str(i) + '.vtk',polyData=None)
+        writeVTK(D[iD,...],imageVals,imageNamesD,savename+'D_zunit'+str(i) + '.vtk',polyData=None)
     return
 
 def writeVTK(YXZ,features,featureNames,savename,polyData=None,fields=None,fieldNames=None):
