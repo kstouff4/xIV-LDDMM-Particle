@@ -1,13 +1,9 @@
-import numpy as np
-import matplotlib
-from matplotlib import pyplot as plt
+import os
+import sys
 from sys import path as sys_path
 sys_path.append('..')
-sys_path.append('../xmodmap')
-sys_path.append('../xmodmap/io')
-import initialize as init
-import getInput as gI
-import getOutput as gO
+
+import xmodmap.io.getOutput as gO
 
 import torch
 
@@ -18,30 +14,33 @@ from sandbox.analyzeOutput import *
 np_dtype = "float32" # "float64"
 use_cuda = torch.cuda.is_available()
 if use_cuda:
-    dtype = torch.cuda.FloatTensor #DoubleTensor 
+    dtype = torch.cuda.FloatTensor #DoubleTensor
+    map_location = lambda storage, loc: storage.cuda(0)
 else:
     dtype = torch.FloatTensor
+    map_location = torch.device('cpu')
 
-import nibabel as nib
+torch.set_default_tensor_type(dtype)
 
 def main():
     original = sys.stdout
 
-    outpath='output/RatToMouse/'
+    savedir = os.path.join('output', 'RatToMouse', '2DdefaultParameters')
+    datadir = os.path.join('..', 'data', '2D_cross_ratToMouseAtlas')
 
-    if (not os.path.exists(outpath)):
-        os.mkdir(outpath) 
-        
-    S,nu_S = torch.load('../data/2D_cross_ratToMouseAtlas/source_2D_ratAtlas.pt')
-    T,nu_T = torch.load('../data/2D_cross_ratToMouseAtlas/target_2D_mouseAtlas.pt')
-    sigmaRKHSlist,sigmaVarlist,gamma,d,labs,its,kScale,cA,cT,cS,cPi,dimEff,Csqpi,Csqlamb,eta0,lamb0,single = torch.load('../data/2D_cross_ratToMouseAtlas/parameters_2D_ratToMouseAtlas.pt')
+    os.makedirs(savedir, exist_ok=True)
+
+
+    S, nu_S = torch.load(os.path.join(datadir, 'source_2D_ratAtlas.pt'), map_location=map_location)
+    T, nu_T = torch.load(os.path.join(datadir, 'target_2D_mouseAtlas.pt'), map_location=map_location)
+    sigmaRKHSlist, sigmaVarlist, gamma, d, labs, its, kScale, cA, cT, cS, cPi, dimEff, Csqpi, Csqlamb, eta0, lamb0, single = torch.load(
+        os.path.join(datadir, 'parameters_2D_ratToMouseAtlas.pt'), map_location=map_location)
+
+
     N = S.shape[0]
-    
-    savedir = outpath + '2DdefaultParameters/'
-    if (not os.path.exists(savedir)):
-        os.mkdir(savedir)
-    
-    sys.stdout = open(savedir+'test.txt','w')
+
+
+    sys.stdout = open(os.path.join(savedir, 'test.log'),'w')
     print("Parameters")
     print("d: " + str(d))
     print("labs: " + str(labs))
