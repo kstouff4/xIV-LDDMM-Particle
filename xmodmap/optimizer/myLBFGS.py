@@ -4,8 +4,8 @@
     with different N's.
 '''
 
+import torch
 from functools import reduce
-#from .optimizer import Optimizer
 from torch.optim import Optimizer
 
 __all__ = ['myLBFGS']
@@ -187,7 +187,7 @@ def _strong_wolfe(obj_func,
     return f_new, g_new, t, ls_func_evals
 
 
-[docs]class myLBFGS(Optimizer):
+class myLBFGS(Optimizer):
     """Implements L-BFGS algorithm, heavily inspired by `minFunc
     <https://www.cs.ubc.ca/~schmidtm/Software/minFunc.html>`_.
 
@@ -286,7 +286,7 @@ def _strong_wolfe(obj_func,
         self._set_param(x)
         return loss, flat_grad
 
-[docs]    @torch.no_grad()
+    @torch.no_grad()
     def step(self, closure):
         """Performs a single optimization step.
 
