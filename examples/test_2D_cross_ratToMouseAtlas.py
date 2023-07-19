@@ -25,34 +25,9 @@ else:
 import nibabel as nib
 
 def main():
-    d = 3
-    dimEff = 2
-    labs = 34 # in target 
-    labS = 114 # template
-    sigmaRKHS = [0.2,0.1,0.05] #[0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
-    sigmaVar = [0.5,0.2,0.05,0.02] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 81
-    alphaSt = 'sl536'
-    beta = None
-    res=1.0
-    kScale=1
-    extra=""
-    cA=1.0
-    cT=1.0 # original is 0.5
-    cS=10.0
-    Csqpi=10000.0
-    Csqlamb=100.0
-    eta0 = torch.sqrt(torch.tensor(0.2)).type(dtype)
-    lamb0 = torch.tensor(0.4).type(dtype)
-    single=False
-    
-    # Set these parameters according to relative decrease you expect in data attachment term
-    # these should be based on approximately what the contribution compared to original cost is
-    gamma = 0.1 #0.01 #10.0
-    
     original = sys.stdout
 
-    outpath='../sandbox/RatToMouse/'
+    outpath='output/RatToMouse/'
 
     if (not os.path.exists(outpath)):
         os.mkdir(outpath) 
