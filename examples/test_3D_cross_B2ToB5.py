@@ -40,7 +40,7 @@ def main():
     S,nu_S = torch.load('../data/3D_cross_B2ToB5/source_3D_B2_3regions.pt')
     T,nu_T = torch.load('../data/3D_cross_B2ToB5/target_3D_B5_6regions.pt')
     N = S.shape[0]
-    sigmaRKHSlist,sigmaVarlist,gamma,d,labs,its,torch.tensor(kScale).type(dtype),torch.tensor(cA).type(dtype),torch.tensor(cT).type(dtype),cS,cPi,dimEff,Csqpi,Csqlamb,eta0,lamb0,single = torch.load('../data/parameters_3D_B2ToB5.pt')
+    sigmaRKHSlist,sigmaVarlist,gamma,d,labs,its,kScale,cA,cT,cS,cPi,dimEff,Csqpi,Csqlamb,eta0,lamb0,single = torch.load('../data/3D_cross_B2ToB5/parameters_3D_B2ToB5.pt')
 
     
     sys.stdout = open(savedir+'test.txt','w')

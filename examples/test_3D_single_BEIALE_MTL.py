@@ -47,9 +47,11 @@ def main():
     original = sys.stdout
 
     outpath='output/HumanSingleModality/'
+    if (not os.path.exists(outpath)):
+        os.mkdir(outpath)
 
-    S,nu_S = torch.load('../data/source_3D_BEIALE_MTL.pt')
-    T,nu_T = torch.load('../data/target_3D_BEIALE_MTL.pt')
+    S,nu_S = torch.load('../data/3D_single_BEIALE_MTL/source_3D_BEIALE_MTL.pt')
+    T,nu_T = torch.load('../data/3D_single_BEIALE_MTL/target_3D_BEIALE_MTL.pt')
        
     N = S.shape[0]
 
@@ -57,7 +59,7 @@ def main():
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
         
-    sigmaRKHSlist,sigmaVarlist,gamma,d,labs,its,kScale,cA,cT,cS,dimEff,single = torch.load('../data/parameters_3D_BEIALE_MTL.pt')
+    sigmaRKHSlist,sigmaVarlist,gamma,d,labs,its,kScale,cA,cT,cS,dimEff,single = torch.load('../data/3D_single_BEIALE_MTL/parameters_3D_BEIALE_MTL.pt')
  
     sys.stdout = open(savedir+'test.txt','w')
     print("Parameters")
