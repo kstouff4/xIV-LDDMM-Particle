@@ -33,7 +33,7 @@ sys_path.append('..')
 sys_path.append('../xmodmap')
 sys_path.append('../xmodmap/io')
 import initialize as init
-from saveState import *
+from sandbox.saveState import *
 import getOutput as gO
 
 #################################################################################
@@ -540,7 +540,7 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
     
 
     if supportWeightF is not None:
-        wS = supportWeightF(D,p0Curr[-1].detach()**2)
+        wS = supportWeightF(q[numS:].detach().view(-1,d),p0Curr[-1].detach()**2)
         nu_D = wS.cpu().numpy()*np.squeeze(muD[0:numS])[...,None]*zeta_S.detach().cpu().numpy()
         zeta_D = nu_D/np.sum(nu_D,axis=-1)[...,None]
         nu_Dpi = nu_D@pi_ST

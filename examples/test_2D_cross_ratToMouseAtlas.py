@@ -11,8 +11,8 @@ import getOutput as gO
 
 import torch
 
-from crossModalityHamiltonianATSCalibrated_Boundary import *
-from analyzeOutput import *
+from sandbox.crossModalityHamiltonianATSCalibrated_Boundary import *
+from sandbox.analyzeOutput import *
 
 # Set data type in: fromScratHamiltonianAT, analyzeOutput, getInput, initialize
 np_dtype = "float32" # "float64"
@@ -34,9 +34,10 @@ def main():
         
     S,nu_S = torch.load('../data/2D_cross_ratToMouseAtlas/source_2D_ratAtlas.pt')
     T,nu_T = torch.load('../data/2D_cross_ratToMouseAtlas/target_2D_mouseAtlas.pt')
-    sigmaRKHSlist,sigmaVarlist,gamma,d,labs,its,kScale,torch.tensor(cA).type(dtype),torch.tensor(cT).type(dtype),cS,cPi,dimEff,Csqpi,Csqlamb,eta0,lamb0,single = torch.load('../data/2D_cross_ratToMouseAtlas/parameters_2D_ratToMouseAtlas.pt')
+    sigmaRKHSlist,sigmaVarlist,gamma,d,labs,its,kScale,cA,cT,cS,cPi,dimEff,Csqpi,Csqlamb,eta0,lamb0,single = torch.load('../data/2D_cross_ratToMouseAtlas/parameters_2D_ratToMouseAtlas.pt')
+    N = S.shape[0]
     
-    savedir = outpath + '/output_dl_sig_its_csgamma_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(cS) + str(Csqpi) + str(gamma) + '_' + str(N) + extra + '/'
+    savedir = outpath + '2DdefaultParameters/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
     
@@ -44,15 +45,24 @@ def main():
     print("Parameters")
     print("d: " + str(d))
     print("labs: " + str(labs))
-    print("sigmaRKHS: " + str(sigmaRKHS))
-    print("sigmaVar: " + str(sigmaVar))
+    print("sigmaRKHS: ", sigmaRKHSlist)
+    print("sigmaVar: ", sigmaVarlist)
     print("its: " + str(its))
-    print("gammaA: " + str(gamma))
-    print("beta: " + str(beta))
-    
+    print("gamma: " + str(gamma))
+    print("kScale: ", kScale)
+    print("cA: ", cA)
+    print("cT: ", cT)
+    print("cS: ", cS)
+    print("cPi: ", cPi)
+    print("dimEff: ", dimEff)
+    print("Csqpi: ", Csqpi)
+    print("Csqlamb: ", Csqlamb)
+    print("eta0: ", eta0)
+    print("lamb0: ", lamb0)
+    print("single: ", single)
     print("N " + str(N))
     
-    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist, Tlist, nu_Tlist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=kScale,cA=cA,cT=cT,cS=cS,cPi=cPi,dimEff=dimEff,Csqpi=Csqpi,Csqlamb=Csqlamb,eta0=eta0,lambInit=lamb0,loadPrevious=None,single=single)
+    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist, Tlist, nu_Tlist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,gamma,d,labs,savedir,its=its,kScale=kScale,cA=cA,cT=cT,cS=cS,cPi=cPi,dimEff=dimEff,Csqpi=Csqpi,Csqlamb=Csqlamb,eta0=eta0,lambInit=lamb0,loadPrevious=None,single=single)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
@@ -131,15 +141,15 @@ def main():
             polyListG[int(t*len(G)):int((t+1)*len(G)),2] = np.arange((t+1)*len(G),(t+2)*len(G))
 
 
-
+    sigmaVar0 = sigmaVarlist[0].cpu().numpy()
     gO.writeVTK(pointList,[featList],['Weights'],savedir+'testOutput_curves.vtk',polyData=polyList)
     gO.writeVTK(pointListG,[featListG],['Weights'],savedir+'testOutput_grid.vtk',polyData=polyListG)
     volS = np.prod(np.max(S,axis=(0,1)) - np.min(S,axis=(0,1)))
     volT = np.prod(np.max(T,axis=(0,1)) - np.min(T,axis=(0,1)))
     volD = np.prod(np.max(Dlist[-1],axis=(0,1)) - np.min(Dlist[-1],axis=(0,1)))
-    getLocalDensity(S,nu_S,sigmaVar[0],savedir+'density_S.vtk',coef=2.0)
-    getLocalDensity(T,nu_T,sigmaVar[0],savedir+'density_T.vtk',coef=2.0)
-    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar[0],savedir+'density_D.vtk',coef=2.0)
+    getLocalDensity(S,nu_S,sigmaVar0,savedir+'density_S.vtk',coef=2.0)
+    getLocalDensity(T,nu_T,sigmaVar0,savedir+'density_T.vtk',coef=2.0)
+    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar0,savedir+'density_D.vtk',coef=2.0)
     
     jFile = gO.getJacobian(Dlist[-1],nu_S,nu_Dlist[-1],savedir+'testOutput_D10_jacobian.vtk')
     gO.splitZs(T,nu_T,Dlist[-1],nu_DPilist[-1],savedir+'testOutput_Dpi10',units=15,jac=jFile)
@@ -170,7 +180,7 @@ def main():
     
     x = applyAandTau(qx0,qw0,A0,tau0)
     gO.writeVTK(x,[qw0],['weights'],savedir+'testOutput_D_ATau.vtk',polyData=None)
-    getLocalDensity(x,nu_S,sigmaVar[0],savedir+'density_D_ATau.vtk',coef=2.0)
+    getLocalDensity(x,nu_S,sigmaVar0,savedir+'density_D_ATau.vtk',coef=2.0)
     
     sys.stdout = original
     return
