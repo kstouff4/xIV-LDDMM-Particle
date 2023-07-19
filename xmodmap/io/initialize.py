@@ -1,15 +1,6 @@
 import numpy as np
 import scipy as sp
-from sys import path as sys_path
-
 import torch
-use_cuda = torch.cuda.is_available()
-if use_cuda:
-    dtype = torch.cuda.FloatTensor #DoubleTensor 
-else:
-    dtype = torch.FloatTensor
-
-
 
 
 def applyAffine(Z, nu_Z, A, tau,bc=False):
@@ -54,21 +45,21 @@ def get3DRotMatrix(thetaX,thetaY,thetaZ):
     '''
     thetaX, thetaY, and thetaZ should all be torch tensors in radians 
     '''
-    Ax = torch.zeros((3,3)).type(dtype)
+    Ax = torch.zeros((3,3))
     Ax[0,0] = torch.tensor(1.0)
     Ax[1,1] = torch.cos(thetaX)
     Ax[2,2] = Ax[1,1]
     Ax[1,2] = -torch.sin(thetaX)
     Ax[2,1] = torch.sin(thetaX)
     
-    Ay = torch.zeros((3,3)).type(dtype)
+    Ay = torch.zeros((3,3))
     Ay[0,0] = torch.cos(thetaY)
     Ay[0,2] = torch.sin(thetaY)
     Ay[2,0] = -torch.sin(thetaY)
     Ay[2,2] = torch.cos(thetaY)
     Ay[1,1] = torch.tensor(1.0)
     
-    Az = torch.zeros((3,3)).type(dtype)
+    Az = torch.zeros((3,3))
     Az[0,0] = torch.cos(thetaZ)
     Az[0,1] = -torch.sin(thetaZ)
     Az[1,0] = torch.sin(thetaZ)
@@ -94,7 +85,7 @@ def get3DRotMatrixAxis(theta,ax=None):
     K[2,1] = ax[0]
     #A = np.cross(-theta*ax,np.identity(3),axisa=0,axisb=0)
     R = sp.linalg.expm(theta*K)
-    return torch.from_numpy(R).type(dtype)
+    return torch.from_numpy(R)
 
 def rescaleData(S,T):
     '''
@@ -171,7 +162,7 @@ def combineFeatures(S,nuS,listOfCols):
     '''
     
     numFeats = len(listOfCols)
-    nuSnew = torch.zeros((nuS.shape[0],numFeats)).type(dtype)
+    nuSnew = torch.zeros((nuS.shape[0],numFeats))
     
     c = 0
     for l in listOfCols:

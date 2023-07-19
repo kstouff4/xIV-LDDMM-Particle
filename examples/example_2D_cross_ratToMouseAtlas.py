@@ -40,7 +40,7 @@ def main():
     N = S.shape[0]
 
 
-    sys.stdout = open(os.path.join(savedir, 'test.log'),'w')
+    # sys.stdout = open(os.path.join(savedir, 'test.log'),'w')
     print("Parameters")
     print("d: " + str(d))
     print("labs: " + str(labs))
