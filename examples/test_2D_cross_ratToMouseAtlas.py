@@ -11,8 +11,8 @@ import getOutput as gO
 
 import torch
 
-from crossModalityHamiltonianATSCalibrated_Boundary import *
-from analyzeOutput import *
+from sandbox.crossModalityHamiltonianATSCalibrated_Boundary import *
+from sandbox.analyzeOutput import *
 
 # Set data type in: fromScratHamiltonianAT, analyzeOutput, getInput, initialize
 np_dtype = "float32" # "float64"
@@ -25,64 +25,19 @@ else:
 import nibabel as nib
 
 def main():
-    d = 3
-    dimEff = 3
-    single = True
-    labs = 2 # in target 
-    labS = 28 # template
-    sigmaRKHS = [0.2,0.1,0.05] #[0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
-    sigmaVar = [0.5,0.2,0.05,0.02] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 100
-    alphaSt = 'B2toB5_NoBoundary'
-    beta = None
-    res=1.0
-    kScale=1
-    extra=""
-    cA=1.0
-    cT=1.0 # original is 0.5
-    cS=10.0
-    Csqpi=100.0
-    Csqlamb=100.0
-    eta0 = torch.sqrt(torch.tensor(0.2)).type(dtype)
-    lamb0 = torch.tensor(0.4).type(dtype)
-    lamb0 = torch.tensor(-1.0).type(dtype)
-    
-    # Set these parameters according to relative decrease you expect in data attachment term
-    # these should be based on approximately what the contribution compared to original cost is
-    gamma = 1.0 #0.01 #10.0
-    
     original = sys.stdout
 
-    outpath='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/HumanCrossModality/'
+    outpath='output/RatToMouse/'
 
     if (not os.path.exists(outpath)):
         os.mkdir(outpath) 
         
-    outpath = outpath + alphaSt + '/'
-    
-    if (not os.path.exists(outpath)):
-        os.mkdir(outpath)
-    
-    atlasImage = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain2/3DSegmentations/allMerge_smoothe.nii.gz'
-    atlasImage_a = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain2/3DSegmentations/AMYGDALA_SUBREGIONS.nii.gz'
-    
-    S,nu_S = gI.makeFromSingleChannelImage(atlasImage,0.125*8,bg=0,ordering=[3,8,7],ds=8,weights=torch.tensor(1.0**3).type(dtype))
-    targetImage = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain5/3DSegmentations/Brain5_allMerge_smoothe.nii.gz'
-    targetImage_a = '/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain5/3DSegmentations/Brain_5_amygdala_subregions_final.nii.gz'
-    
-    Tw,nu_Tw = gI.makeFromSingleChannelImage(targetImage,0.125*8,bg=0,ordering=[6,14],ds=8,weights=torch.tensor(1.0**3).type(dtype))
-    Ta,nu_Ta = gI.makeFromSingleChannelImage(targetImage_a,0.125*8,bg=0,ordering=[1,2,3,4],ds=8,weights=torch.tensor(1.0**3).type(dtype))
-    T,nu_T = gI.combineObjects([Tw,Ta],[nu_Tw,nu_Ta])
-    
-    labs = nu_T.shape[-1]
-    labS = nu_S.shape[-1]
-    cPi=torch.tensor(0.1/np.log(labs)).type(dtype) #0.1
+    S,nu_S = torch.load('../data/2D_cross_ratToMouseAtlas/source_2D_ratAtlas.pt')
+    T,nu_T = torch.load('../data/2D_cross_ratToMouseAtlas/target_2D_mouseAtlas.pt')
+    sigmaRKHSlist,sigmaVarlist,gamma,d,labs,its,kScale,cA,cT,cS,cPi,dimEff,Csqpi,Csqlamb,eta0,lamb0,single = torch.load('../data/2D_cross_ratToMouseAtlas/parameters_2D_ratToMouseAtlas.pt')
     N = S.shape[0]
     
-    # Reverse X coordinate (x1) in source
-    S[:,1] = -1.0*S[:,1]
-
-    savedir = outpath + '/output_dl_sig_its_csgamma_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(cS) + str(Csqpi) + str(gamma) + '_' + str(N) + extra + '/'
+    savedir = outpath + '2DdefaultParameters/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
     
@@ -90,27 +45,24 @@ def main():
     print("Parameters")
     print("d: " + str(d))
     print("labs: " + str(labs))
-    print("sigmaRKHS: " + str(sigmaRKHS))
-    print("sigmaVar: " + str(sigmaVar))
+    print("sigmaRKHS: ", sigmaRKHSlist)
+    print("sigmaVar: ", sigmaVarlist)
     print("its: " + str(its))
-    print("gammaA: " + str(gamma))
-    print("beta: " + str(beta))
-    
+    print("gamma: " + str(gamma))
+    print("kScale: ", kScale)
+    print("cA: ", cA)
+    print("cT: ", cT)
+    print("cS: ", cS)
+    print("cPi: ", cPi)
+    print("dimEff: ", dimEff)
+    print("Csqpi: ", Csqpi)
+    print("Csqlamb: ", Csqlamb)
+    print("eta0: ", eta0)
+    print("lamb0: ", lamb0)
+    print("single: ", single)
     print("N " + str(N))
     
-    #Dlist, nu_Dlist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),d,labs,savedir,its=its,beta=beta)
-    sigmaRKHSlist = []
-    sigmaVarlist = []
-    for sigg in sigmaRKHS:
-        sigmaRKHSlist.append(torch.tensor(sigg).type(dtype))
-    for sigg in sigmaVar:
-        sigmaVarlist.append(torch.tensor(sigg).type(dtype))
-    
-    torch.save([S,nu_S],'../data/source_B2_3regions_3D.pt')
-    torch.save([T,nu_T],'../data/target_B5_6regions_3D.pt')
-    torch.save([sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,its,torch.tensor(kScale).type(dtype),torch.tensor(cA).type(dtype),torch.tensor(cT).type(dtype),cS,cPi,dimEff,Csqpi,Csqlamb,eta0,lamb0,single],'../data/params_B2toB5_3D.pts')
-        
-    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist, Tlist, nu_Tlist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,cPi=cPi,dimEff=d,Csqpi=Csqpi,Csqlamb=Csqlamb,eta0=eta0,lambInit=lamb0,loadPrevious=None)
+    Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist, Tlist, nu_Tlist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,gamma,d,labs,savedir,its=its,kScale=kScale,cA=cA,cT=cT,cS=cS,cPi=cPi,dimEff=dimEff,Csqpi=Csqpi,Csqlamb=Csqlamb,eta0=eta0,lambInit=lamb0,loadPrevious=None,single=single)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
@@ -189,15 +141,15 @@ def main():
             polyListG[int(t*len(G)):int((t+1)*len(G)),2] = np.arange((t+1)*len(G),(t+2)*len(G))
 
 
-
+    sigmaVar0 = sigmaVarlist[0].cpu().numpy()
     gO.writeVTK(pointList,[featList],['Weights'],savedir+'testOutput_curves.vtk',polyData=polyList)
     gO.writeVTK(pointListG,[featListG],['Weights'],savedir+'testOutput_grid.vtk',polyData=polyListG)
     volS = np.prod(np.max(S,axis=(0,1)) - np.min(S,axis=(0,1)))
     volT = np.prod(np.max(T,axis=(0,1)) - np.min(T,axis=(0,1)))
     volD = np.prod(np.max(Dlist[-1],axis=(0,1)) - np.min(Dlist[-1],axis=(0,1)))
-    getLocalDensity(S,nu_S,sigmaVar[0],savedir+'density_S.vtk',coef=2.0)
-    getLocalDensity(T,nu_T,sigmaVar[0],savedir+'density_T.vtk',coef=2.0)
-    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar[0],savedir+'density_D.vtk',coef=2.0)
+    getLocalDensity(S,nu_S,sigmaVar0,savedir+'density_S.vtk',coef=2.0)
+    getLocalDensity(T,nu_T,sigmaVar0,savedir+'density_T.vtk',coef=2.0)
+    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar0,savedir+'density_D.vtk',coef=2.0)
     
     jFile = gO.getJacobian(Dlist[-1],nu_S,nu_Dlist[-1],savedir+'testOutput_D10_jacobian.vtk')
     gO.splitZs(T,nu_T,Dlist[-1],nu_DPilist[-1],savedir+'testOutput_Dpi10',units=15,jac=jFile)
@@ -228,7 +180,7 @@ def main():
     
     x = applyAandTau(qx0,qw0,A0,tau0)
     gO.writeVTK(x,[qw0],['weights'],savedir+'testOutput_D_ATau.vtk',polyData=None)
-    getLocalDensity(x,nu_S,sigmaVar[0],savedir+'density_D_ATau.vtk',coef=0.25)
+    getLocalDensity(x,nu_S,sigmaVar0,savedir+'density_D_ATau.vtk',coef=2.0)
     
     sys.stdout = original
     return

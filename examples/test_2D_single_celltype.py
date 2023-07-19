@@ -12,8 +12,8 @@ import getOutput as gO
 
 import torch
 
-from singleModalityHamiltonianATSCalibrated import *
-from analyzeOutput import *
+from sandbox.singleModalityHamiltonianATSCalibrated import *
+from sandbox.analyzeOutput import *
 
 np_dtype = "float32" # "float64"
 use_cuda = torch.cuda.is_available()
@@ -26,52 +26,19 @@ else:
 import nibabel as nib
 
 def main():
-    d = 3
-    sigmaRKHS = [0.2,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
-    sigmaVar = [0.5,0.2,0.05] # as of 3/16, should be fraction of total domain of S+T #10.0
-    its = 101
-    alphaSt = 'BEIALE_15to17'
-    beta = None
-    res=1.0
-    kScale=1
-    extra=""
-    cA=1.0
-    cT=1.0 # original is 0.5
-    cS=20.0
-    
-    # Set these parameters according to relative decrease you expect in data attachment term
-    # these should be based on approximately what the contribution compared to original cost is
-    gamma = 10.0 #0.01 #10.0
-    single=True
-    
     original = sys.stdout
 
-    outpath='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/HumanSingleModality/'
+    outpath='output/MERFISH_Celltypes/'
 
     if (not os.path.exists(outpath)):
         os.mkdir(outpath) 
         
-    outpath = outpath + alphaSt + '/'
-    
-    if (not os.path.exists(outpath)):
-        os.mkdir(outpath)
-        
-    sourceImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/Human/BEIALE_150428.npz'
-    targetImage = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/Human/BEIALE_170516.npz'
-    
-    S,nu_S = gI.getFromFile(sourceImage)
-    T,nu_T = gI.getFromFile(targetImage)
-    torch.save([S,nu_S],'../data/source_3D_BEIALE_MTL.pt')
-    torch.save([T,nu_T],'../data/target_3D_BEIALE_MTL.pt')
-    
-    # test extra particles
-    #S,nu_S = gI.returnMultiplesSpace(S,nu_S,kScale)
-    
-    labs = nu_T.shape[-1]
-    labS = nu_S.shape[-1]
+    S,nu_S = torch.load('../data/2D_single_celltype/source_2D_celltype.pt')
+    T,nu_T = torch.load('../data/2D_single_celltype/target_2D_celltype.pt')
+    sigmaRKHSlist,sigmaVarlist,gamma,d,labs,its,kScale,cA,cT,cS,dimEff,single = torch.load('../data/2D_single_celltype/parameters_2D_celltype.pt')
     N = S.shape[0]
 
-    savedir = outpath + '/output_dl_sig_its_albega_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(gamma) + str(beta) + '_' + str(N) + extra + '/'
+    savedir = outpath + '2DdefaultParameters/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
     
@@ -79,26 +46,20 @@ def main():
     print("Parameters")
     print("d: " + str(d))
     print("labs: " + str(labs))
-    print("sigmaRKHS: " + str(sigmaRKHS))
-    print("sigmaVar: " + str(sigmaVar))
+    print("sigmaRKHS: ", sigmaRKHSlist)
+    print("sigmaVar: ", sigmaVarlist)
     print("its: " + str(its))
-    print("gammaA: " + str(gamma))
-    print("beta: " + str(beta))
+    print("gamma: " + str(gamma))
+    print("kScale: ", kScale)
+    print("cA: ", cA)
+    print("cT: ", cT)
+    print("cS: ", cS)
+    print("single: ", single)
+    print("dimEff: ", dimEff)
     
     print("N " + str(N))
-    dimEff=3
-    
-    #Dlist, nu_Dlist = callOptimize(S,nu_S,T,nu_T,torch.tensor(sigmaRKHS).type(dtype),torch.tensor(sigmaVar).type(dtype),d,labs,savedir,its=its,beta=beta)
-    sigmaRKHSlist = []
-    sigmaVarlist = []
-    for sigg in sigmaRKHS:
-        sigmaRKHSlist.append(torch.tensor(sigg).type(dtype))
-    for sigg in sigmaVar:
-        sigmaVarlist.append(torch.tensor(sigg).type(dtype))
-        
-    torch.save([sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,its,torch.tensor(kScale).type(dtype),torch.tensor(cA).type(dtype),torch.tensor(cT).type(dtype),cS,dimEff,single],'../data/parameters_3D_BEIALE_MTL.pt')
-        
-    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,torch.tensor(gamma).type(dtype),d,labs,savedir,its=its,kScale=torch.tensor(kScale).type(dtype),cA=torch.tensor(cA).type(dtype),cT=torch.tensor(cT).type(dtype),cS=cS,dimEff=dimEff,single=single)
+                
+    Dlist, nu_Dlist, Glist, nu_Glist = callOptimize(S,nu_S,T,nu_T,sigmaRKHSlist,sigmaVarlist,gamma,d,labs,savedir,its=its,kScale=kScale,cA=cA,cT=cT,cS=cS,dimEff=dimEff,single=single)
     
     S=S.detach().cpu().numpy()
     T=T.detach().cpu().numpy()
@@ -163,14 +124,15 @@ def main():
 
     jFile = gO.getJacobian(Dlist[-1],nu_S,nu_Dlist[-1],savedir+'testOutput_D10_jacobian.vtk')
 
+    sigmaVar0 = sigmaVarlist[0].cpu().numpy()
     gO.writeVTK(pointList,[featList],['Weights'],savedir+'testOutput_curves.vtk',polyData=polyList)
     gO.writeVTK(pointListG,[featListG],['Weights'],savedir+'testOutput_grid.vtk',polyData=polyListG)
     volS = np.prod(np.max(S,axis=(0,1)) - np.min(S,axis=(0,1)))
     volT = np.prod(np.max(T,axis=(0,1)) - np.min(T,axis=(0,1)))
     volD = np.prod(np.max(Dlist[-1],axis=(0,1)) - np.min(Dlist[-1],axis=(0,1)))
-    getLocalDensity(S,nu_S,sigmaVar[0],savedir+'density_S.vtk',coef=2.0)
-    getLocalDensity(T,nu_T,sigmaVar[0],savedir+'density_T.vtk',coef=2.0)
-    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar[0],savedir+'density_D.vtk',coef=2.0)
+    getLocalDensity(S,nu_S,sigmaVar0,savedir+'density_S.vtk',coef=2.0)
+    getLocalDensity(T,nu_T,sigmaVar0,savedir+'density_T.vtk',coef=2.0)
+    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar0,savedir+'density_D.vtk',coef=2.0)
     
     print("volumes of source, target, and deformed source")
     print(volS)
@@ -198,7 +160,7 @@ def main():
     
     x = applyAandTau(qx0,qw0,A0,tau0)
     gO.writeVTK(x,[qw0],['weights'],savedir+'testOutput_D_ATau.vtk',polyData=None)
-    getLocalDensity(x,nu_S,sigmaVar[0],savedir+'density_D_ATau.vtk',coef=0.25)
+    getLocalDensity(x,nu_S,sigmaVar0,savedir+'density_D_ATau.vtk',coef=2.0)
     
     sys.stdout = original
     return

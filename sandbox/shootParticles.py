@@ -117,7 +117,7 @@ def shootBackwards(paramFile,variableFile,Z,w_Z,dimE=3):
     Load variables and parameters from filenames
     Use shootinggrid to reshoot new set of particles --> check if need q0?
     '''
-    uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,cPi,single = loadParams(paramFile)
+    uCoeff,sigmaRKHS,sigmaVar,beta,d,labs,numS,pTilde,gamma,cA,cT,cPi,dimE,single = loadParams(paramFile)
     q0,p0,Ttilde,w_T,s,m = loadVariables(variableFile)
     Kg = GaussKernelHamiltonian(sigma=sigmaRKHS,d=d,uCoeff=uCoeff)
     

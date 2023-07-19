@@ -136,7 +136,9 @@ def main():
     savedir = outpath + '/output_dl_sig_its_albega_N-' + str(d) + str(labs) + '_' + str(sigmaRKHS) + str(sigmaVar) + '_' + str(its) + '_' + str(gamma) + str(beta) + '_' + str(N) + extra + '/'
     if (not os.path.exists(savedir)):
         os.mkdir(savedir)
-    
+    #np.savez('/cis/home/kstouff4/Documents/MeshRegistration/Particles/Human/BEIALE_150428.npz',X=S.cpu().numpy(),nu_X=nu_S.cpu().numpy())
+    #np.savez('/cis/home/kstouff4/Documents/MeshRegistration/Particles/Human/BEIALE_170516.npz',X=T.cpu().numpy(),nu_X=nu_T.cpu().numpy())
+    #return
     sys.stdout = open(savedir+'test.txt','w')
     print("Parameters")
     print("d: " + str(d))

@@ -32,7 +32,7 @@ sys_path.append('..')
 sys_path.append('../xmodmap')
 sys_path.append('../xmodmap/io')
 import initialize as init
-from saveState import *
+from sandbox.saveState import *
 import getOutput as gO
 
 #################################################################################
