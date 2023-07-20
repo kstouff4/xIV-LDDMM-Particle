@@ -28,10 +28,16 @@ else:
     
 
 
-def getLocalDensity(Z,nu_Z,sigma,savename,coef=3):
+def getLocalDensity(Zi,nu_Zi,sigma,savename,coef=3):
     '''
     Compute local density in cube of size 2sigma x 2sigma x 2sigma
     '''
+    if torch.is_tensor(Zi):
+        Z = Zi.cpu().numpy()
+        nu_Z = nu_Zi.cpu().numpy()
+    else:
+        Z = Zi
+        nu_Z = nu_Zi
     if (len(nu_Z.shape) < 2):
         nu_Z = nu_Z[...,None]
     if (nu_Z.shape[-1] == 1):
