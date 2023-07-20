@@ -505,7 +505,7 @@ def printCurrentVariables(p0Curr,itCurr,K0,sigmaRKHS,uCoeff,q0Curr,d,numS,zeta_S
     f.colorbar(im,ax=ax)
     ax.set_ylabel("Source Labels")
     ax.set_xlabel("Target Label Replicates")
-    f.savefig(savedir + 'pi_STiter' + str(itCurr) + '.png',dpi=300)
+    f.savefig(os.path.join(savedir, f'pi_STiter{itCurr}.png'),dpi=300)
     
     q = pqList[-1][1]
     D = q[numS:].detach().view(-1,d)
@@ -637,7 +637,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     else:
         pTilde[(d+1)*numS:-1] = Csqpi
         pTilde[-1] = Csqlamb
-    savepref = savedir + 'State_'
+    savepref = os.path.join(savedir, 'State_')
     
     if lamb0 < 0:
         supportWeights = None
@@ -737,7 +737,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         ax.set_xlabel("Iterations")
         ax.set_ylabel("Cost")
         ax.legend()
-        f.savefig(savedir + 'Cost_' + str(currIt) + '.png',dpi=300)
+        f.savefig(os.path.join(savedir, f'Cost_{currIt}.png'),dpi=300)
         return
     
     if (loadPrevious is not None):
@@ -790,7 +790,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     ax.set_title("Loss")
     ax.set_xlabel("Iterations")
     ax.legend()
-    f.savefig(savedir + 'CostOuterIter.png',dpi=300)
+    f.savefig(os.path.join(savedir,'CostOuterIter.png'),dpi=300)
     
     
     # Print out deformed states
@@ -850,11 +850,11 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
         pi_STplot = pi_STfinal
 
     f,ax = plt.subplots()
-    im = ax.imshow(pi_STplot)
+    im = ax.imshow(pi_STplot.cpu().numpy())
     f.colorbar(im,ax=ax)
     ax.set_ylabel("Source Labels")
     ax.set_xlabel("Target Label Replicates")
-    f.savefig(savedir + 'pi_STfinal.png',dpi=300)
+    f.savefig(os.path.join(savedir,'pi_STfinal.png'),dpi=300)
     
     for t in range(len(listpq)):
         qnp = listpq[t][1]

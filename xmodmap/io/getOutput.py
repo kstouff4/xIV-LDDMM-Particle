@@ -124,7 +124,7 @@ def splitZs(Ti,nu_Ti,Di,nu_Di,savename,units=10,jac=None):
     else:
         T = Ti
         nu_T = nu_Ti
-    if torch.is_tensor(Di)
+    if torch.is_tensor(Di):
         D = Di.cpu().numpy()
         nu_D = nu_Di.cpu().numpy()
     else:

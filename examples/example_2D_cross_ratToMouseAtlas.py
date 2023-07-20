@@ -44,7 +44,7 @@ def main():
     N = S.shape[0]
 
 
-    # sys.stdout = open(os.path.join(savedir, 'test.log'),'w')
+    sys.stdout = open(os.path.join(savedir, 'test.log'),'w')
     print("Parameters")
     print("d: " + str(d))
     print("labs: " + str(labs))
@@ -78,9 +78,9 @@ def main():
     zeta_T[torch.squeeze(w_T == 0),...] = 0
     torch.save([S,nu_S,T,nu_T,zeta_S,zeta_T],os.path.join(savedir,'origST.pt'))
     
-    gO.writeParticleVTK(S,nu_S,savedir+'testOutput_S.vtk')
-    gO.writeParticleVTK(T,nu_T,savedir+'testOutput_T.vtk')
-    gO.writeParticleVTK(Td,nu_Td,savedir+'testOutput_Td.vtk')
+    gO.writeParticleVTK(S,nu_S,os.path.join(savedir, 'testOutput_S.vtk'))
+    gO.writeParticleVTK(T,nu_T,os.path.join(savedir, 'testOutput_T.vtk'))
+    gO.writeParticleVTK(Td,nu_Td,os.path.join(savedir, 'testOutput_Td.vtk'))
 
     pointList = np.zeros((S.shape[0]*len(Dlist),d))
     polyList = np.zeros((S.shape[0]*(len(Dlist)-1),3))
@@ -98,23 +98,23 @@ def main():
         nu_D = nu_Dlist[t]
         nu_G = nu_Glist[t]
         nu_Dpi = nu_DPilist[t]
-        gO.writeParticleVTK(D,nu_D,savedir+'testOutput_D' + str(t) + '.vtk')
-        gO.writeParticleVTK(D,nu_Dpi,savedir+'testOutput_Dpi' + str(t) + '.vtk')
-        gO.writeParticleVTK(G,nu_G,savedir+'testOutput_G' + str(t) + '.vtk')
+        gO.writeParticleVTK(D,nu_D,os.path.join(savedir, f'testOutput_D{t}.vtk'))
+        gO.writeParticleVTK(D,nu_Dpi,os.path.join(savedir, f'testOutput_Dpi{t}.vtk'))
+        gO.writeParticleVTK(G,nu_G,os.path.join(savedir, f'testOutput_G{t}.vtk'))
         if (t == len(Dlist) - 1):
             if not torch.is_tensor(D):
-                np.savez(savedir+'testOutput.npz',D=D,nu_D=nu_D,nu_Dpi=nu_Dpi)
+                np.savez(os.path.join(savedir, 'testOutput.npz'),D=D,nu_D=nu_D,nu_Dpi=nu_Dpi)
             else:
-                torch.save([D,nu_D,nu_Dpi],savedir+'testOutput.pt')
+                torch.save([D,nu_D,nu_Dpi],os.path.join(savedir, 'testOutput.pt'))
 
 
     sigmaVar0 = sigmaVarlist[0].cpu().numpy()
-    getLocalDensity(S,nu_S,sigmaVar0,savedir+'density_S.vtk',coef=2.0)
-    getLocalDensity(T,nu_T,sigmaVar0,savedir+'density_T.vtk',coef=2.0)
-    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar0,savedir+'density_D.vtk',coef=2.0)
+    getLocalDensity(S,nu_S,sigmaVar0,os.path.join(savedir, 'density_S.vtk'),coef=2.0)
+    getLocalDensity(T,nu_T,sigmaVar0,os.path.join(savedir, 'density_T.vtk'),coef=2.0)
+    getLocalDensity(Dlist[-1],nu_Dlist[-1],sigmaVar0,os.path.join(savedir, 'density_D.vtk'),coef=2.0)
     
-    jFile = gO.getJacobian(Dlist[-1],nu_S,nu_Dlist[-1],savedir+'testOutput_D10_jacobian.vtk')
-    gO.splitZs(T,nu_T,Dlist[-1],nu_DPilist[-1],savedir+'testOutput_Dpi10',units=15,jac=jFile)
+    jFile = gO.getJacobian(Dlist[-1],nu_S,nu_Dlist[-1],os.path.join(savedir, 'testOutput_D10_jacobian.vtk'))
+    gO.splitZs(T,nu_T,Dlist[-1],nu_DPilist[-1],os.path.join(savedir, 'testOutput_Dpi10'),units=15,jac=jFile)
     
     S = S.detach().cpu().numpy()
     T = T.detach().cpu().numpy()
@@ -155,8 +155,8 @@ def main():
     qw0 = np.reshape(q0[:N],(N,1))
     
     x = applyAandTau(qx0,qw0,A0,tau0)
-    gO.writeParticleVTK(x,qw0,savedir+'testOutput_D_ATau.vtk')
-    getLocalDensity(x,nu_S,sigmaVar0,savedir+'density_D_ATau.vtk',coef=2.0)
+    gO.writeParticleVTK(x,qw0,os.path.join(savedir, 'testOutput_D_ATau.vtk'))
+    getLocalDensity(x,nu_S,sigmaVar0,os.path.join(savedir, 'density_D_ATau.vtk'),coef=2.0)
     
     sys.stdout = original
     return
