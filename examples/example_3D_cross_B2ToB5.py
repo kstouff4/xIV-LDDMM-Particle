@@ -40,7 +40,7 @@ def main():
     sigmaRKHSlist,sigmaVarlist,gamma,d,labs,its,kScale,cA,cT,cS,cPi,dimEff,Csqpi,Csqlamb,eta0,lamb0,single=torch.load(os.path.join(datadir, 'parameters_3D_B2ToB5.pt'))
 
     
-    sys.stdout = open(savedir+'test.txt','w')
+    sys.stdout = open(os.path.join(savedir,'test.log'),'w')
     print("Parameters")
     print("d: " + str(d))
     print("labs: " + str(labs))

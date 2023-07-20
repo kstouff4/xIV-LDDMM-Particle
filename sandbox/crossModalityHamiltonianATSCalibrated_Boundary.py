@@ -247,7 +247,7 @@ def checkEndPoint(lossFunction,p0,p1,q1,d,numS,savedir):
     ax.plot(torch.arange(numS),ep[2*numS:3*numS],label='z_diff')
     ax.plot(torch.arange(numS),ep[3*numS:],label='w_diff')
     ax.legend()
-    f.savefig(savedir+'checkPoint.png',dpi=300)
+    f.savefig(os.path.join(savedir,'checkPoint.png'),dpi=300)
     
     return
 
@@ -888,7 +888,7 @@ def callOptimize(S,nu_S,T,nu_T,sigmaRKHS,sigmaVar,gamma,d,labs, savedir, its=100
     polyListSp0 = torch.zeros((numS,3))
     polyListSp0[:,0] = 2
     polyListSp0[:,1] = torch.arange(numS)# +1
-    polyListSp0[:,2] = numS + time.arange(numS) #+ 1
+    polyListSp0[:,2] = numS + torch.arange(numS) #+ 1
 
     listSp0[0:numS, :] = S.detach()
     listSp0[numS:, :] = p0T[numS:(d + 1) * numS].detach().view(-1,d) + listSp0[0:numS, :]
