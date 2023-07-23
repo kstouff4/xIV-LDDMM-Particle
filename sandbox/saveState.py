@@ -35,6 +35,8 @@ def loadParams(filename):
     params = torch.load(filename)
     if not 'single' in params:
         params['single'] = False
+    if not 'dimEff' in params:
+        params['dimEff'] = 3
     return params['uCoeff'],params['sigmaRKHS'],params['sigmaVar'],params['beta'],params['d'],params['labs'],params['numS'],params['pTilde'],params['gamma'],params['cA'],params['cT'],params['cPi'],params['dimEff'],params['single']
 
 def saveVariables(q0,p0,Ttilde,wT,s,m,savepref):

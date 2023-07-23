@@ -25,8 +25,10 @@ def main():
     imgS = '/cis/home/kstouff4/Documents/MeshRegistration/TestImages/Allen_10_anno_16bit_ap_672.img'
     res = 0.001 # TO DO --> check whether this refers to scale of 1 or in um 
     savepref = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/AllenAtlas200ToBarSeq/output_dl_sig_its_csgamma_N-35_[0.2, 0.1, 0.05][0.5, 0.2, 0.05, 0.02]_4_10.010000.00.1_67827flipFullAtlasLamb/'
+    savepref = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/AllenAtlas200ToBarSeq28/output_dl_sig_its_csgamma_N-328_[0.2, 0.1, 0.05][0.5, 0.2, 0.05, 0.02]_100_10.010000.00.1_67827flipFullAtlasLamb/'
+    targHigh = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/BarSeqAligned/top28MI/sig0.1_dimEff2/initialHigh_All.npz'
     #savepref='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/AllenAtlas200ToBarSeq/output_dl_sig_its_csgamma_N-35_[0.2, 0.1, 0.05][0.5, 0.2, 0.05, 0.02]_2_10.010000.00.1_67827flipFullAtlasLamb/'
-    paramsFile = savepref + 'State__params.pth.tar'
+    paramsFile = savepref + 'State__params.pt'
     
     #_,_,_,_,s,m = ss.loadVariables(paramsFile.replace('params','variables'))
     
@@ -34,11 +36,20 @@ def main():
     #v = np.load(variablesFile)
     #p0 = v['p0']
     #q0 = v['q0']
-    variablesFile = savepref + 'State__variables.pth.tar'
+    variablesFile = savepref + 'State__variables.pt'
     q0,p0,Ttilde,wT,s,m = ss.loadVariables(variablesFile)
     v = np.load(savepref + 'testOutput_targetScaled.npz')
     zeta_T = torch.tensor(v['zeta_T']).type(dtype)
     nu_T = wT*zeta_T
+    
+    # get high resolution Target
+    if targHigh is not None:
+        fils = np.load(targHigh)
+        T = fils[fils.files[0]]
+        nu_T = fils[fils.files[1]]
+        Ttilde = (T-m)*(1.0/s)
+        Ttilde = torch.tensor(Ttilde).type(dtype)
+        nu_T = torch.tensor(nu_T).type(dtype)
     
     #ss.saveVariables(torch.tensor(q0).type(dtype),torch.tensor(p0).type(dtype),Ttilde,wT,s,m,savepref + 'State_')
     

@@ -1,5 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
+import torch
 
 def computeRegionStatisticsImage(npzFile,labels,plotOriginal=False):
     '''

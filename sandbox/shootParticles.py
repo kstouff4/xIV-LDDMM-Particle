@@ -82,6 +82,7 @@ def makeGrid(T,nu_T,res,savedir,dimE=2):
     
     ranges = np.max(T,axis=0) - np.min(T,axis=0)
     numCubes = np.ceil(ranges/res)
+    print("number of cubes is: ", numCubes)
     
     if numCubes[-1] == 0 or dimE == 2:
         dimEff = 2
@@ -162,12 +163,23 @@ def shootForwards(paramFile,variableFile,Q,w_Q,dimEff=3):
     
     return Zlist[-1],wZlist[-1]
 
-def shootTargetGridSlice(Ttilde,nu_T,index,res,savedir,paramFile,variableFile):
+def shootTargetGridSlice(Ttildei,nu_T,index,res,savedir,paramFile,variableFile):
     '''
     Returns grid rendering (X x Y x Z x 3) and similar for features covering the support of slice index in T dataset 
     input in tensors
     '''
-    u,i = torch.unique(Ttilde[:,-1],return_inverse=True)
+    Ttilde = torch.round(Ttildei,decimals=2)
+    u, i, c = torch.unique(Ttilde[:,-1],return_inverse=True,return_counts=True)
+    print("unique values: ", u)
+    print(u.shape)
+    print("number in each: ", c)
+    print(torch.min(c))
+    print(torch.max(c))
+    
+    print("Ttilde shape")
+    print(Ttilde.shape)
+    print(nu_T.shape)
+        
     
     # make grid covering 1 slice 
     if (index >= 0):
