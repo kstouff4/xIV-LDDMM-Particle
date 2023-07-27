@@ -3,7 +3,8 @@ import torch
 
 import numpy as np
 
-def normalize(x, p=1., dim=1):
+
+def normalize(x, p=1.0, dim=1):
     """
     Normalize a tensor or numpy array along a given dimension. Return a copy of the input.
 
@@ -22,6 +23,7 @@ def normalize(x, p=1., dim=1):
         res = np.copy(x)
         res[gd] = res[gd] / tmp[gd]
         return res
+
 
 #
 # a = np.row_stack((np.zeros((3,2)), np.ones((1, 2))))

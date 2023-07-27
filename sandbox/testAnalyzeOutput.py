@@ -1,10 +1,11 @@
 import analyzeOutput as ao
 import numpy as np
 
+
 def main():
     # path to results
-    fpath = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/AllenAtlasToBarSeq/output_dl_sig_its_albega_N-35_[0.2, 0.1][0.5, 0.2, 0.05]_100_0.1None_18706flipFullAtlas/'
-    '''
+    fpath = "/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/AllenAtlasToBarSeq/output_dl_sig_its_albega_N-35_[0.2, 0.1][0.5, 0.2, 0.05]_100_0.1None_18706flipFullAtlas/"
+    """
     x = np.load(fpath + 'testOutput_Dvars.npz')
     Td = x['Td']
     
@@ -30,12 +31,15 @@ def main():
     
     # normalize images
     ao.removeZerosAndNormalize(fpath+'imageOutput/interpolateNN_onTTdensity.nii.gz',fpath+'imageOutput/interpolateNN_onTDdensity.nii.gz',norm=True)
-    '''
-    ao.removeZerosAndNormalize(fpath+'imageOutput/interpolateNN_onTTmaxval.nii.gz',fpath+'imageOutput/interpolateNN_onTDmaxval.nii.gz',norm=False)
-    
+    """
+    ao.removeZerosAndNormalize(
+        fpath + "imageOutput/interpolateNN_onTTmaxval.nii.gz",
+        fpath + "imageOutput/interpolateNN_onTDmaxval.nii.gz",
+        norm=False,
+    )
+
     return
+
 
 if __name__ == "__main__":
     main()
-    
-    
