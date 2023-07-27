@@ -1,48 +1,48 @@
-import numpy as np
-import matplotlib
-from matplotlib import pyplot as plt
+import sys
 from sys import path as sys_path
 sys_path.append('..')
-sys_path.append('../xmodmap')
-sys_path.append('../xmodmap/io')
-import initialize as init
-import getInput as gI
-import getOutput as gO
-
 
 import torch
 
-from sandbox.singleModalityHamiltonianATSCalibrated import *
+legacy = True
+
+if legacy:
+    from sandbox.singleModalityHamiltonianATSCalibrated import *
+else:
+    import xmodmap
+
 from sandbox.analyzeOutput import *
 
+
+# Set data type in: fromScratHamiltonianAT, analyzeOutput, getInput, initialize
 np_dtype = "float32" # "float64"
 use_cuda = torch.cuda.is_available()
 if use_cuda:
-    dtype = torch.cuda.FloatTensor #DoubleTensor 
+    dtype = torch.cuda.FloatTensor #DoubleTensor
+    map_location = lambda storage, loc: storage.cuda(0)
 else:
     dtype = torch.FloatTensor
+    map_location = torch.device('cpu')
 
-
-import nibabel as nib
+torch.set_default_tensor_type(dtype)
 
 def main():
     original = sys.stdout
 
-    outpath='output/MERFISH_Celltypes/'
+    savedir = os.path.join('output', 'MERFISH_Celltypes', f"2DdefaultParameters_{legacy}")
+    datadir = os.path.join('..', 'data', '2D_single_celltype')
 
-    if (not os.path.exists(outpath)):
-        os.mkdir(outpath) 
-        
-    S,nu_S = torch.load('../data/2D_single_celltype/source_2D_celltype.pt')
-    T,nu_T = torch.load('../data/2D_single_celltype/target_2D_celltype.pt')
-    sigmaRKHSlist,sigmaVarlist,gamma,d,labs,its,kScale,cA,cT,cS,dimEff,single = torch.load('../data/2D_single_celltype/parameters_2D_celltype.pt')
+    os.makedirs(savedir, exist_ok=True)
+
+    S, nu_S = torch.load(os.path.join(datadir, 'source_2D_celltype.pt'), map_location=map_location)
+    T, nu_T = torch.load(os.path.join(datadir, 'target_2D_celltype.pt'), map_location=map_location)
+
+
+    sigmaRKHSlist,sigmaVarlist,gamma,d,labs,its,kScale,cA,cT,cS,dimEff,single = torch.load(os.path.join(datadir, 'parameters_2D_celltype.pt'))
     N = S.shape[0]
 
-    savedir = outpath + '2DdefaultParameters/'
-    if (not os.path.exists(savedir)):
-        os.mkdir(savedir)
     
-    sys.stdout = open(savedir+'test.txt','w')
+    sys.stdout = open(os.path.join(savedir, 'test.log'),'w')
     print("Parameters")
     print("d: " + str(d))
     print("labs: " + str(labs))
