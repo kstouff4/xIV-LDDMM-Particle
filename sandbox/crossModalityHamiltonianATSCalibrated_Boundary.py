@@ -5,8 +5,6 @@ import torch
 
 from pykeops.torch import Vi, Vj
 
-dtype = torch.cuda.FloatTensor
-
 from matplotlib import pyplot as plt
 import matplotlib
 
@@ -807,12 +805,12 @@ def makePQ(
     norm=True,
 ):
     # initialize state vectors based on normalization
-    w_S = nu_S.sum(axis=-1)[..., None].type(dtype)
-    w_T = nu_T.sum(axis=-1)[..., None].type(dtype)
-    zeta_S = (nu_S / w_S).type(dtype)
-    zeta_T = (nu_T / w_T).type(dtype)
-    zeta_S[torch.squeeze(w_S == 0), ...] = torch.tensor(0.0).type(dtype)
-    zeta_T[torch.squeeze(w_T == 0), ...] = torch.tensor(0.0).type(dtype)
+    w_S = nu_S.sum(axis=-1)[..., None]
+    w_T = nu_T.sum(axis=-1)[..., None]
+    zeta_S = (nu_S / w_S)
+    zeta_T = (nu_T / w_T)
+    zeta_S[torch.squeeze(w_S == 0), ...] = torch.tensor(0.0)
+    zeta_T[torch.squeeze(w_T == 0), ...] = torch.tensor(0.0)
     numS = w_S.shape[0]
 
     Stilde, Ttilde, s, m = init.rescaleData(S, T)
