@@ -2,18 +2,10 @@ import os
 import time
 
 import torch
-from torch.autograd import grad
 
-import pykeops
 from pykeops.torch import Vi, Vj
 
-np_dtype = "float32"  # "float64"
-
-use_cuda = torch.cuda.is_available()
-if use_cuda:
-    dtype = torch.cuda.FloatTensor  # DoubleTensor
-else:
-    dtype = torch.FloatTensor
+dtype = torch.cuda.FloatTensor
 
 from matplotlib import pyplot as plt
 import matplotlib
@@ -42,7 +34,7 @@ def GaussKernelHamiltonian(sigma, d, uCoeff):
         Vi(4, 1),
         Vj(5, 1),
     )
-    # retVal = qxO.sqdist(qyO)*torch.tensor(0).type(dtype)
+
     for sInd in range(len(sigma)):
         sig = sigma[sInd]
         qx, qy, wpx, wpy = qxO / sig, qyO / sig, wpxO / sig, wpyO / sig
@@ -57,6 +49,7 @@ def GaussKernelHamiltonian(sigma, d, uCoeff):
             retVal = (1.0 / uCoeff[sInd]) * K * h  # normalize by N_sigma/(N sigma**2)
         else:
             retVal += (1.0 / uCoeff[sInd]) * K * h
+
     return retVal.sum_reduction(
         axis=1
     )  # (K*h).sum_reduction(axis=1) #,  h2, h3.sum_reduction(axis=1)
@@ -124,7 +117,7 @@ def getATauAlpha(px, qx, pw, qw, cA=1.0, cT=1.0, dimEff=3, single=False):
 # compute U and divergence of U
 def getU(sigma, d, uCoeff):
     xO, qyO, py, wpyO = Vi(0, d), Vj(1, d), Vj(2, d), Vj(3, 1)
-    # retVal = xO.sqdist(qyO)*torch.tensor(0).type(dtype)
+    # retVal = xO.sqdist(qyO)*torch.tensor(0)
     for sInd in range(len(sigma)):
         sig = sigma[sInd]
         x, qy, wpy = xO / sig, qyO / sig, wpyO / sig
@@ -172,13 +165,13 @@ def defineSupport(Ttilde, eps=0.001):
         while sh < 2:
             lineZMin = Ttilde[
                 torch.squeeze(
-                    Ttilde[:, -2] < (zMin + torch.tensor(co * eps).type(dtype))
+                    Ttilde[:, -2] < (zMin + torch.tensor(co * eps))
                 ),
                 ...,
             ]
             lineZMax = Ttilde[
                 torch.squeeze(
-                    Ttilde[:, -2] > (zMax - torch.tensor(co * eps).type(dtype))
+                    Ttilde[:, -2] > (zMax - torch.tensor(co * eps))
                 ),
                 ...,
             ]
@@ -204,10 +197,10 @@ def defineSupport(Ttilde, eps=0.001):
 
         n0 = torch.tensor(
             [-(a0s[1, 1] - a0s[0, 1]), (a0s[1, 0] - a0s[0, 0]), Ttilde[0, -1]]
-        ).type(dtype)
+        )
         n1 = torch.tensor(
             [-(a1s[1, 1] - a1s[0, 1]), (a1s[1, 0] - a1s[0, 0]), Ttilde[0, -1]]
-        ).type(dtype)
+        )
         if torch.dot(tCenter - a0, n0) < 0:
             n0 = -1.0 * n0
 
@@ -220,13 +213,13 @@ def defineSupport(Ttilde, eps=0.001):
         while sh < 3:
             sliceZMin = Ttilde[
                 torch.squeeze(
-                    Ttilde[:, -1] < (zMin + torch.tensor(co * eps).type(dtype))
+                    Ttilde[:, -1] < (zMin + torch.tensor(co * eps))
                 ),
                 ...,
             ]
             sliceZMax = Ttilde[
                 torch.squeeze(
-                    Ttilde[:, -1] > (zMax - torch.tensor(co * eps).type(dtype))
+                    Ttilde[:, -1] > (zMax - torch.tensor(co * eps))
                 ),
                 ...,
             ]
@@ -275,16 +268,16 @@ def defineSupport(Ttilde, eps=0.001):
 
 def noSupportEstimation(Ttilde):
     def alphaSupportWeight(qx, lamb):
-        return torch.ones((qx.shape[0], 1)).type(dtype)
+        return torch.ones((qx.shape[0], 1))
 
     return alphaSupportWeight
 
 
 ###################################################################
 def checkEndPoint(lossFunction, p0, p1, q1, d, numS, savedir):
-    q = torch.clone(q1).detach().requires_grad_(True).type(dtype)
-    p0n = torch.clone(p0).detach().requires_grad_(False).type(dtype)
-    p1n = torch.clone(p1).detach().requires_grad_(False).type(dtype)
+    q = torch.clone(q1).detach().requires_grad_(True)
+    p0n = torch.clone(p0).detach().requires_grad_(False)
+    p1n = torch.clone(p1).detach().requires_grad_(False)
 
     dLoss = lossFunction(q, p0n[(d + 1) * numS :])
     dLoss.backward()  # gradient of loss at end point with respect to q1
@@ -366,7 +359,7 @@ def HamiltonianSystem(K0, sigma, d, numS, cA=1.0, cT=1.0, dimEff=3, single=False
     H = Hamiltonian(K0, sigma, d, numS, cA, cT, dimEff, single)
 
     def HS(p, q):
-        Gp, Gq = grad(H(p, q), (p, q), create_graph=True)
+        Gp, Gq = torch.autograd.grad(H(p, q), (p, q), create_graph=True)
         return -Gq, Gp
 
     return HS
@@ -387,7 +380,7 @@ def HamiltonianSystemGrid(
         # qc = q[-d:].view(1,d)
         gx = qgrid.view(-1, d)
         gw = qgridw.view(-1, 1)
-        Gp, Gq = grad(H(p, q), (p, q), create_graph=True)
+        Gp, Gq = torch.autograd.grad(H(p, q), (p, q), create_graph=True)
         A, tau, Alpha = getATauAlpha(px, qx, pw, qw, dimEff=dimEff, single=single)
         xc = (qw * qx).sum(dim=0) / (qw.sum(dim=0))
         Gg = (
@@ -441,7 +434,7 @@ def HamiltonianSystemBackwards(
         pw = p[:numS].view(-1, 1)
         qx = q[numS:].view(-1, d)
         qw = q[:numS].view(-1, 1)  # torch.squeeze(q[:numS])[...,None]
-        Gp, Gq = grad(H(p, q), (p, q), create_graph=True)
+        Gp, Gq = torch.autograd.grad(H(p, q), (p, q), create_graph=True)
         A, tau, Alpha = getATauAlpha(px, qx, pw, qw, dimEff=dimEff, single=single)
         xc = (qw * qx).sum(dim=0) / (qw.sum(dim=0))
         Tx = T.view(-1, d)
@@ -507,17 +500,11 @@ def LDDMMloss(
         )
         dLoss = dataloss(q, p0[(d + 1) * numS :])
         if lambLoss is not None:
-            pLoss = (
-                gamma
-                * torch.tensor(cPi).type(dtype)
-                * piLoss(q, p0[(d + 1) * numS : -1])
-            )
+            pLoss = gamma * cPi * piLoss(q, p0[(d + 1) * numS : -1])
             lLoss = gamma * lambLoss(p0[-1])
         else:
-            pLoss = (
-                gamma * torch.tensor(cPi).type(dtype) * piLoss(q, p0[(d + 1) * numS :])
-            )
-            lLoss = torch.tensor(0.0).type(dtype)
+            pLoss = gamma * cPi * piLoss(q, p0[(d + 1) * numS :])
+            lLoss = torch.tensor(0.0)
         return hLoss, dLoss, pLoss, lLoss
         # return dataloss(q)
 
@@ -629,7 +616,7 @@ def PiRegularizationSystem(zeta_S, nu_T, numS, d, norm=True):
             nu_T
         )  # compare to overall distribution of features
     else:
-        nu_Tprob = (torch.ones((1, nu_T.shape[-1])) / nu_T.shape[-1]).type(dtype)
+        nu_Tprob = (torch.ones((1, nu_T.shape[-1])) / nu_T.shape[-1])
 
     def PiReg(q, pi_est):
         qw = q[:numS].view(-1, 1)
@@ -816,9 +803,9 @@ def makePQ(
     nu_S,
     T,
     nu_T,
-    Csqpi=torch.tensor(1.0).type(dtype),
-    lambInit=torch.tensor(0.5).type(dtype),
-    Csqlamb=torch.tensor(1.0).type(dtype),
+    Csqpi=1.,
+    lambInit=0.5,
+    Csqlamb=1.,
     norm=True,
 ):
     # initialize state vectors based on normalization
@@ -837,11 +824,10 @@ def makePQ(
             (w_S.clone().detach().flatten(), Stilde.clone().detach().flatten()), 0
         )
         .requires_grad_(True)
-        .type(dtype)
     )  # not adding extra element for xc
 
     # two alternatives (linked to variation of KL divergence norm that consider)
-    pi_STinit = torch.zeros((zeta_S.shape[-1], zeta_T.shape[-1])).type(dtype)
+    pi_STinit = torch.zeros((zeta_S.shape[-1], zeta_T.shape[-1]))
     nuSTtot = torch.sum(w_T) / torch.sum(w_S)
     if not norm:
         pi_STinit[:, :] = nu_T.sum(axis=0) / torch.sum(
@@ -864,7 +850,6 @@ def makePQ(
                 0,
             )
             .requires_grad_(True)
-            .type(dtype)
         )
     else:
         p0 = (
@@ -877,7 +862,6 @@ def makePQ(
                 0,
             )
             .requires_grad_(True)
-            .type(dtype)
         )
 
     return (
@@ -909,16 +893,16 @@ def callOptimize(
     labs,
     savedir,
     its=100,
-    kScale=torch.tensor(1.0).type(dtype),
+    kScale=1.,
     cA=1.0,
     cT=1.0,
     cS=10.0,
     cPi=1.0,
     dimEff=3,
-    Csqpi=torch.tensor(1.0).type(dtype),
-    Csqlamb=torch.tensor(1.0).type(dtype),
-    eta0=torch.sqrt(torch.tensor(0.1)).type(dtype),
-    lambInit=torch.tensor(0.5).type(dtype),
+    Csqpi=1.,
+    Csqlamb=1.,
+    eta0=1.,
+    lambInit=0.5,
     single=False,
     beta=None,
     loadPrevious=None,
@@ -955,17 +939,13 @@ def callOptimize(
         pi_STinit,
         lamb0,
     ) = makePQ(S, nu_S, T, nu_T, Csqpi=Csqpi, lambInit=lambInit, Csqlamb=Csqlamb)
-    N = torch.tensor(S.shape[0]).type(dtype)
+    N = S.shape[0]
 
-    pTilde = torch.zeros_like(p0).type(dtype)
+    pTilde = torch.zeros_like(p0)
     pTilde[0:numS] = torch.squeeze(
         torch.tensor(1.0 / (torch.sqrt(kScale) * dimEff * w_S))
-    ).type(
-        dtype
     )  # torch.sqrt(kScale)*torch.sqrt(kScale)
-    pTilde[numS : numS * (d + 1)] = torch.tensor(1.0 / torch.sqrt(kScale)).type(
-        dtype
-    )  # torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
+    pTilde[numS : numS * (d + 1)] = torch.tensor(1.0 / torch.sqrt(kScale))  # torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
     if lamb0 < 0:
         pTilde[(d + 1) * numS :] = Csqpi
     else:
@@ -975,7 +955,7 @@ def callOptimize(
 
     if lamb0 < 0:
         supportWeights = None
-        sW0 = torch.ones((Stilde.shape[0], 1)).type(dtype)
+        sW0 = torch.ones((Stilde.shape[0], 1))
     else:
         supportWeights = defineSupport(Ttilde)
         sW0 = supportWeights(Stilde, lamb0)
@@ -992,11 +972,11 @@ def callOptimize(
                 (sW0 * w_S * zeta_S) @ pi_STinit,
             )
             k2 = Kinit(Stilde, Ttilde, (sW0 * w_S * zeta_S) @ pi_STinit, w_T * zeta_T)
-            beta = torch.tensor(2.0 / (cinit + k1.sum() - 2.0 * k2.sum())).type(dtype)
-            print("beta is ", beta.detach().cpu().numpy())
+            beta = 2.0 / (cinit + k1.sum() - 2.0 * k2.sum())
+            print("beta is ", beta)
             beta = [
                 (0.6 / sigmaVar[0])
-                * torch.clone(2.0 / (cinit + k1.sum() - 2.0 * k2.sum())).type(dtype)
+                * torch.clone(2.0 / (cinit + k1.sum() - 2.0 * k2.sum()))
             ]
 
         # print out indiviual costs
@@ -1004,7 +984,7 @@ def callOptimize(
             print("different varifold norm at beginning")
             beta = []
             for sig in sigmaVar:
-                print("sig is ", sig.detach().cpu().numpy())
+                print("sig is ", sig)
                 Kinit = GaussLinKernelSingle(sig=sig, d=d, l=labs)
                 cinit = Kinit(Ttilde, Ttilde, w_T * zeta_T, w_T * zeta_T).sum()
                 k1 = Kinit(
@@ -1020,24 +1000,25 @@ def callOptimize(
                     ).sum()
                 )
                 beta.append(
-                    (0.6 / sig) * torch.clone(2.0 / (cinit + k1 + k2)).type(dtype)
+                    (0.6 / sig) * torch.clone(2.0 / (cinit + k1 + k2))
                 )
-                print("mu source norm ", k1.detach().cpu().numpy())
-                print("mu target norm ", cinit.detach().cpu().numpy())
-                print("total norm ", (cinit + k1 + k2).detach().cpu().numpy())
+                print("mu source norm ", k1)
+                print("mu target norm ", cinit)
+                print("total norm ", (cinit + k1 + k2))
+
     # Compute constants to weigh each kernel norm in RKHS by
     uCoeff = []
     for sig in sigmaRKHS:
         Kinit = GaussKernelSpaceSingle(sig=sig, d=d)
         uCoeff.append(
             torch.clone(
-                (torch.tensor(cS).type(dtype) * Kinit(Stilde, Stilde).sum())
+                (cS * Kinit(Stilde, Stilde).sum())
                 / (N * N * sig * sig)
-            ).type(dtype)
+            )
         )
     for ss in range(len(uCoeff)):
-        print("sig is ", sigmaRKHS[ss].detach().cpu().numpy())
-        print("uCoeff ", uCoeff[ss].detach().cpu().numpy())
+        print("sig is ", sigmaRKHS[ss])
+        print("uCoeff ", uCoeff[ss])
 
     cst, dataloss = lossVarifoldNorm(
         Ttilde,
@@ -1267,10 +1248,10 @@ def callOptimize(
         )
 
     XG, YG, ZG = torch.meshgrid((xGrid, yGrid, zGrid), indexing="ij")
-    qGrid = torch.stack((XG.flatten(), YG.flatten(), ZG.flatten()), axis=-1).type(dtype)
+    qGrid = torch.stack((XG.flatten(), YG.flatten(), ZG.flatten()), axis=-1)
     numG = qGrid.shape[0]
     qGrid = qGrid.flatten()
-    qGridw = torch.ones((numG)).type(dtype)
+    qGridw = torch.ones((numG))
 
     listpq = ShootingGrid(
         p0 * pTilde,
