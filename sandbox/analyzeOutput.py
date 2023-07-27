@@ -4,10 +4,9 @@ from matplotlib import pyplot as plt
 from sys import path as sys_path
 
 sys_path.append('../')
-sys_path.append('../xmodmap/')
-sys_path.append('../xmodmap/io/')
-import initialize as init
-import getOutput as gO
+
+import xmodmap.io.initialize as init
+import xmodmap.io.getOutput as gO
 
 import scipy as sp
 from scipy import linalg
@@ -25,7 +24,7 @@ if use_cuda:
 else:
     dtype = torch.FloatTensor
     
-    
+import xmodmap
 
 
 def getLocalDensity(Zi,nu_Zi,sigma,savename,coef=3):
@@ -70,8 +69,7 @@ def getLocalDensity(Zi,nu_Zi,sigma,savename,coef=3):
     imageDensity = []
     imageNames.append('TotalDensity')
     imageDensity.append(np.sum(cubes_mrna,axis=-1))
-    cubes_mrna_prob = cubes_mrna/(np.sum(cubes_mrna,axis=-1)[...,None])
-    cubes_mrna_prob[np.sum(cubes_mrna,axis=-1) == 0,:] = 0.0
+    cubes_mrna_prob = xmodmap.normalize(cubes_mrna)
     if (nu_Z.shape[-1] > 1):
         for f in range(nu_Z.shape[-1]):
             imageNames.append('Feature' + str(f) + '_Density')
