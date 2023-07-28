@@ -1,12 +1,18 @@
 import os
 import time
 
-import torch
-
 from pykeops.torch import Vi, Vj
 
 from matplotlib import pyplot as plt
 import matplotlib
+
+from xmodmap.boundary.support import defineSupport
+from xmodmap.deformation.control.affine import getATauAlpha
+from xmodmap.deformation.hamiltonian import hamiltonian
+from xmodmap.deformation.shooting import shooting, ShootingGrid, ShootingBackwards
+from xmodmap.distances.boundary import supportRestrictionReg
+from xmodmap.distances.kl import PiRegularizationSystem
+from xmodmap.distances.varifold import lossVarifoldNorm
 
 if "DISPLAY" in os.environ:
     matplotlib.use("qt5Agg")
@@ -85,189 +91,6 @@ def GaussKernelSpaceSingle(sig, d):
     return K.sum_reduction(axis=1)
 
 
-#################################################################
-# Compute Controls (A,Tau,U,div(U))
-# get A,tau,alpha
-def getATauAlpha(px, qx, pw, qw, cA=1.0, cT=1.0, dimEff=3, single=False):
-    xc = (qw * qx).sum(dim=0) / (qw.sum(dim=0))  # moving barycenters; should be 1 x 3
-    A = ((1.0 / (2.0 * cA)) * (px.T @ (qx - xc) - (qx - xc).T @ px))  # 3 x N * N x 3
-    tau = ((1.0 / cT) * (px.sum(dim=0)))
-
-    if dimEff == 2:
-        alpha = ((px * (qx - xc)).sum() + (pw * qw * dimEff).sum())
-        Alpha = torch.eye(3) * alpha
-        Alpha[-1, -1] = 0.0  # always scale Z by 0
-    elif dimEff == 3 and single:
-        alpha = ((px * (qx - xc)).sum() + (pw * qw * dimEff).sum())
-        Alpha = torch.eye(3) * alpha
-    else:
-        alpha_xy = 0.5 * (
-            (px[:, 0:2] * (qx - xc)[:, 0:2]).sum() + (pw * qw * 2.0).sum()
-        )
-        alpha_z = ((px[:, -1] * (qx - xc)[:, -1]).sum() + (pw * qw).sum())
-        Alpha = torch.eye(3) * alpha_xy
-        Alpha[-1, -1] = alpha_z
-
-    return A, tau, Alpha
-
-
-# compute U and divergence of U
-def getU(sigma, d, uCoeff):
-    xO, qyO, py, wpyO = Vi(0, d), Vj(1, d), Vj(2, d), Vj(3, 1)
-    # retVal = xO.sqdist(qyO)*torch.tensor(0)
-    for sInd in range(len(sigma)):
-        sig = sigma[sInd]
-        x, qy, wpy = xO / sig, qyO / sig, wpyO / sig
-        D2 = x.sqdist(qy)
-        K = (-D2 * 0.5).exp()  # G x N
-        h = py + wpy * (x - qy)  # 1 X N x 3
-        if sInd == 0:
-            retVal = (1.0 / uCoeff[sInd]) * K * h
-        else:
-            retVal += (1.0 / uCoeff[sInd]) * (K * h)  # .sum_reduction(axis=1)
-    return retVal.sum_reduction(axis=1)  # G x 3
-
-
-def getUdiv(sigma, d, uCoeff):
-    xO, qyO, py, wpyO = Vi(0, d), Vj(1, d), Vj(2, d), Vj(3, 1)
-    for sInd in range(len(sigma)):
-        sig = sigma[sInd]
-        x, qy, wpy = xO / sig, qyO / sig, wpyO / sig
-        D2 = x.sqdist(qy)
-        K = (-D2 * 0.5).exp()
-        h = wpy * (d - D2) - ((x - qy) * py).sum()
-        if sInd == 0:
-            retVal = (1.0 / (sig * uCoeff[sInd])) * K * h
-        else:
-            retVal += (1.0 / (sig * uCoeff[sInd])) * (K * h)  # .sum_reduction(axis=1)
-    return retVal.sum_reduction(axis=1)  # G x 1
-
-
-def defineSupport(Ttilde, eps=0.001):
-    # estimate normal vectors and points; assume coronal sections
-    zMin = torch.min(Ttilde[:, -1])
-    zMax = torch.max(Ttilde[:, -1])
-
-    print("zMin: ", zMin)
-    print("zMax: ", zMax)
-
-    if zMin == zMax:
-        zMin = torch.min(Ttilde[:, -2])
-        zMax = torch.max(Ttilde[:, -2])
-        print("new Zmin: ", zMin)
-        print("new Zmax: ", zMax)
-        sh = 0
-        co = 1
-        while sh < 2:
-            lineZMin = Ttilde[
-                torch.squeeze(
-                    Ttilde[:, -2] < (zMin + torch.tensor(co * eps))
-                ),
-                ...,
-            ]
-            lineZMax = Ttilde[
-                torch.squeeze(
-                    Ttilde[:, -2] > (zMax - torch.tensor(co * eps))
-                ),
-                ...,
-            ]
-            sh = min(lineZMin.shape[0], lineZMax.shape[0])
-            co += 1
-
-        print("lineZMin: ", lineZMin)
-        print("lineZMax: ", lineZMax)
-
-        tCenter = torch.mean(Ttilde, axis=0)
-
-        a0s = lineZMin[torch.randperm(lineZMin.shape[0])[0:2], ...]
-        a1s = lineZMax[torch.randperm(lineZMax.shape[0])[0:2], ...]
-
-        print("a0s: ", a0s)
-        print("a1s: ", a1s)
-
-        a0 = torch.mean(a0s, axis=0)
-        a1 = torch.mean(a1s, axis=0)
-
-        print("a0: ", a0)
-        print("a1: ", a1)
-
-        n0 = torch.tensor(
-            [-(a0s[1, 1] - a0s[0, 1]), (a0s[1, 0] - a0s[0, 0]), Ttilde[0, -1]]
-        )
-        n1 = torch.tensor(
-            [-(a1s[1, 1] - a1s[0, 1]), (a1s[1, 0] - a1s[0, 0]), Ttilde[0, -1]]
-        )
-        if torch.dot(tCenter - a0, n0) < 0:
-            n0 = -1.0 * n0
-
-        if torch.dot(tCenter - a1, n1) < 0:
-            n1 = -1.0 * n1
-
-    else:
-        sh = 0
-        co = 1
-        while sh < 3:
-            sliceZMin = Ttilde[
-                torch.squeeze(
-                    Ttilde[:, -1] < (zMin + torch.tensor(co * eps))
-                ),
-                ...,
-            ]
-            sliceZMax = Ttilde[
-                torch.squeeze(
-                    Ttilde[:, -1] > (zMax - torch.tensor(co * eps))
-                ),
-                ...,
-            ]
-            sh = min(sliceZMin.shape[0], sliceZMax.shape[0])
-            co += 1
-
-        print("sliceZMin: ", sliceZMin)
-        print("sliceZMax: ", sliceZMax)
-
-        tCenter = torch.mean(Ttilde, axis=0)
-
-        # pick 3 points on each approximate slice and take center and normal vector
-        a0s = sliceZMin[torch.randperm(sliceZMin.shape[0])[0:3], ...]
-        a1s = sliceZMax[torch.randperm(sliceZMax.shape[0])[0:3], ...]
-
-        print("a0s: ", a0s)
-        print("a1s: ", a1s)
-
-        a0 = torch.mean(a0s, axis=0)
-        a1 = torch.mean(a1s, axis=0)
-
-        n0 = torch.cross(a0s[1, ...] - a0s[0, ...], a0s[2, ...] - a0s[0, ...])
-        if torch.dot(tCenter - a0, n0) < 0:
-            n0 = -1.0 * n0
-
-        n1 = torch.cross(a1s[1, ...] - a1s[0, ...], a1s[2, ...] - a1s[0, ...])
-        if torch.dot(tCenter - a1, n1) < 0:
-            n1 = -1.0 * n1
-
-    # normalize vectors
-    n0 = n0 / torch.sqrt(torch.sum(n0**2))
-    n1 = n1 / torch.sqrt(torch.sum(n1**2))
-
-    # ensure dot product with barycenter vector to point is positive, otherwise flip sign of normal
-    print("n0: ", n0)
-    print("n1: ", n1)
-
-    def alphaSupportWeight(qx, lamb):
-        return (
-            0.5 * torch.tanh(torch.sum((qx - a0) * n0, axis=-1) / lamb)
-            + 0.5 * torch.tanh(torch.sum((qx - a1) * n1, axis=-1) / lamb)
-        )[..., None]
-
-    return alphaSupportWeight
-
-
-def noSupportEstimation(Ttilde):
-    def alphaSupportWeight(qx, lamb):
-        return torch.ones((qx.shape[0], 1))
-
-    return alphaSupportWeight
-
 
 ###################################################################
 def checkEndPoint(lossFunction, p0, p1, q1, d, numS, savedir):
@@ -300,176 +123,8 @@ def checkEndPoint(lossFunction, p0, p1, q1, d, numS, savedir):
 # Integration
 
 
-def RalstonIntegrator():
-    def f(ODESystem, x0, nt, deltat=1.0):
-        x = tuple(map(lambda x: x.clone(), x0))
-        dt = deltat / nt
-        l = [x]
-        for i in range(nt):
-            xdot = ODESystem(*x)
-            xi = tuple(map(lambda x, xdot: x + (2 * dt / 3) * xdot, x, xdot))
-            xdoti = ODESystem(*xi)
-            x = tuple(
-                map(
-                    lambda x, xdot, xdoti: x + (0.25 * dt) * (xdot + 3 * xdoti),
-                    x,
-                    xdot,
-                    xdoti,
-                )
-            )
-            l.append(x)
-        return l
-
-    return f
-
-
-#################################################################
-# Hamiltonian
-def Hamiltonian(K0, sigma, d, numS, cA=1.0, cT=1.0, dimEff=3, single=False):
-    # K0 = GaussKernelHamiltonian(x,x,px,px,w*pw,w*pw)
-    def H(p, q):
-        px = p[numS:].view(-1, d)
-        pw = p[:numS].view(-1, 1)
-        qx = q[numS:].view(-1, d)
-        qw = q[:numS].view(-1, 1)  # torch.squeeze(q[:numS])[...,None]
-
-        wpq = pw * qw
-        k = K0(qx, qx, px, px, wpq, wpq)  # k shape should be N x 1
-        # px = N x 3, qx = N x 3, qw = N x 1
-        A, tau, Alpha = getATauAlpha(
-            px, qx, pw, qw, cA, cT, dimEff, single
-        )  # getAtau( = (1.0/(2*alpha))*(px.T@(qx-qc) - (qx-qc).T@px) # should be d x d
-        Anorm = (A * A).sum()
-        Alphanorm = (Alpha * Alpha).sum()
-        return (
-            k.sum()
-            + (cA / 2.0) * Anorm
-            + (cT / 2.0) * (tau * tau).sum()
-            + (0.5) * Alphanorm
-        )
-
-    return H
-
-
-def HamiltonianSystem(K0, sigma, d, numS, cA=1.0, cT=1.0, dimEff=3, single=False):
-    H = Hamiltonian(K0, sigma, d, numS, cA, cT, dimEff, single)
-
-    def HS(p, q):
-        Gp, Gq = torch.autograd.grad(H(p, q), (p, q), create_graph=True)
-        return -Gq, Gp
-
-    return HS
-
-
-# Katie change this to include A and T for the grid
-def HamiltonianSystemGrid(
-    K0, sigma, d, numS, uCoeff, cA=1.0, cT=1.0, dimEff=3, single=False
-):
-    H = Hamiltonian(K0, sigma, d, numS, cA, cT, dimEff=dimEff, single=single)
-
-    def HS(p, q, qgrid, qgridw, T=None, wT=None):
-        px = p[numS:].view(-1, d)
-        pw = p[:numS].view(-1, 1)
-        qx = q[numS:].view(-1, d)
-        qw = q[:numS].view(-1, 1)  # torch.squeeze(q[:numS])[...,None]
-        # pc = p[-d:].view(1,d)
-        # qc = q[-d:].view(1,d)
-        gx = qgrid.view(-1, d)
-        gw = qgridw.view(-1, 1)
-        Gp, Gq = torch.autograd.grad(H(p, q), (p, q), create_graph=True)
-        A, tau, Alpha = getATauAlpha(px, qx, pw, qw, dimEff=dimEff, single=single)
-        xc = (qw * qx).sum(dim=0) / (qw.sum(dim=0))
-        Gg = (
-            getU(sigma, d, uCoeff)(gx, qx, px, pw * qw)
-            + (gx - xc) @ A.T
-            + tau
-            + (gx - xc) @ Alpha
-        ).flatten()
-        Ggw = (
-            getUdiv(sigma, d, uCoeff)(gx, qx, px, pw * qw) * gw + Alpha.sum() * gw
-        ).flatten()
-
-        if T == None:
-            return -Gq, Gp, Gg, Ggw
-        else:
-            print("including T")
-            Tx = T.view(-1, d)
-            wTw = wT.view(-1, 1)
-            Gt = (
-                -1.0
-                * (
-                    getU(sigma, d, uCoeff)(Tx, qx, px, pw * qw)
-                    + (Tx - xc) @ A.T
-                    + tau
-                    + (Tx - xc) @ Alpha
-                ).flatten()
-            )
-            Gtw = (
-                -1.0
-                * (
-                    getUdiv(sigma, d, uCoeff)(Tx, qx, px, pw * qw) * wTw
-                    + Alpha.sum() * wTw
-                ).flatten()
-            )
-            return -Gq, Gp, Gg, Ggw, Gt, Gtw
-
-    return HS
-
-
-def HamiltonianSystemBackwards(
-    K0, sigma, d, numS, uCoeff, cA=1.0, cT=1.0, dimEff=3, single=False
-):
-    # initial = integration from p0 and q0 just with negative velocity field and parameters (e.g. giving same p's)
-    # 06/25 = first try with just putting -px, -pw replacement only --> doesn't work (seems to give incorrect mapping)
-    # 06/26 = second try with just changing hamiltonian derivatives in terms of sign (change t --> 1 - t); scale off (too big)
-    # 7/01 = third try with starting with -p1, but keeping same integration scheme in terms of relation with hamiltonians
-    H = Hamiltonian(K0, sigma, d, numS, cA, cT, dimEff=dimEff, single=single)
-
-    def HS(p, q, T, wT):
-        px = p[numS:].view(-1, d)
-        pw = p[:numS].view(-1, 1)
-        qx = q[numS:].view(-1, d)
-        qw = q[:numS].view(-1, 1)  # torch.squeeze(q[:numS])[...,None]
-        Gp, Gq = torch.autograd.grad(H(p, q), (p, q), create_graph=True)
-        A, tau, Alpha = getATauAlpha(px, qx, pw, qw, dimEff=dimEff, single=single)
-        xc = (qw * qx).sum(dim=0) / (qw.sum(dim=0))
-        Tx = T.view(-1, d)
-        wTw = wT.view(-1, 1)
-        Gt = (
-            getU(sigma, d, uCoeff)(Tx, qx, px, pw * qw)
-            + (Tx - xc) @ A.T
-            + tau
-            + (Tx - xc) @ Alpha
-        ).flatten()
-        Gtw = (
-            getUdiv(sigma, d, uCoeff)(Tx, qx, px, pw * qw) * wTw + Alpha.sum() * wTw
-        ).flatten()
-        return -Gq, Gp, Gt, Gtw
-
-    return HS
-
-
 ##################################################################
 # Shooting
-
-
-def Shooting(
-    p0,
-    q0,
-    K0,
-    sigma,
-    d,
-    numS,
-    cA=1.0,
-    cT=1.0,
-    dimEff=3,
-    single=False,
-    nt=10,
-    Integrator=RalstonIntegrator(),
-):
-    return Integrator(
-        HamiltonianSystem(K0, sigma, d, numS, cA, cT, dimEff, single), (p0, q0), nt
-    )
 
 
 def LDDMMloss(
@@ -488,10 +143,10 @@ def LDDMMloss(
     single=False,
 ):
     def loss(p0, q0):
-        p, q = Shooting(
+        p, q = shooting(
             p0[: (d + 1) * numS], q0, K0, sigma, d, numS, dimEff=dimEff, single=single
         )[-1]
-        hLoss = gamma * Hamiltonian(K0, sigma, d, numS, cA, cT, dimEff, single=single)(
+        hLoss = gamma * hamiltonian(K0, sigma, d, numS, cA, cT, dimEff, single=single)(
             p0[: (d + 1) * numS], q0
         )
         dLoss = dataloss(q, p0[(d + 1) * numS :])
@@ -505,137 +160,6 @@ def LDDMMloss(
         # return dataloss(q)
 
     return loss
-
-
-def ShootingGrid(
-    p0,
-    q0,
-    qGrid,
-    qGridw,
-    K0,
-    sigma,
-    d,
-    numS,
-    uCoeff,
-    cA=1.0,
-    cT=1.0,
-    dimEff=3,
-    single=False,
-    nt=10,
-    Integrator=RalstonIntegrator(),
-    T=None,
-    wT=None,
-):
-    if T == None:
-        return Integrator(
-            HamiltonianSystemGrid(
-                K0, sigma, d, numS, uCoeff, cA, cT, dimEff, single=single
-            ),
-            (p0[: (d + 1) * numS], q0, qGrid, qGridw),
-            nt,
-        )
-    else:
-        print("T shape adn wT shape")
-        print(T.shape)
-        print(wT.shape)
-        print("G and wG shape")
-        print(qGrid.shape)
-        print(qGridw.shape)
-        return Integrator(
-            HamiltonianSystemGrid(
-                K0, sigma, d, numS, uCoeff, cA, cT, dimEff, single=single
-            ),
-            (p0[: (d + 1) * numS], q0, qGrid, qGridw, T, wT),
-            nt,
-        )
-
-
-def ShootingBackwards(
-    p1,
-    q1,
-    T,
-    wT,
-    K0,
-    sigma,
-    d,
-    numS,
-    uCoeff,
-    cA=1.0,
-    cT=1.0,
-    dimEff=3,
-    single=False,
-    nt=10,
-    Integrator=RalstonIntegrator(),
-):
-    return Integrator(
-        HamiltonianSystemBackwards(
-            K0, sigma, d, numS, uCoeff, cA, cT, dimEff, single=single
-        ),
-        (-p1[: (d + 1) * numS], q1, T, wT),
-        nt,
-    )
-
-
-#################################################################
-# Data Attachment Term
-# K kernel for Varifold Norm (GaussLinKernel)
-def lossVarifoldNorm(T, w_T, zeta_T, zeta_S, K, d, numS, supportWeight):
-    # print(w_T*zeta_T.cpu().numpy())
-    cst = (K(T, T, w_T * zeta_T, w_T * zeta_T)).sum()
-
-    def loss(sS, pi_est):
-        # sS will be in the form of q (w_S,S,x_c)
-        sSx = sS[numS:].view(-1, d)
-        sSw = sS[:numS].view(-1, 1)
-        if supportWeight is not None:
-            wSupport = supportWeight(sSx, pi_est[-1] ** 2)
-            sSw = wSupport * sSw
-            pi_ST = (pi_est[:-1].view(zeta_S.shape[-1], zeta_T.shape[-1])) ** 2
-        else:
-            pi_ST = (pi_est.view(zeta_S.shape[-1], zeta_T.shape[-1])) ** 2
-        nu_Spi = (sSw * zeta_S) @ pi_ST  # Ns x L * L x F
-
-        k1 = K(sSx, sSx, nu_Spi, nu_Spi)
-        k2 = K(sSx, T, nu_Spi, w_T * zeta_T)
-
-        return (1.0 / 2.0) * (cst + k1.sum() - 2.0 * k2.sum())
-
-    return cst.detach(), loss
-
-
-# pi regularization (KL divergence)
-def PiRegularizationSystem(zeta_S, nu_T, numS, d, norm=True):
-    nuTconst = torch.sum(nu_T)
-    # two alternatives for distribution to compare to
-    if not norm:
-        nu_Tprob = torch.sum(nu_T, dim=0) / torch.sum(
-            nu_T
-        )  # compare to overall distribution of features
-    else:
-        nu_Tprob = (torch.ones((1, nu_T.shape[-1])) / nu_T.shape[-1])
-
-    def PiReg(q, pi_est):
-        qw = q[:numS].view(-1, 1)
-        mass_S = torch.sum(qw * zeta_S, dim=0)
-        qwSum = torch.sum(qw, dim=0)[None, ...]
-        pi_ST = (pi_est.view(zeta_S.shape[-1], nu_T.shape[-1])) ** 2
-        pi_S = torch.sum(pi_ST, dim=-1)
-        pi_STprob = pi_ST / pi_S[..., None]
-        numer = pi_STprob / nu_Tprob
-        di = mass_S @ (pi_ST * (torch.log(numer)))
-        return (1.0 / nuTconst) * di.sum()
-
-    return PiReg
-
-
-# boundary weight regularization
-def supportRestrictionReg(eta0=torch.sqrt(torch.tensor(0.1))):
-    def etaReg(eta):
-        lamb = (eta / eta0) ** 2
-        reg = lamb * torch.log(lamb) + 1.0 - lamb
-        return reg
-
-    return etaReg
 
 
 ##################################################################
@@ -663,7 +187,7 @@ def printCurrentVariables(
     p0 = p0Curr
     torch.save(p0, os.path.join(savedir, f"p0_iter{itCurr}.pt"))
 
-    pqList = Shooting(
+    pqList = shooting(
         p0Curr[: (d + 1) * numS],
         q0Curr,
         K0,
