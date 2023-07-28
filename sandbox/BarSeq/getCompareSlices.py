@@ -23,27 +23,30 @@ import numpy as np
 
 
 def main():
-    indices = [0, 9, 19, 29, 39]  # 0, 9, 19, 29, 39
-    resAtlas = [0.01, 0.01, 0.01]
-    imgS = "/cis/home/kstouff4/Documents/MeshRegistration/TestImages/Allen_10_anno_16bit_ap_672.img"
-    res = 0.001  # TO DO --> check whether this refers to scale of 1 or in um
-    savepref = "/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/AllenAtlas200ToBarSeq/output_dl_sig_its_csgamma_N-35_[0.2, 0.1, 0.05][0.5, 0.2, 0.05, 0.02]_4_10.010000.00.1_67827flipFullAtlasLamb/"
-    savepref = "/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/AllenAtlas200ToBarSeq28/output_dl_sig_its_csgamma_N-328_[0.2, 0.1, 0.05][0.5, 0.2, 0.05, 0.02]_100_10.010000.00.1_67827flipFullAtlasLamb/"
-    targHigh = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/BarSeqAligned/top28MI/sig0.1_dimEff2/initialHigh_All.npz"
-    # savepref='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/AllenAtlas200ToBarSeq/output_dl_sig_its_csgamma_N-35_[0.2, 0.1, 0.05][0.5, 0.2, 0.05, 0.02]_2_10.010000.00.1_67827flipFullAtlasLamb/'
-    paramsFile = savepref + "State__params.pt"
-
-    # _,_,_,_,s,m = ss.loadVariables(paramsFile.replace('params','variables'))
-
-    # variablesFile = savepref + 'testOutput_values.npz'
-    # v = np.load(variablesFile)
-    # p0 = v['p0']
-    # q0 = v['q0']
-    variablesFile = savepref + "State__variables.pt"
-    q0, p0, Ttilde, wT, s, m = ss.loadVariables(variablesFile)
-    v = np.load(savepref + "testOutput_targetScaled.npz")
-    zeta_T = torch.tensor(v["zeta_T"]).type(dtype)
-    nu_T = wT * zeta_T
+    indices=[0,9,19,29,39] # 0, 9, 19, 29, 39
+    indices=[38]
+    resAtlas = [0.01,0.01,0.01]
+    imgS = '/cis/home/kstouff4/Documents/MeshRegistration/TestImages/Allen_10_anno_16bit_ap_672.img'
+    res = 0.001 # TO DO --> check whether this refers to scale of 1 or in um 
+    savepref = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/AllenAtlas200ToBarSeq/output_dl_sig_its_csgamma_N-35_[0.2, 0.1, 0.05][0.5, 0.2, 0.05, 0.02]_4_10.010000.00.1_67827flipFullAtlasLamb/'
+    targHigh = None
+    #savepref = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/AllenAtlas200ToBarSeq28/output_dl_sig_its_csgamma_N-328_[0.2, 0.1, 0.05][0.5, 0.2, 0.05, 0.02]_100_10.010000.00.1_67827flipFullAtlasLamb/'
+    #targHigh = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/BarSeqAligned/top28MI/sig0.1_dimEff2/initialHigh_All.npz'
+    #savepref='/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/BarSeq/AllenAtlas200ToBarSeq/output_dl_sig_its_csgamma_N-35_[0.2, 0.1, 0.05][0.5, 0.2, 0.05, 0.02]_2_10.010000.00.1_67827flipFullAtlasLamb/'
+    paramsFile = savepref + 'State__params.pt'
+    
+    #_,_,_,_,s,m = ss.loadVariables(paramsFile.replace('params','variables'))
+    
+    #variablesFile = savepref + 'testOutput_values.npz'
+    #v = np.load(variablesFile)
+    #p0 = v['p0']
+    #q0 = v['q0']
+    variablesFile = savepref + 'State__variables.pt'
+    q0,p0,Ttilde,wT,s,m = ss.loadVariables(variablesFile)
+    v = np.load(savepref + 'testOutput_targetScaled.npz')
+    zeta_T = torch.tensor(v['zeta_T']).type(dtype)
+    nu_T = wT*zeta_T
+    
 
     # get high resolution Target
     if targHigh is not None:
