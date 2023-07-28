@@ -6,13 +6,12 @@ from pykeops.torch import Vi, Vj
 from matplotlib import pyplot as plt
 import matplotlib
 
-from xmodmap.boundary.support import defineSupport
 from xmodmap.deformation.control.affine import getATauAlpha
 from xmodmap.deformation.hamiltonian import hamiltonian
 from xmodmap.deformation.shooting import shooting, ShootingGrid, ShootingBackwards
 from xmodmap.distances.boundary import supportRestrictionReg
 from xmodmap.distances.kl import PiRegularizationSystem
-from xmodmap.distances.varifold import lossVarifoldNorm
+from xmodmap.distances.varifold import LossVarifoldNorm
 
 if "DISPLAY" in os.environ:
     matplotlib.use("qt5Agg")
@@ -60,27 +59,9 @@ def GaussKernelHamiltonian(sigma, d, uCoeff):
 
 
 # |\mu_s - \mu_T |_sigma^2
-def GaussLinKernelSingle(sig, d, l):
-    # u and v are the feature vectors
-    x, y, u, v = Vi(0, d), Vj(1, d), Vi(2, l), Vj(3, l)
-    D2 = x.sqdist(y)
-    K = (-D2 / (2.0 * sig * sig)).exp() * (u * v).sum()
-    return K.sum_reduction(axis=1)
 
 
-# \sum_sigma \beta/2 * |\mu_s - \mu_T|^2_\sigma
-def GaussLinKernel(sigma, d, l, beta):
-    # u and v are the feature vectors
-    x, y, u, v = Vi(0, d), Vj(1, d), Vi(2, l), Vj(3, l)
-    D2 = x.sqdist(y)
-    for sInd in range(len(sigma)):
-        sig = sigma[sInd]
-        K = (-D2 / (2.0 * sig * sig)).exp() * (u * v).sum()
-        if sInd == 0:
-            retVal = beta[sInd] * K
-        else:
-            retVal += beta[sInd] * K
-    return (retVal).sum_reduction(axis=1)
+
 
 
 # k(x^\sigma - y^\sigma)
@@ -117,14 +98,6 @@ def checkEndPoint(lossFunction, p0, p1, q1, d, numS, savedir):
     f.savefig(os.path.join(savedir, "checkPoint.png"), dpi=300)
 
     return
-
-
-###################################################################
-# Integration
-
-
-##################################################################
-# Shooting
 
 
 def LDDMMloss(
@@ -473,58 +446,7 @@ def callOptimize(
         pTilde[-1] = Csqlamb
     savepref = os.path.join(savedir, "State_")
 
-    if lamb0 < 0:
-        supportWeights = None
-        sW0 = torch.ones((Stilde.shape[0], 1))
-    else:
-        supportWeights = defineSupport(Ttilde)
-        sW0 = supportWeights(Stilde, lamb0)
 
-    if beta is None:
-        # set beta to make ||mu_S - mu_T||^2 = 1
-        if len(sigmaVar) == 1:
-            Kinit = GaussLinKernelSingle(sig=sigmaVar[0], d=d, l=labs)
-            cinit = Kinit(Ttilde, Ttilde, w_T * zeta_T, w_T * zeta_T).sum()
-            k1 = Kinit(
-                Stilde,
-                Stilde,
-                (sW0 * w_S * zeta_S) @ pi_STinit,
-                (sW0 * w_S * zeta_S) @ pi_STinit,
-            )
-            k2 = Kinit(Stilde, Ttilde, (sW0 * w_S * zeta_S) @ pi_STinit, w_T * zeta_T)
-            beta = 2.0 / (cinit + k1.sum() - 2.0 * k2.sum())
-            print("beta is ", beta)
-            beta = [
-                (0.6 / sigmaVar[0])
-                * torch.clone(2.0 / (cinit + k1.sum() - 2.0 * k2.sum()))
-            ]
-
-        # print out indiviual costs
-        else:
-            print("different varifold norm at beginning")
-            beta = []
-            for sig in sigmaVar:
-                print("sig is ", sig)
-                Kinit = GaussLinKernelSingle(sig=sig, d=d, l=labs)
-                cinit = Kinit(Ttilde, Ttilde, w_T * zeta_T, w_T * zeta_T).sum()
-                k1 = Kinit(
-                    Stilde,
-                    Stilde,
-                    (sW0 * w_S * zeta_S) @ pi_STinit,
-                    (sW0 * w_S * zeta_S) @ pi_STinit,
-                ).sum()
-                k2 = (
-                    -2.0
-                    * Kinit(
-                        Stilde, Ttilde, (sW0 * w_S * zeta_S) @ pi_STinit, w_T * zeta_T
-                    ).sum()
-                )
-                beta.append(
-                    (0.6 / sig) * torch.clone(2.0 / (cinit + k1 + k2))
-                )
-                print("mu source norm ", k1)
-                print("mu target norm ", cinit)
-                print("total norm ", (cinit + k1 + k2))
 
     # Compute constants to weigh each kernel norm in RKHS by
     uCoeff = []
@@ -540,16 +462,23 @@ def callOptimize(
         print("sig is ", sigmaRKHS[ss])
         print("uCoeff ", uCoeff[ss])
 
-    cst, dataloss = lossVarifoldNorm(
-        Ttilde,
-        w_T,
-        zeta_T,
-        zeta_S,
-        GaussLinKernel(sigma=sigmaVar, d=d, l=labs, beta=beta),
+    dataloss = LossVarifoldNorm(
+        beta,
+        sigmaVar,
         d,
-        numS,
-        supportWeights,
+        labs,
+        w_S,
+        w_T,
+        zeta_S,
+        zeta_T,
+        pi_STinit,
+        Stilde,
+        Ttilde,
+        lamb0
     )
+
+    cst = dataloss.cst.detach()
+
     piLoss = PiRegularizationSystem(zeta_S, nu_T, numS, d)
     Kg = GaussKernelHamiltonian(sigma=sigmaRKHS, d=d, uCoeff=uCoeff)
     if lamb0 < 0:
@@ -702,7 +631,7 @@ def callOptimize(
                 s,
                 m,
                 savedir,
-                supportWeights,
+                dataloss.supportWeight,
                 dimEff=dimEff,
                 single=single,
             )
