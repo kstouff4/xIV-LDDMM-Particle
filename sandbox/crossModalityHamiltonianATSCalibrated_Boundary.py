@@ -7,8 +7,9 @@ from matplotlib import pyplot as plt
 import matplotlib
 
 from xmodmap.deformation.control.affine import getATauAlpha
-from xmodmap.deformation.hamiltonian import hamiltonian
+from xmodmap.deformation.Hamiltonian import Hamiltonian
 from xmodmap.deformation.shooting import shooting, ShootingGrid, ShootingBackwards
+from xmodmap.deformation.Shooting import Shooting
 from xmodmap.distances.boundary import supportRestrictionReg
 from xmodmap.distances.kl import PiRegularizationSystem
 from xmodmap.distances.varifold import LossVarifoldNorm
@@ -101,6 +102,7 @@ def checkEndPoint(lossFunction, p0, p1, q1, d, numS, savedir):
 
 
 def LDDMMloss(
+    Stilde,
     K0,
     sigma,
     d,
@@ -116,12 +118,14 @@ def LDDMMloss(
     single=False,
 ):
     def loss(p0, q0):
-        p, q = shooting(
-            p0[: (d + 1) * numS], q0, K0, sigma, d, numS, dimEff=dimEff, single=single
-        )[-1]
-        hLoss = gamma * hamiltonian(K0, sigma, d, numS, cA, cT, dimEff, single=single)(
+
+        shoot = Shooting(sigma, Stilde, cA=cA, cT=cT, dimEff=dimEff, single=single)
+        p, q = shoot(p0[: (d + 1) * numS], q0)[-1]
+
+        hLoss = gamma * Hamiltonian(sigma, Stilde, cA=cA, cT=cT, dimEff=dimEff, single=single)(
             p0[: (d + 1) * numS], q0
         )
+
         dLoss = dataloss(q, p0[(d + 1) * numS :])
         if lambLoss is not None:
             pLoss = gamma * cPi * piLoss(q, p0[(d + 1) * numS : -1])
@@ -487,6 +491,7 @@ def callOptimize(
         lambLoss = supportRestrictionReg(eta0)
 
     loss = LDDMMloss(
+        Stilde,
         Kg,
         sigmaRKHS,
         d,

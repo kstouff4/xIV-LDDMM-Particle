@@ -29,6 +29,7 @@ torch.set_default_tensor_type(dtype)
 # set random seed
 torch.manual_seed(0)
 np.random.seed(0)
+torch.set_printoptions(precision=6)
 
 
 def main():
@@ -96,6 +97,8 @@ def main():
 
     print("Dlist", Dlist[-1])
     print("nu_DPilist", nu_DPilist[-1])
+    print("Glist", Glist[-1])
+    print("nu_Glist", nu_Glist[-1])
 
     return
 
