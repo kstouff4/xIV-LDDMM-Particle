@@ -8,8 +8,8 @@ import matplotlib
 
 from xmodmap.deformation.control.affine import getATauAlpha
 from xmodmap.deformation.Hamiltonian import Hamiltonian
-from xmodmap.deformation.shooting import shooting, ShootingGrid, ShootingBackwards
-from xmodmap.deformation.Shooting import Shooting
+from xmodmap.deformation.shooting import shooting, ShootingBackwards
+from xmodmap.deformation.Shooting import Shooting, ShootingGrid
 from xmodmap.distances.boundary import supportRestrictionReg
 from xmodmap.distances.kl import PiRegularizationSystem
 from xmodmap.distances.varifold import LossVarifoldNorm
@@ -112,6 +112,7 @@ def LDDMMloss(
     piLoss,
     lambLoss,
     cA=1.0,
+    cS=10.,
     cT=1.0,
     cPi=10.0,
     dimEff=3,
@@ -119,10 +120,10 @@ def LDDMMloss(
 ):
     def loss(p0, q0):
 
-        shoot = Shooting(sigma, Stilde, cA=cA, cT=cT, dimEff=dimEff, single=single)
+        shoot = Shooting(sigma, Stilde, cA=cA, cS=cS, cT=cT, dimEff=dimEff, single=single)
         p, q = shoot(p0[: (d + 1) * numS], q0)[-1]
 
-        hLoss = gamma * Hamiltonian(sigma, Stilde, cA=cA, cT=cT, dimEff=dimEff, single=single)(
+        hLoss = gamma * Hamiltonian(sigma, Stilde, cA=cA, cS=cS, cT=cT, dimEff=dimEff, single=single)(
             p0[: (d + 1) * numS], q0
         )
 
@@ -707,21 +708,9 @@ def callOptimize(
     qGrid = qGrid.flatten()
     qGridw = torch.ones((numG))
 
-    listpq = ShootingGrid(
-        p0 * pTilde,
-        q0,
-        qGrid,
-        qGridw,
-        Kg,
-        sigmaRKHS,
-        d,
-        numS,
-        uCoeff,
-        cA,
-        cT,
-        dimEff,
-        single=single,
-    )
+    shootgrid = ShootingGrid(sigmaRKHS, Stilde, cA=cA, cT=cT, dimEff=dimEff, single=single)
+    listpq = shootgrid((p0 * pTilde)[: (d + 1) * numS], q0, qGrid, qGridw)
+
     print("length of pq list is, ", len(listpq))
     Dlist = []
     nu_Dlist = []

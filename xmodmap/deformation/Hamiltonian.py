@@ -89,7 +89,7 @@ class HamiltonianSystemGrid(Hamiltonian):
     def __init__(self, sigma, Stilde, cA=1.0, cS=10.0, cT=1.0, dimEff=3, single=False):
         super().__init__(sigma, Stilde, cA=cA, cS=cS, cT=cT, dimEff=dimEff, single=single)
 
-    def __call__(self, p, q, qgrid, qgridw, T=None, wT=None):
+    def __call__(self, p, q, qgrid, qgridw):
         # TODO: avoid to pack and unpack p and q
         px = p[self.numS:].view(-1, self.d)
         pw = p[:self.numS].view(-1, 1)
@@ -113,32 +113,8 @@ class HamiltonianSystemGrid(Hamiltonian):
             + Alpha.sum() * gw
         ).flatten()
 
-        if T == None:
-            return -Gq, Gp, Gg, Ggw
-        else:
-            # TODO: check if this is actually used
-            # print("including T")
-            # Tx = T.view(-1, d)
-            # wTw = wT.view(-1, 1)
-            # Gt = (
-            #     -1.0
-            #     * (
-            #         getU(sigma, d, uCoeff)(Tx, qx, px, pw * qw)
-            #         + (Tx - xc) @ A.T
-            #         + tau
-            #         + (Tx - xc) @ Alpha
-            #     ).flatten()
-            # )
-            # Gtw = (
-            #     -1.0
-            #     * (
-            #         getUdiv(sigma, d, uCoeff)(Tx, qx, px, pw * qw) * wTw
-            #         + Alpha.sum() * wTw
-            #     ).flatten()
-            # )
-            # return -Gq, Gp, Gg, Ggw, Gt, Gtw
-            # throw implementation error
-            raise NotImplementedError
+        return -Gq, Gp, Gg, Ggw
+
 
 
 
