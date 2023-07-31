@@ -1,13 +1,11 @@
 import os
 import time
 import numpy as np
-from numpy import random
 import scipy as sp
 
 import torch
 from torch.autograd import grad
 
-import pykeops
 from pykeops.torch import Vi, Vj
 
 np_dtype = "float32"  # "float64"
@@ -25,7 +23,7 @@ if "DISPLAY" in os.environ:
 else:
     matplotlib.use("Agg")
 
-import xmodmap.io.initialize as init
+import xmodmap.preprocess.preprocess as init
 from sandbox.saveState import *
 import xmodmap.io.getOutput as gO
 

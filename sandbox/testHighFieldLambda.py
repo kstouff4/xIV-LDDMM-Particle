@@ -153,8 +153,8 @@ def main():
     # cPi=torch.tensor(0.1/np.log(labs)).type(dtype) #0.1
 
     # Trying Rotation manually
-    # Arot = init.get3DRotMatrix(torch.tensor(0.0),torch.tensor(np.pi/16.0),torch.tensor(np.pi/8.0))
-    # T,nu_T = init.applyAffine(T,nu_T,Arot,torch.zeros((1,d)).type(dtype))
+    # Arot = preprocess.get3DRotMatrix(torch.tensor(0.0),torch.tensor(np.pi/16.0),torch.tensor(np.pi/8.0))
+    # T,nu_T = preprocess.applyAffine(T,nu_T,Arot,torch.zeros((1,d)).type(dtype))
 
     # changing number of particles based on scale
     # S, nu_S = gI.returnMultiplesSpace(S,nu_S,kScale)

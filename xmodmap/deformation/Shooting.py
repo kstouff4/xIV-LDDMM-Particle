@@ -49,10 +49,10 @@ class Shooting(Abstract_Shooting):
                                  dimEff=self.dimEff,
                                  single=self.single)
 
-    def __call__(self, p0, q0):
+    def __call__(self, p0, qx0, qw0):
         return self.integrator(
             self.HS,
-            (p0, q0),
+            (p0, qx0, qw0),
             self.nt
         )
 
@@ -78,10 +78,10 @@ class ShootingGrid(Abstract_Shooting):
                                  dimEff=self.dimEff,
                                  single=self.single)
 
-    def __call__(self, p0, q0, qGrid, qGridw):
+    def __call__(self, p0, qx0, qw0, qGrid, qGridw):
         return self.integrator(
             self.HS,
-            (p0, q0, qGrid, qGridw),
+            (p0, qx0, qw0, qGrid, qGridw),
             self.nt,
         )
 
@@ -108,7 +108,7 @@ class ShootingBackwards(Abstract_Shooting):
                                     dimEff=self.dimEff,
                                     single=self.single)
 
-    def __call__(self, p1, q1, T, wT):
+    def __call__(self, p1, qx1, qw1, T, wT):
         """
         :param p1: final momentum
         :param q1: final position
@@ -120,6 +120,6 @@ class ShootingBackwards(Abstract_Shooting):
         """
         return self.integrator(
             self.HS,
-            (-p1, q1, T, wT),  # minus sign because we are going backwards in time
+            (-p1, qx1, qw1, T, wT),  # minus sign because we are going backwards in time
             self.nt
         )

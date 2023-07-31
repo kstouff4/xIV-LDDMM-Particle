@@ -10,7 +10,7 @@ from xmodmap.distances.kl import PiRegularizationSystem
 from xmodmap.distances.varifold import LossVarifoldNorm
 from xmodmap.model.CrossModality import LDDMMloss
 
-import xmodmap.io.initialize as init
+import xmodmap.preprocess.preprocess as preprocess
 from sandbox.saveState import *
 import xmodmap.io.getOutput as gO
 
@@ -97,7 +97,7 @@ def printCurrentVariables(
     nu_D = torch.squeeze(muD[0:numS])[..., None] * zeta_S
     zeta_D = nu_D / torch.sum(nu_D, axis=-1)[..., None]
     nu_Dpi = nu_D @ pi_ST
-    Ds = init.resizeData(D, s, m)
+    Ds = preprocess.resizeData(D, s, m)
     zeta_Dpi = nu_Dpi / torch.sum(nu_Dpi, axis=-1)[..., None]
     print("nu_D shape original: ", nu_D.shape)
 
@@ -132,7 +132,7 @@ def printCurrentVariables(
         nu_D = wS * torch.squeeze(muD[0:numS])[..., None] * zeta_S
         zeta_D = nu_D / torch.sum(nu_D, axis=-1)[..., None]
         nu_Dpi = nu_D @ pi_ST
-        Ds = init.resizeData(D, s, m)
+        Ds = preprocess.resizeData(D, s, m)
         zeta_Dpi = nu_Dpi / torch.sum(nu_Dpi, axis=-1)[..., None]
         imageValsSpi = [torch.sum(nu_Dpi, axis=-1), torch.argmax(nu_Dpi, axis=-1), wS]
         imageValsS = [torch.sum(nu_D, axis=-1), torch.argmax(nu_D, axis=-1), wS]
@@ -215,7 +215,7 @@ def makePQ(
     zeta_T[torch.squeeze(w_T == 0), ...] = torch.tensor(0.0)
     numS = w_S.shape[0]
 
-    Stilde, Ttilde, s, m = init.rescaleData(S, T)
+    Stilde, Ttilde, s, m = preprocess.rescaleData(S, T)
 
     q0 = (
         torch.cat(
@@ -338,18 +338,28 @@ def callOptimize(
         pi_STinit,
         lamb0,
     ) = makePQ(S, nu_S, T, nu_T, Csqpi=Csqpi, lambInit=lambInit, Csqlamb=Csqlamb)
-    N = S.shape[0]
 
-    pTilde = torch.zeros_like(p0)
-    pTilde[0:numS] = torch.squeeze(
-        torch.tensor(1.0 / (torch.sqrt(kScale) * dimEff * w_S))
-    )  # torch.sqrt(kScale)*torch.sqrt(kScale)
-    pTilde[numS : numS * (d + 1)] = torch.tensor(1.0 / torch.sqrt(kScale))  # torch.sqrt(kScale)*1.0/(cScale*torch.sqrt(kScale))
+    qx = Stilde.clone().detach().requires_grad_(True)
+    qw = w_S.clone().detach().requires_grad_(True)
+
+    px = torch.zeros_like(qx).requires_grad_(True)
+    pw = torch.zeros_like(qw).requires_grad_(True)
+
+    pwTilde = torch.tensor(1.0 / (torch.sqrt(kScale) * dimEff * w_S))
+    pxTilde = torch.tensor(1.0 / torch.sqrt(kScale))
+
+
+    pi_ST = (pi_STinit.sqrt().clone().detach() / Csqpi).requires_grad_(True)
+
     if lamb0 < 0:
+        variable_to_optimize = [px, pw, pi_ST]
         pTilde[(d + 1) * numS :] = Csqpi
+        lambLoss = None
     else:
         pTilde[(d + 1) * numS : -1] = Csqpi
         pTilde[-1] = Csqlamb
+        lambLoss = supportRestrictionReg(eta0)
+
     savepref = os.path.join(savedir, "State_")
 
 
@@ -372,10 +382,6 @@ def callOptimize(
 
     piLoss = PiRegularizationSystem(zeta_S, nu_T, numS, d)
 
-    if lamb0 < 0:
-        lambLoss = None
-    else:
-        lambLoss = supportRestrictionReg(eta0)
 
     loss = LDDMMloss(
         Stilde,
@@ -433,7 +439,7 @@ def callOptimize(
 
     def closure():
         optimizer.zero_grad()
-        LH, LDA, LPI, LL = loss(p0 * pTilde, q0)
+        LH, LDA, LPI, LL = loss(p0 * pTilde, qx, qw)
         L = LH + LDA + LPI + LL
         """
         print("loss", L.detach().cpu().numpy())
@@ -554,8 +560,7 @@ def callOptimize(
     f.savefig(os.path.join(savedir, "CostOuterIter.png"), dpi=300)
 
     # Print out deformed states
-    # listpq = Shooting(p0, q0, Kg, Kv, sigmaRKHS,d,numS)
-    coords = q0[numS:].detach().view(-1, d)
+    coords = qx
     rangesX = (torch.max(coords[..., 0]) - torch.min(coords[..., 0])) / 100.0
     rangesY = (torch.max(coords[..., 1]) - torch.min(coords[..., 1])) / 100.0
     rangesZ = (torch.max(coords[..., 2]) - torch.min(coords[..., 2])) / 100.0
@@ -595,7 +600,7 @@ def callOptimize(
     qGridw = torch.ones((numG))
 
     shootgrid = ShootingGrid(sigmaRKHS, Stilde, cA=cA, cT=cT, dimEff=dimEff, single=single)
-    listpq = shootgrid((p0 * pTilde)[: (d + 1) * numS], q0, qGrid, qGridw)
+    listpq = shootgrid((p0 * pTilde)[: (d + 1) * numS], qx, qw, qGrid, qGridw)
 
     print("length of pq list is, ", len(listpq))
     Dlist = []
@@ -644,13 +649,13 @@ def callOptimize(
         muD = qnp.detach()
         nu_D = torch.squeeze(muD[0:numS])[..., None] * zeta_S.detach()
         nu_Dpi = nu_D @ pi_STfinal
-        Dlist.append(init.resizeData(D, s, m))
+        Dlist.append(preprocess.resizeData(D, s, m))
         nu_Dlist.append(nu_D)
         nu_DPilist.append(nu_Dpi)
 
         gt = listpq[t][2]
         G = gt.detach().view(-1, d)
-        Glist.append(init.resizeData(G, s, m))
+        Glist.append(preprocess.resizeData(G, s, m))
         gw = listpq[t][3]
         wGlist.append(gw.detach())
 
@@ -661,7 +666,7 @@ def callOptimize(
 
     for t in range(len(listBack)):
         Tt = listBack[t][2]
-        Tlist.append(init.resizeData(Tt.detach().view(-1, d), s, m))
+        Tlist.append(preprocess.resizeData(Tt.detach().view(-1, d), s, m))
         wTt = listBack[t][3]
         nuTlist.append(wTt.detach()[..., None] * zeta_T.detach())
 
@@ -689,9 +694,9 @@ def callOptimize(
     pNew = pTilde * p0
     A, tau, Alpha = getATauAlpha(
         pNew[numS : (d + 1) * numS].view(-1, d),
-        q0[numS:].view(-1, d),
+        qx,
         pNew[:numS].view(-1, 1),
-        q0[:numS].view(-1, 1),
+        qw,
         dimEff=dimEff,
         single=single,
     )
@@ -703,12 +708,11 @@ def callOptimize(
     A0 = A
     tau0 = tau
     p0 = pNew
-    q0 = q0
     alpha0 = Alpha
     pTilde = pTilde
     pi_ST = pi_STfinal
     torch.save(
-        [A0, tau0, p0, q0, alpha0, pTilde, pi_ST],
+        [A0, tau0, p0, qx, qw, alpha0, pTilde, pi_ST],
         os.path.join(savedir, "testOutput_values.pt"),
     )
 

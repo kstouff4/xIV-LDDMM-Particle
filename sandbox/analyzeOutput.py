@@ -1,11 +1,9 @@
 import numpy as np
-import matplotlib
 from matplotlib import pyplot as plt
 from sys import path as sys_path
 
 sys_path.append("../")
 
-import xmodmap.io.initialize as init
 import xmodmap.io.getOutput as gO
 
 import scipy as sp

@@ -87,12 +87,12 @@ def main():
     N = S.shape[0]
 
     # Trying Rotation manually
-    # Arot = init.get3DRotMatrix(torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0))
+    # Arot = preprocess.get3DRotMatrix(torch.tensor(0.0),torch.tensor(0.0),torch.tensor(0.0))
     # tauManual = torch.zeros((1,d)).type(dtype)
     # tauManual[0,0] = torch.tensor(2.0).type(dtype)
-    # T,nu_T = init.applyAffine(T,nu_T,Arot,tauManual)
+    # T,nu_T = preprocess.applyAffine(T,nu_T,Arot,tauManual)
 
-    # S,nu_S = init.scaleDataByVolumes(S,nu_S,T,nu_T,dRel=2) # dRel for what relative volume is
+    # S,nu_S = preprocess.scaleDataByVolumes(S,nu_S,T,nu_T,dRel=2) # dRel for what relative volume is
 
     savedir = (
         outpath

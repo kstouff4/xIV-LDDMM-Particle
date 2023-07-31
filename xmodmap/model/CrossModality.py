@@ -38,11 +38,11 @@ class LDDMMloss:
                               dimEff=dimEff,
                               single=single)
 
-    def __call__(self, p0, q0):
+    def __call__(self, p0, qx0, qw0):
 
-        p, q = self.shoot(p0[: (self.d + 1) * self.numS], q0)[-1]
+        p, q = self.shoot(p0[: (self.d + 1) * self.numS], qx0, qw0)[-1]
 
-        hLoss = self.gamma * self.hamiltonian(p0[: (self.d + 1) * self.numS], q0)
+        hLoss = self.gamma * self.hamiltonian(p0[: (self.d + 1) * self.numS], qx0, qw0)
         dLoss = self.dataloss(q, p0[(self.d + 1) * self.numS :])
 
         if self.lambLoss is not None:
