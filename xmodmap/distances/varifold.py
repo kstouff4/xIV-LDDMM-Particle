@@ -227,10 +227,7 @@ class LossVarifoldNorm:
 
         return alphaSupportWeight
 
-    def __call__(self, sS, pi_est):
-        # sS will be in the form of q (w_S,S,x_c)
-        sSx = sS[self.numS:].view(-1, self.d)
-        sSw = sS[:self.numS].view(-1, 1)
+    def __call__(self, sSx, sSw, pi_est):
         if self.supportWeight is not None:
             wSupport = self.supportWeight(sSx, pi_est[-1] ** 2)
             sSw = wSupport * sSw

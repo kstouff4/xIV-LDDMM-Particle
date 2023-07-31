@@ -14,8 +14,7 @@ def PiRegularizationSystem(zeta_S, nu_T, numS, d, norm=True):
     else:
         nu_Tprob = (torch.ones((1, nu_T.shape[-1])) / nu_T.shape[-1])
 
-    def PiReg(q, pi_est):
-        qw = q[:numS].view(-1, 1)
+    def PiReg(qw, pi_est):
         mass_S = torch.sum(qw * zeta_S, dim=0)
         qwSum = torch.sum(qw, dim=0)[None, ...]
         pi_ST = (pi_est.view(zeta_S.shape[-1], nu_T.shape[-1])) ** 2

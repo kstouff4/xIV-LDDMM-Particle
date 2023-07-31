@@ -353,11 +353,12 @@ def callOptimize(
 
     if lamb0 < 0:
         variable_to_optimize = [px, pw, pi_ST]
-        pTilde[(d + 1) * numS :] = Csqpi
+        tilde = [pxTilde, pwTilde, Csqpi]
         lambLoss = None
     else:
-        pTilde[(d + 1) * numS : -1] = Csqpi
-        pTilde[-1] = Csqlamb
+        lamb = (lamb0.sqrt().clone().detach() / Csqlamb).requires_grad_(True)
+        variables_to_optimize = [px, pw, pi_ST, lamb]
+        tilde = [pxTilde, pwTilde, Csqpi, Csqlamb]
         lambLoss = supportRestrictionReg(eta0)
 
     savepref = os.path.join(savedir, "State_")
@@ -398,6 +399,7 @@ def callOptimize(
         single=single,
     )
 
+    '''
     saveParams(
         loss.hamiltonian.uCoeff,
         sigmaRKHS,
@@ -415,9 +417,10 @@ def callOptimize(
         single,
         savepref,
     )
+    '''
 
     optimizer = torch.optim.LBFGS(
-        [p0],
+        variables_to_optimize,
         max_eval=15,
         max_iter=10,
         line_search_fn="strong_wolfe",
@@ -439,14 +442,8 @@ def callOptimize(
 
     def closure():
         optimizer.zero_grad()
-        LH, LDA, LPI, LL = loss(p0 * pTilde, qx, qw)
+        LH, LDA, LPI, LL = loss(*[variables_to_optimize[i] * tilde[i] for i in range(len(tilde))], qx, qw)
         L = LH + LDA + LPI + LL
-        """
-        print("loss", L.detach().cpu().numpy())
-        print("loss H ", LH.detach().cpu().numpy())
-        print("loss LDA ", LDA.detach().cpu().numpy())
-        print("loss LPI ", LPI.detach().cpu().numpy())
-        """
 
         # move the value to cpu() to be matplotlib compatible
         lossListH.append(LH.detach().clone().cpu())
@@ -504,7 +501,7 @@ def callOptimize(
         osd = optimizer.state_dict()
         lossOnlyH.append(osd["state"][0]["prev_loss"])
 
-        saveState(osd, its, i, p0, savepref)
+        #saveState(osd, its, i, p0, savepref)
         if i > 0 and torch.isnan(lossListH[-1]) or torch.isnan(lossListDA[-1]):
             print("Exiting with detected NaN in Loss")
             print("state of optimizer")
@@ -513,6 +510,7 @@ def callOptimize(
         if i % 20 == 0:
             # p0Save = torch.clone(p0).detach()
             optimizer.zero_grad()
+            '''
             p1, q1 = printCurrentVariables(
                 Stilde,
                 p0 * pTilde,
@@ -534,7 +532,7 @@ def callOptimize(
                 single=single,
             )
             printCost(i)
-
+            '''
             if i > 0:
                 if torch.allclose(
                     lossListH[-1], lossListH[-2], atol=1e-6, rtol=1e-5
@@ -546,9 +544,9 @@ def callOptimize(
                     break
 
     print("Optimization (L-BFGS) time: ", round(time.time() - start, 2), " seconds")
-    saveVariables(q0, p0 * pTilde, Ttilde, w_T, s, m, savepref)
+    #saveVariables(q0, p0 * pTilde, Ttilde, w_T, s, m, savepref)
 
-    printCost(its)
+    #printCost(its)
 
     f, ax = plt.subplots()
     ax.plot(lossOnlyH, label="TotLoss, Final = {0:.6f}".format(lossOnlyH[-1]))
@@ -600,7 +598,7 @@ def callOptimize(
     qGridw = torch.ones((numG))
 
     shootgrid = ShootingGrid(sigmaRKHS, Stilde, cA=cA, cT=cT, dimEff=dimEff, single=single)
-    listpq = shootgrid((p0 * pTilde)[: (d + 1) * numS], qx, qw, qGrid, qGridw)
+    listpq = shootgrid(px * pxTilde, pw * pwTilde, qx, qw, qGrid, qGridw)
 
     print("length of pq list is, ", len(listpq))
     Dlist = []

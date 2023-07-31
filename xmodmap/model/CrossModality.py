@@ -38,17 +38,17 @@ class LDDMMloss:
                               dimEff=dimEff,
                               single=single)
 
-    def __call__(self, p0, qx0, qw0):
+    def __call__(self, px0, pw0, qx0, qw0, pi_ST):
 
-        p, q = self.shoot(p0[: (self.d + 1) * self.numS], qx0, qw0)[-1]
+        p, q = self.shoot(px0, pw0, qx0, qw0)[-1]
 
-        hLoss = self.gamma * self.hamiltonian(p0[: (self.d + 1) * self.numS], qx0, qw0)
-        dLoss = self.dataloss(q, p0[(self.d + 1) * self.numS :])
+        hLoss = self.gamma * self.hamiltonian(px0, pw0, qx0, qw0)
+        dLoss = self.dataloss(qx, qw, pi_ST)
 
         if self.lambLoss is not None:
-            pLoss = self.gamma * self.cPi * self.piLoss(q, p0[(self.d + 1) * self.numS : -1])
+            pLoss = self.gamma * self.cPi * self.piLoss(qw, pi_ST)
             lLoss = self.gamma * self.lambLoss(p0[-1])
         else:
-            pLoss = self.gamma * self.cPi * self.piLoss(q, p0[(self.d + 1) * self.numS :])
+            pLoss = self.gamma * self.cPi * self.piLoss(qw, pi_ST)
             lLoss = torch.tensor(0.)
         return hLoss, dLoss, pLoss, lLoss
