@@ -300,6 +300,35 @@ def makePQ(
     Csqlamb=1.,
     norm=True,
 ):
+    '''
+    Initialization of co-state (P) and state (Q) for Hamiltonian Control Optimization, 
+    transfer function between source and target feature spaces (Pi_ST),
+    and support of target in target space (given by transition boundary defined through lambda parameter).
+    
+    Args:
+        S = source positions (N x 3)
+        nu_S = source feature values (N x labS)
+        T = target positions (M x 3)
+        nu_T = target feature values (M x labs)
+        Csqpi = optimizing coefficient rescaling Pi_ST within optimization scheme
+        lambInit = initial value of lambda (transition boundary width of target support)
+        Csqlamb = optimizing coefficient rescaling lambda within optimization scheme 
+        norm = choice of initialization of Pi_ST
+            * true uses uniform distribution over target feature values
+            * false uses distribution over target feature values over whole target dataset 
+    
+    Returns:
+        w_S, w_T = total mass over features for each particle in S and T (N x 1, M x 1)
+        zeta_S, zeta_T = (normalized) probability distribution over feature values for S and T (N x labS, M x labs)
+        q0 = initial state (Stilde, w_S) values
+        p0 = initial values of variables to be optimized, rescaled for optimization scheme (momenta (px,pw), Pi_ST, lambda)
+        numS = number of particles in source
+        Stilde, Ttilde = source and target positions rescaled within unit box
+        s,m = scaling and translation applied to S and T to be within unit box
+        pi_STinit = initial (user) value of transfer function Pi_ST
+        lamb0 = initial (user) value of lambda
+        
+    '''
     # initialize state vectors based on normalization
     w_S = nu_S.sum(axis=-1)[..., None]
     w_T = nu_T.sum(axis=-1)[..., None]
