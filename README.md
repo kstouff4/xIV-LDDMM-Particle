@@ -14,26 +14,16 @@ deformation: deformation models and functions
 distances: fixed point costs including varifold distance (matching term), regularizer for functional mapping (kl divergence), and regularizer for support estimation parameter 
 models: selected parameters and mappings to estimate
 
+Dependencies:
+pytorch
+pykeops
+numpy
+scipy
+matplotlib
+
 Examples (../examples/):
-
-Geometric Mapping Only
-2D to 2D
-```
-python examples/example_2D_single_celltype.py
-```
-3D to 3D
-```
-python examples/example_3D_single_BEIALE_MTL.py
-```
-
-Geometric and Functional Mappings
-2D to 2D
-```
-python examples/example_2D_cross_ratToMouseAtlas.py
-```
-
-3D to 3D
-```
-python examples/example_3D_cross_B2ToB5.py
-```
+2D to 2D geometric mapping only (example_2D_single_celltype.py)
+3D to 3D geometric mapping only (example_3D_single_BEIALE_MTL.py)
+2D to 2D geometric mapping and functional mapping (example_2D_cross_ratToMouseAtlas.py)
+3D to 3D geometric mapping and functional mapping (example_3D_cross_B2ToB5.py)
 
