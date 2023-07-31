@@ -18,120 +18,6 @@ import xmodmap.io.initialize as init
 from sandbox.saveState import *
 import xmodmap.io.getOutput as gO
 
-#################################################################################
-# Kernels
-
-
-# (1/2) |u|^2
-def GaussKernelHamiltonian(sigma, d, uCoeff):
-    qxO, qyO, px, py, wpxO, wpyO = (
-        Vi(0, d),
-        Vj(1, d),
-        Vi(2, d),
-        Vj(3, d),
-        Vi(4, 1),
-        Vj(5, 1),
-    )
-
-    for sInd in range(len(sigma)):
-        sig = sigma[sInd]
-        qx, qy, wpx, wpy = qxO / sig, qyO / sig, wpxO / sig, wpyO / sig
-        D2 = qx.sqdist(qy)
-        K = (-D2 * 0.5).exp()
-        h = (
-            0.5 * (px * py).sum()
-            + wpy * ((qx - qy) * px).sum()
-            - (0.5) * wpx * wpy * (D2 - d)
-        )  # 1/2 factor included here
-        if sInd == 0:
-            retVal = (1.0 / uCoeff[sInd]) * K * h  # normalize by N_sigma/(N sigma**2)
-        else:
-            retVal += (1.0 / uCoeff[sInd]) * K * h
-
-    return retVal.sum_reduction(
-        axis=1
-    )  # (K*h).sum_reduction(axis=1) #,  h2, h3.sum_reduction(axis=1)
-
-
-# |\mu_s - \mu_T |_sigma^2
-
-
-
-
-
-# k(x^\sigma - y^\sigma)
-def GaussKernelSpaceSingle(sig, d):
-    x, y = Vi(0, d) / sig, Vj(1, d) / sig
-    D2 = x.sqdist(y)
-    K = (-D2 * 0.5).exp()
-    return K.sum_reduction(axis=1)
-
-
-
-###################################################################
-def checkEndPoint(lossFunction, p0, p1, q1, d, numS, savedir):
-    q = torch.clone(q1).detach().requires_grad_(True)
-    p0n = torch.clone(p0).detach().requires_grad_(False)
-    p1n = torch.clone(p1).detach().requires_grad_(False)
-
-    dLoss = lossFunction(q, p0n[(d + 1) * numS :])
-    dLoss.backward()  # gradient of loss at end point with respect to q1
-    print("checking end point condition")
-    print(q.grad)
-    print(p1[: (d + 1) * numS])
-    print("should equal zero")
-    ep = q.grad.detach() + p1n[: (d + 1) * numS].detach()
-    print(ep)
-    print(torch.max(ep))
-    print(torch.min(ep))
-    f, ax = plt.subplots()
-    ax.plot(torch.arange(numS), ep[:numS], label="x_diff")
-    ax.plot(torch.arange(numS), ep[numS : 2 * numS], label="y_diff")
-    ax.plot(torch.arange(numS), ep[2 * numS : 3 * numS], label="z_diff")
-    ax.plot(torch.arange(numS), ep[3 * numS :], label="w_diff")
-    ax.legend()
-    f.savefig(os.path.join(savedir, "checkPoint.png"), dpi=300)
-
-    return
-
-
-def LDDMMloss_legacy(
-    Stilde,
-    K0,
-    sigma,
-    d,
-    numS,
-    gamma,
-    dataloss,
-    piLoss,
-    lambLoss,
-    cA=1.0,
-    cS=10.,
-    cT=1.0,
-    cPi=10.0,
-    dimEff=3,
-    single=False,
-):
-    def loss(p0, q0):
-
-        shoot = Shooting(sigma, Stilde, cA=cA, cS=cS, cT=cT, dimEff=dimEff, single=single)
-        p, q = shoot(p0[: (d + 1) * numS], q0)[-1]
-
-        hLoss = gamma * Hamiltonian(sigma, Stilde, cA=cA, cS=cS, cT=cT, dimEff=dimEff, single=single)(
-            p0[: (d + 1) * numS], q0
-        )
-
-        dLoss = dataloss(q, p0[(d + 1) * numS :])
-        if lambLoss is not None:
-            pLoss = gamma * cPi * piLoss(q, p0[(d + 1) * numS : -1])
-            lLoss = gamma * lambLoss(p0[-1])
-        else:
-            pLoss = gamma * cPi * piLoss(q, p0[(d + 1) * numS :])
-            lLoss = torch.tensor(0.0)
-        return hLoss, dLoss, pLoss, lLoss
-        # return dataloss(q)
-
-    return loss
 
 
 ##################################################################
@@ -470,21 +356,6 @@ def callOptimize(
     savepref = os.path.join(savedir, "State_")
 
 
-
-    # Compute constants to weigh each kernel norm in RKHS by
-    uCoeff = []
-    for sig in sigmaRKHS:
-        Kinit = GaussKernelSpaceSingle(sig=sig, d=d)
-        uCoeff.append(
-            torch.clone(
-                (cS * Kinit(Stilde, Stilde).sum())
-                / (N * N * sig * sig)
-            )
-        )
-    for ss in range(len(uCoeff)):
-        print("sig is ", sigmaRKHS[ss])
-        print("uCoeff ", uCoeff[ss])
-
     dataloss = LossVarifoldNorm(
         beta,
         sigmaVar,
@@ -503,7 +374,7 @@ def callOptimize(
     cst = dataloss.cst.detach()
 
     piLoss = PiRegularizationSystem(zeta_S, nu_T, numS, d)
-    Kg = GaussKernelHamiltonian(sigma=sigmaRKHS, d=d, uCoeff=uCoeff)
+
     if lamb0 < 0:
         lambLoss = None
     else:
@@ -525,7 +396,7 @@ def callOptimize(
     )
 
     saveParams(
-        uCoeff,
+        loss.hamiltonian.uCoeff,
         sigmaRKHS,
         sigmaVar,
         beta,
@@ -660,7 +531,7 @@ def callOptimize(
                 single=single,
             )
             printCost(i)
-            # checkEndPoint(dataloss,p0*pTilde,p1,q1,d,numS,savedir + 'it' + str(i))
+
             if i > 0:
                 if torch.allclose(
                     lossListH[-1], lossListH[-2], atol=1e-6, rtol=1e-5
@@ -798,7 +669,6 @@ def callOptimize(
         nuTlist.append(wTt.detach()[..., None] * zeta_T.detach())
 
     # plot p0 as arrows
-    # checkEndPoint(dataloss,p0T,listpq[-1][0],listpq[-1][1],d,numS,savedir)
     listSp0 = torch.zeros((numS * 2, 3))
     polyListSp0 = torch.zeros((numS, 3))
     polyListSp0[:, 0] = 2
