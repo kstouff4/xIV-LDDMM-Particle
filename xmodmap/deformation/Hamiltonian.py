@@ -51,11 +51,7 @@ class Hamiltonian:
             axis=1
         )  # (K*h).sum_reduction(axis=1) #,  h2, h3.sum_reduction(axis=1)
 
-    def H(self, p, qx, qw):
-        # TODO: avoid to pack and unpack p and q
-        px = p[self.numS:].view(-1, self.d)
-        pw = p[:self.numS].view(-1, 1)
-
+    def H(self, px, pw, qx, qw):
         wpq = pw * qw
         k = self.K0(qx, qx, px, px, wpq, wpq)  # k shape should be N x 1
         # px = N x 3, qx = N x 3, qw = N x 1
@@ -69,17 +65,17 @@ class Hamiltonian:
             + (0.5) * Alphanorm
         )
 
-    def __call__(self, *args):
-        return self.H(*args)
+    def __call__(self, px, pw, qx, qw):
+        return self.H(px, pw, qx, qw)
 
 
 class HamiltonianSystem(Hamiltonian):
     def __init__(self, sigma, Stilde, cA=1.0, cS=10.0, cT=1.0, dimEff=3, single=False):
         super().__init__(sigma, Stilde, cA=cA, cS=cS, cT=cT, dimEff=dimEff, single=single)
 
-    def __call__(self, *args):
-        Gp, Gqx, Gqw = torch.autograd.grad(self.H(*args), args, create_graph=True)
-        return -Gqx, -Gqw, Gp
+    def __call__(self, px, pw, qx, qw):
+        Gpx, Gpw, Gqx, Gqw = torch.autograd.grad(self.H(px, pw, qx, qw), (px, pw, qx, qw), create_graph=True)
+        return -Gqx, -Gqw, Gpx, Gpw
 
 
 
@@ -87,16 +83,11 @@ class HamiltonianSystemGrid(Hamiltonian):
     def __init__(self, sigma, Stilde, cA=1.0, cS=10.0, cT=1.0, dimEff=3, single=False):
         super().__init__(sigma, Stilde, cA=cA, cS=cS, cT=cT, dimEff=dimEff, single=single)
 
-    def __call__(self, p, qx, qw, qgrid, qgridw):
-        # TODO: avoid to pack and unpack p and q
-        px = p[self.numS:].view(-1, self.d)
-        pw = p[:self.numS].view(-1, 1)
-
-        # pc = p[-d:].view(1,d)
-        # qc = q[-d:].view(1,d)
+    def __call__(self, px, pw, qx, qw, qgrid, qgridw):
         gx = qgrid.view(-1, self.d)
         gw = qgridw.view(-1, 1)
-        Gp, Gqx, Gqw = torch.autograd.grad(self.H(p, qx, qw), (p, qx, qw), create_graph=True)
+
+        Gpx, Gpw, Gqx, Gqw = torch.autograd.grad(self.H(px, pw, qx, qw), (px, pw, qx, qw), create_graph=True)
         A, tau, Alpha = getATauAlpha(px, qx, pw, qw, dimEff=self.dimEff, single=self.single)
         xc = (qw * qx).sum(dim=0) / (qw.sum(dim=0))
         Gg = (
@@ -104,13 +95,13 @@ class HamiltonianSystemGrid(Hamiltonian):
             + (gx - xc) @ A.T
             + tau
             + (gx - xc) @ Alpha
-        ).flatten()
+        )
         Ggw = (
             getUdiv(self.sigma, self.d, self.uCoeff)(gx, qx, px, pw * qw) * gw
             + Alpha.sum() * gw
-        ).flatten()
+        )
 
-        return -Gqx, -Gqw, Gp, Gg, Ggw
+        return -Gqx, -Gqw, Gpx, Gpw, Gg, Ggw
 
 
 
@@ -126,12 +117,9 @@ class HamiltonianSystemBackwards(Hamiltonian):
     def __init__(self, sigma, Stilde, cA=1.0, cS=10.0, cT=1.0, dimEff=3, single=False):
         super().__init__(sigma, Stilde, cA=cA, cS=cS, cT=cT, dimEff=dimEff, single=single)
 
-    def __call__(self, p, qx, qw, T, wT):
-        px = p[self.numS:].view(-1, self.d)
-        pw = p[:self.numS].view(-1, 1)
+    def __call__(self, px, pw, qx, qw, T, wT):
 
-
-        Gp, Gqx, Gqw = torch.autograd.grad(self.H(p, qx, qw), (p, qx, qw), create_graph=True)
+        Gpx, Gpw, Gqx, Gqw = torch.autograd.grad(self.H(px, pw, qx, qw), (px, pw, qx, qw), create_graph=True)
         A, tau, Alpha = getATauAlpha(px, qx, pw, qw, dimEff=self.dimEff, single=self.single)
         xc = (qw * qx).sum(dim=0) / (qw.sum(dim=0))
         Tx = T.view(-1, self.d)
@@ -141,8 +129,8 @@ class HamiltonianSystemBackwards(Hamiltonian):
             + (Tx - xc) @ A.T
             + tau
             + (Tx - xc) @ Alpha
-        ).flatten()
+        )
         Gtw = (
             getUdiv(self.sigma, self.d, self.uCoeff)(Tx, qx, px, pw * qw) * wTw + Alpha.sum() * wTw
-        ).flatten()
-        return -Gqx, -Gqw, Gp, Gt, Gtw
+        )
+        return -Gqx, -Gqw, Gpx, Gpw, Gt, Gtw

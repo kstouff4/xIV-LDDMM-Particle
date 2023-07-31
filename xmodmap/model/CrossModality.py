@@ -40,7 +40,7 @@ class LDDMMloss:
 
     def __call__(self, px0, pw0, qx0, qw0, pi_ST):
 
-        p, q = self.shoot(px0, pw0, qx0, qw0)[-1]
+        px, pw, qx, qw = self.shoot(px0, pw0, qx0, qw0)[-1]
 
         hLoss = self.gamma * self.hamiltonian(px0, pw0, qx0, qw0)
         dLoss = self.dataloss(qx, qw, pi_ST)

@@ -348,11 +348,10 @@ def callOptimize(
     pwTilde = torch.tensor(1.0 / (torch.sqrt(kScale) * dimEff * w_S))
     pxTilde = torch.tensor(1.0 / torch.sqrt(kScale))
 
-
-    pi_ST = (pi_STinit.sqrt().clone().detach() / Csqpi).requires_grad_(True)
+    pi_ST = ((1.0 / Csqpi) * torch.sqrt(pi_STinit).clone().detach()).requires_grad_(True)
 
     if lamb0 < 0:
-        variable_to_optimize = [px, pw, pi_ST]
+        variables_to_optimize = [px, pw, pi_ST]
         tilde = [pxTilde, pwTilde, Csqpi]
         lambLoss = None
     else:
@@ -419,8 +418,11 @@ def callOptimize(
     )
     '''
 
+    #test_var = torch.cat((pw.flatten(),px.flatten(), pi_ST.flatten()), dim=0).detach().requires_grad_(True)
+
     optimizer = torch.optim.LBFGS(
         variables_to_optimize,
+        #[test_var],
         max_eval=15,
         max_iter=10,
         line_search_fn="strong_wolfe",
@@ -442,7 +444,18 @@ def callOptimize(
 
     def closure():
         optimizer.zero_grad()
-        LH, LDA, LPI, LL = loss(*[variables_to_optimize[i] * tilde[i] for i in range(len(tilde))], qx, qw)
+        # loss_ = lambda x: loss(x[numS:numS * (d + 1)].view(-1, d) * pxTilde,
+        #                         x[:numS].view(-1, 1) * pwTilde,
+        #                         qx,
+        #                         qw,
+        #                         x[numS * (d + 1):] * Csqpi)
+        # LH, LDA, LPI, LL = loss_(test_var)
+
+        LH, LDA, LPI, LL = loss(px * pxTilde,
+                                pw * pwTilde,
+                                qx,
+                                qw,
+                                pi_ST * Csqpi)
         L = LH + LDA + LPI + LL
 
         # move the value to cpu() to be matplotlib compatible
@@ -558,7 +571,7 @@ def callOptimize(
     f.savefig(os.path.join(savedir, "CostOuterIter.png"), dpi=300)
 
     # Print out deformed states
-    coords = qx
+    coords = qx.detach()
     rangesX = (torch.max(coords[..., 0]) - torch.min(coords[..., 0])) / 100.0
     rangesY = (torch.max(coords[..., 1]) - torch.min(coords[..., 1])) / 100.0
     rangesZ = (torch.max(coords[..., 2]) - torch.min(coords[..., 2])) / 100.0
@@ -594,11 +607,15 @@ def callOptimize(
     XG, YG, ZG = torch.meshgrid((xGrid, yGrid, zGrid), indexing="ij")
     qGrid = torch.stack((XG.flatten(), YG.flatten(), ZG.flatten()), axis=-1)
     numG = qGrid.shape[0]
-    qGrid = qGrid.flatten()
-    qGridw = torch.ones((numG))
+    qGridw = torch.ones(numG, 1)
 
     shootgrid = ShootingGrid(sigmaRKHS, Stilde, cA=cA, cT=cT, dimEff=dimEff, single=single)
-    listpq = shootgrid(px * pxTilde, pw * pwTilde, qx, qw, qGrid, qGridw)
+    listpq = shootgrid(px * pxTilde,
+                       pw * pwTilde,
+                       qx,
+                       qw,
+                       qGrid,
+                       qGridw)
 
     print("length of pq list is, ", len(listpq))
     Dlist = []
@@ -609,16 +626,8 @@ def callOptimize(
     Tlist = []
     nuTlist = []
 
-    p0T = p0 * pTilde
-    if lamb0 < 0:
-        pi_STfinal = (
-            p0T[(d + 1) * numS :].detach().view(zeta_S.shape[-1], zeta_T.shape[-1])
-        )  # shouldn't matter multiplication by pTilde
-    else:
-        pi_STfinal = (
-            p0T[(d + 1) * numS : -1].detach().view(zeta_S.shape[-1], zeta_T.shape[-1])
-        )  # shouldn't matter multiplication by pTilde
-    pi_STfinal = pi_STfinal**2
+    pi_STfinal = (pi_ST.detach() * Csqpi) ** 2
+
     print("pi final, ", pi_STfinal)
     print(torch.unique(pi_STfinal))
 
@@ -642,58 +651,47 @@ def callOptimize(
     f.savefig(os.path.join(savedir, "pi_STfinal.png"), dpi=300)
 
     for t in range(len(listpq)):
-        qnp = listpq[t][1]
-        D = qnp[numS:].detach().view(-1, d)
-        muD = qnp.detach()
-        nu_D = torch.squeeze(muD[0:numS])[..., None] * zeta_S.detach()
-        nu_Dpi = nu_D @ pi_STfinal
+        qnp = listpq[t]
+
+        # unpack (px, pw, qx, qw, qGrid, qGridw)
+        D = qnp[2].detach()
         Dlist.append(preprocess.resizeData(D, s, m))
+
+        muD = qnp[3].detach()
+        nu_D = torch.squeeze(muD[0:numS])[..., None] * zeta_S.detach()
         nu_Dlist.append(nu_D)
+
+        nu_Dpi = nu_D @ pi_STfinal
         nu_DPilist.append(nu_Dpi)
 
-        gt = listpq[t][2]
-        G = gt.detach().view(-1, d)
+        G = qnp[4].detach()
         Glist.append(preprocess.resizeData(G, s, m))
-        gw = listpq[t][3]
+
+        gw = qnp[5].detach()
         wGlist.append(gw.detach())
 
     # Shoot Backwards
+
+    px1 = listpq[-1][0]
+    pw1 = listpq[-1][1]
+    qx1 = listpq[-1][2]
+    qw1 = listpq[-1][3]
+
     # 7/01 = negative of momentum is incorporated into Shooting Backwards function
     shootBack = ShootingBackwards(sigmaRKHS, Stilde, cA=cA, cS=cS, cT=cT, dimEff=dimEff, single=single)
-    listBack = shootBack(listpq[-1][0][: (d + 1) * numS], listpq[-1][1], Ttilde.flatten(), w_T.flatten())
+    listBack = shootBack(px1, pw1, qx1, qw1, Ttilde, w_T)
 
     for t in range(len(listBack)):
-        Tt = listBack[t][2]
-        Tlist.append(preprocess.resizeData(Tt.detach().view(-1, d), s, m))
-        wTt = listBack[t][3]
+        Tt = listBack[t][4]
+        Tlist.append(preprocess.resizeData(Tt.detach(), s, m))
+        wTt = listBack[t][5]
         nuTlist.append(wTt.detach()[..., None] * zeta_T.detach())
 
-    # plot p0 as arrows
-    listSp0 = torch.zeros((numS * 2, 3))
-    polyListSp0 = torch.zeros((numS, 3))
-    polyListSp0[:, 0] = 2
-    polyListSp0[:, 1] = torch.arange(numS)  # +1
-    polyListSp0[:, 2] = numS + torch.arange(numS)  # + 1
 
-    listSp0[0:numS, :] = S.detach()
-    listSp0[numS:, :] = (
-        p0T[numS : (d + 1) * numS].detach().view(-1, d) + listSp0[0:numS, :]
-    )
-    featsp0 = torch.zeros((numS * 2, 1))
-    featsp0[numS:, :] = p0T[0:numS].detach().view(-1, 1)
-    gO.writeVTK(
-        listSp0,
-        [featsp0],
-        ["p0_w"],
-        os.path.join(savedir, "testOutput_p0.vtk"),
-        polyData=polyListSp0,
-    )
-
-    pNew = pTilde * p0
     A, tau, Alpha = getATauAlpha(
-        pNew[numS : (d + 1) * numS].view(-1, d),
+        px * pxTilde,
         qx,
-        pNew[:numS].view(-1, 1),
+        pw * pwTilde,
         qw,
         dimEff=dimEff,
         single=single,
@@ -705,12 +703,12 @@ def callOptimize(
 
     A0 = A
     tau0 = tau
-    p0 = pNew
     alpha0 = Alpha
-    pTilde = pTilde
+    px0 = px * pxTilde
+    pw0 = pw * pwTilde
     pi_ST = pi_STfinal
     torch.save(
-        [A0, tau0, p0, qx, qw, alpha0, pTilde, pi_ST],
+        [A0, tau0, alpha0, px0, pw0, qx, qw, pi_ST],
         os.path.join(savedir, "testOutput_values.pt"),
     )
 
