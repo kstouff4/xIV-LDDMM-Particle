@@ -501,10 +501,11 @@ def callOptimize(
         dataloss,
         piLoss,
         lambLoss,
-        cA,
-        cT,
-        cPi,
-        dimEff,
+        cA=cA,
+        cS=cS,
+        cT=cT,
+        cPi=cPi,
+        dimEff=dimEff,
         single=single,
     )
 
