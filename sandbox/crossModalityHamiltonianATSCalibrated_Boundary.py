@@ -1,13 +1,9 @@
 import os
 import time
 
-from pykeops.torch import Vi, Vj
-
 from matplotlib import pyplot as plt
-import matplotlib
 
 from xmodmap.deformation.control.affine import getATauAlpha
-from xmodmap.deformation.Hamiltonian import Hamiltonian
 from xmodmap.deformation.Shooting import Shooting, ShootingGrid, ShootingBackwards
 from xmodmap.distances.boundary import supportRestrictionReg
 from xmodmap.distances.kl import PiRegularizationSystem
@@ -232,15 +228,16 @@ def makePQ(
     pi_STinit = torch.zeros((zeta_S.shape[-1], zeta_T.shape[-1]))
     nuSTtot = torch.sum(w_T) / torch.sum(w_S)
     if not norm:
-        pi_STinit[:, :] = nu_T.sum(axis=0) / torch.sum(
-            w_S
-        )  # feature distribution of target scaled by total mass in source
+        # feature distribution of target scaled by total mass in source
+        pi_STinit[:, :] = nu_T.sum(axis=0) / torch.sum(w_S)
     else:
         pi_STinit[:, :] = torch.ones((1, nu_T.shape[-1])) / nu_T.shape[-1]
         pi_STinit = pi_STinit * nuSTtot
+
     print("pi shape ", pi_STinit.shape)
     print("initial Pi ", pi_STinit)
     print("unique values in Pi ", torch.unique(pi_STinit))
+
     lamb0 = lambInit
     if lambInit < 0:
         p0 = (
