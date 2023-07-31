@@ -12,12 +12,7 @@ from xmodmap.deformation.Shooting import Shooting, ShootingGrid, ShootingBackwar
 from xmodmap.distances.boundary import supportRestrictionReg
 from xmodmap.distances.kl import PiRegularizationSystem
 from xmodmap.distances.varifold import LossVarifoldNorm
-
-if "DISPLAY" in os.environ:
-    matplotlib.use("qt5Agg")
-else:
-    matplotlib.use("Agg")
-
+from xmodmap.model.CrossModality import LDDMMloss
 
 import xmodmap.io.initialize as init
 from sandbox.saveState import *
@@ -100,7 +95,7 @@ def checkEndPoint(lossFunction, p0, p1, q1, d, numS, savedir):
     return
 
 
-def LDDMMloss(
+def LDDMMloss_legacy(
     Stilde,
     K0,
     sigma,
@@ -487,10 +482,7 @@ def callOptimize(
 
     loss = LDDMMloss(
         Stilde,
-        Kg,
         sigmaRKHS,
-        d,
-        numS,
         gamma,
         dataloss,
         piLoss,
