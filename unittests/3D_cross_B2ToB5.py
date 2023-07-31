@@ -99,6 +99,8 @@ def main():
     print("nu_DPilist", nu_DPilist[-1])
     print("Glist", Glist[-1])
     print("nu_Glist", nu_Glist[-1])
+    print("Tlist", Tlist[-1])
+    print("nu_Tlist", nu_Tlist[-1])
 
     return
 

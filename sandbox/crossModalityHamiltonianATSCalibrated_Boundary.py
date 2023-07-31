@@ -8,8 +8,7 @@ import matplotlib
 
 from xmodmap.deformation.control.affine import getATauAlpha
 from xmodmap.deformation.Hamiltonian import Hamiltonian
-from xmodmap.deformation.shooting import shooting, ShootingBackwards
-from xmodmap.deformation.Shooting import Shooting, ShootingGrid
+from xmodmap.deformation.Shooting import Shooting, ShootingGrid, ShootingBackwards
 from xmodmap.distances.boundary import supportRestrictionReg
 from xmodmap.distances.kl import PiRegularizationSystem
 from xmodmap.distances.varifold import LossVarifoldNorm
@@ -145,11 +144,10 @@ def LDDMMloss(
 
 
 def printCurrentVariables(
+    Stilde,
     p0Curr,
     itCurr,
-    K0,
     sigmaRKHS,
-    uCoeff,
     q0Curr,
     d,
     numS,
@@ -159,22 +157,18 @@ def printCurrentVariables(
     m,
     savedir,
     supportWeightF,
+    cA=1.0,
+    cS=10.0,
+    cT=1.0,
     dimEff=3,
     single=False,
 ):
     p0 = p0Curr
     torch.save(p0, os.path.join(savedir, f"p0_iter{itCurr}.pt"))
 
-    pqList = shooting(
-        p0Curr[: (d + 1) * numS],
-        q0Curr,
-        K0,
-        sigmaRKHS,
-        d,
-        numS,
-        dimEff=dimEff,
-        single=single,
-    )
+    shoot = Shooting(sigmaRKHS, Stilde, cA=cA, cS=cS, cT=cT, dimEff=dimEff, single=single)
+    pqList = shoot(p0Curr[: (d + 1) * numS], q0Curr)
+
     if supportWeightF is not None:
         pi_ST = p0Curr[(d + 1) * numS : -1].detach().view(zeta_S.shape[-1], labT)
         print("lambda: ", p0Curr[-1] ** 2)
@@ -625,11 +619,10 @@ def callOptimize(
             # p0Save = torch.clone(p0).detach()
             optimizer.zero_grad()
             p1, q1 = printCurrentVariables(
+                Stilde,
                 p0 * pTilde,
                 i,
-                Kg,
                 sigmaRKHS,
-                uCoeff,
                 q0,
                 d,
                 numS,
@@ -639,6 +632,9 @@ def callOptimize(
                 m,
                 savedir,
                 dataloss.supportWeight,
+                cA=cA,
+                cS=cS,
+                cT=cT,
                 dimEff=dimEff,
                 single=single,
             )
@@ -771,19 +767,8 @@ def callOptimize(
 
     # Shoot Backwards
     # 7/01 = negative of momentum is incorporated into Shooting Backwards function
-    listBack = ShootingBackwards(
-        listpq[-1][0],
-        listpq[-1][1],
-        Ttilde.flatten(),
-        w_T.flatten(),
-        Kg,
-        sigmaRKHS,
-        d,
-        numS,
-        uCoeff,
-        dimEff=dimEff,
-        single=single,
-    )
+    shootBack = ShootingBackwards(sigmaRKHS, Stilde, cA=cA, cS=cS, cT=cT, dimEff=dimEff, single=single)
+    listBack = shootBack(listpq[-1][0][: (d + 1) * numS], listpq[-1][1], Ttilde.flatten(), w_T.flatten())
 
     for t in range(len(listBack)):
         Tt = listBack[t][2]

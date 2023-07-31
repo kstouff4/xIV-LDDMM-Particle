@@ -126,8 +126,8 @@ class HamiltonianSystemBackwards(Hamiltonian):
     7/01 = third try with starting with -p1, but keeping same integration scheme in terms of relation with hamiltonians
     """
 
-    def __init__(self, sigma, Stilde, cA=1.0, cT=1.0, dimEff=3, single=False):
-        super().__init__(sigma, Stilde, cA=cA, cT=cT, dimEff=dimEff, single=single)
+    def __init__(self, sigma, Stilde, cA=1.0, cS=10.0, cT=1.0, dimEff=3, single=False):
+        super().__init__(sigma, Stilde, cA=cA, cS=cS, cT=cT, dimEff=dimEff, single=single)
 
     def __call__(self, p, q, T, wT):
         px = p[self.numS:].view(-1, self.d)

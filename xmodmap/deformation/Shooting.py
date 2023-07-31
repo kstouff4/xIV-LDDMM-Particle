@@ -1,4 +1,4 @@
-from xmodmap.deformation.Hamiltonian import HamiltonianSystem, HamiltonianSystemGrid
+from xmodmap.deformation.Hamiltonian import HamiltonianSystem, HamiltonianSystemGrid, HamiltonianSystemBackwards
 
 class Abstract_Shooting():
     HS = None
@@ -83,4 +83,43 @@ class ShootingGrid(Abstract_Shooting):
             self.HS,
             (p0, q0, qGrid, qGridw),
             self.nt,
+        )
+
+class ShootingBackwards(Abstract_Shooting):
+    """
+    Shooting method for the backward (time reversal) Hamiltonian system.
+    """
+    def __init__(self,  sigma, Stilde, cA=1.0, cS=10.0,  cT=1.0, dimEff=3, single=False, nt=10):
+        super().__init__(nt=nt)
+
+        self.sigma = sigma
+        self.Stilde = Stilde
+        self.cA = cA
+        self.cS = cS
+        self.cT = cT
+        self.dimEff = dimEff
+        self.single = single
+
+        self.HS = HamiltonianSystemBackwards(self.sigma,
+                                    self.Stilde,
+                                    cA=self.cA,
+                                    cS=self.cS,
+                                    cT=self.cT,
+                                    dimEff=self.dimEff,
+                                    single=self.single)
+
+    def __call__(self, p1, q1, T, wT):
+        """
+        :param p1: final momentum
+        :param q1: final position
+        :param T: final object position
+        :param wT: final object features
+
+        :return:
+            a list
+        """
+        return self.integrator(
+            self.HS,
+            (-p1, q1, T, wT),  # minus sign because we are going backwards in time
+            self.nt
         )
