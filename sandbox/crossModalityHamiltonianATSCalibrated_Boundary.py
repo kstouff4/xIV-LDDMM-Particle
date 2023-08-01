@@ -345,19 +345,17 @@ def callOptimize(
     px = torch.zeros_like(qx).requires_grad_(True)
     pw = torch.zeros_like(qw).requires_grad_(True)
 
-    pwTilde = torch.tensor(1.0 / (torch.sqrt(kScale) * dimEff * w_S))
-    pxTilde = torch.tensor(1.0 / torch.sqrt(kScale))
+    pwTilde = torch.rsqrt(kScale) / dimEff / w_S
+    pxTilde = torch.rsqrt(kScale)
 
     pi_ST = ((1.0 / Csqpi) * torch.sqrt(pi_STinit).clone().detach()).requires_grad_(True)
 
     if lamb0 < 0:
         variables_to_optimize = [px, pw, pi_ST]
-        tilde = [pxTilde, pwTilde, Csqpi]
         lambLoss = None
     else:
         lamb = (lamb0.sqrt().clone().detach() / Csqlamb).requires_grad_(True)
         variables_to_optimize = [px, pw, pi_ST, lamb]
-        tilde = [pxTilde, pwTilde, Csqpi, Csqlamb]
         lambLoss = supportRestrictionReg(eta0)
 
     savepref = os.path.join(savedir, "State_")
