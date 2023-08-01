@@ -81,7 +81,7 @@ def main():
         d,
         labs,
         savedir,
-        its=1,
+        its=11,
         kScale=kScale,
         cA=cA,
         cT=cT,
