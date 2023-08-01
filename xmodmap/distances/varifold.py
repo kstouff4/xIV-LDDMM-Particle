@@ -1,78 +1,28 @@
 import torch
-from pykeops.torch import Vi, Vj
+from pykeops.torch import Vi, Vj, LazyTensor
 
 class LossVarifoldNorm:
-    def __init__(self, beta, sigmaVar, d, labs, w_S, w_T, zeta_S, zeta_T, pi_STinit, Stilde, Ttilde, lamb0):
+    """
+    beta: weight for the varifold term to rescale the varifold norm to be 1.0 for each scale (see uCoeff !)
+    """
+    def __init__(self, sigmaVar, w_T, zeta_T, Ttilde):
+        self.sigmaVar = sigmaVar
+
         self.Ttilde = Ttilde
         self.w_T = w_T
         self.zeta_T = zeta_T
-        self.zeta_S = zeta_S
-        self.d = d
-        self.labs = labs
-        self.numS = Stilde.shape[0]
-        self.sigmaVar = sigmaVar
 
-        if lamb0 < 0:
-            self.supportWeight = None
-            sW0 = torch.ones((Stilde.shape[0], 1))
-        else:
-            self.supportWeight = self.defineSupport()
-            sW0 = self.supportWeight(Stilde, lamb0)
+        self.d = Ttilde.shape[1]
+        self.labs = zeta_T.shape[1]
 
-        if beta is None:
-            # set beta to make ||mu_S - mu_T||^2 = 1
-            if len(sigmaVar) == 1:
-                Kinit = self.GaussLinKernelSingle(sig=sigmaVar[0], d=d, l=labs)
-                cinit = Kinit(Ttilde, Ttilde, w_T * zeta_T, w_T * zeta_T).sum()
-                k1 = Kinit(
-                    Stilde,
-                    Stilde,
-                    (sW0 * w_S * zeta_S) @ pi_STinit,
-                    (sW0 * w_S * zeta_S) @ pi_STinit,
-                )
-                k2 = Kinit(Stilde, Ttilde, (sW0 * w_S * zeta_S) @ pi_STinit, w_T * zeta_T)
-                beta = 2.0 / (cinit + k1.sum() - 2.0 * k2.sum())
-                print("beta is ", beta)
-                beta = [
-                    (0.6 / sigmaVar[0])
-                    * torch.clone(2.0 / (cinit + k1.sum() - 2.0 * k2.sum()))
-                ]
+        # supportWeight is a function that takes as input cordiantes (ie points of Stilde) and lamb0 (a bandwith
+        # of some tanh sigmoid function) and returns the support weight
+        #self.supportWeights = self.defineSupport()
 
-            # print out indiviual costs
-            else:
-                print("different varifold norm at beginning")
-                beta = []
-                for sig in sigmaVar:
-                    print("sig is ", sig)
-                    Kinit = self.GaussLinKernelSingle(sig=sig, d=d, l=labs)
-                    cinit = Kinit(Ttilde, Ttilde, w_T * zeta_T, w_T * zeta_T).sum()
-                    k1 = Kinit(
-                        Stilde,
-                        Stilde,
-                        (sW0 * w_S * zeta_S) @ pi_STinit,
-                        (sW0 * w_S * zeta_S) @ pi_STinit,
-                    ).sum()
-                    k2 = (
-                            -2.0
-                            * Kinit(
-                        Stilde, Ttilde, (sW0 * w_S * zeta_S) @ pi_STinit, w_T * zeta_T
-                    ).sum()
-                    )
-                    beta.append(
-                        (0.6 / sig) * torch.clone(2.0 / (cinit + k1 + k2))
-                    )
-                    print("mu source norm ", k1)
-                    print("mu target norm ", cinit)
-                    print("total norm ", (cinit + k1 + k2))
 
-        self.beta = beta
+        self.beta = [1. for _ in range(len(sigmaVar))]
 
-        self.K = self.GaussLinKernel()
 
-        self.cst = self.K(self.Ttilde,
-                          self.Ttilde,
-                          self.w_T * self.zeta_T,
-                          self.w_T * self.zeta_T).sum()
     @staticmethod
     def GaussLinKernelSingle(sig, d, l):
         # u and v are the feature vectors
@@ -81,7 +31,7 @@ class LossVarifoldNorm:
         K = (-D2 / (2.0 * sig * sig)).exp() * (u * v).sum()
         return K.sum_reduction(axis=1)
 
-    def GaussLinKernel(self): #sigma, d, l, beta):
+    def GaussLinKernel(self, sigma_list, beta): #sigma, d, l, beta):
         """
         \sum_sigma \beta/2 * |\mu_s - \mu_T|^2_\sigma
         """
@@ -89,16 +39,89 @@ class LossVarifoldNorm:
         # u and v are the feature vectors
         x, y, u, v = Vi(0, self.d), Vj(1, self.d), Vi(2, self.labs), Vj(3, self.labs)
         D2 = x.sqdist(y)
+        retVal = LazyTensor(0.)
         for sInd in range(len(self.sigmaVar)):
             sig = self.sigmaVar[sInd]
             K = (-D2 / (2.0 * sig * sig)).exp() * (u * v).sum()
-            if sInd == 0:
-                retVal = self.beta[sInd] * K
-            else:
-                retVal += self.beta[sInd] * K
+            retVal += self.beta[sInd] * K
+
         return (retVal).sum_reduction(axis=1)
 
-    def defineSupport(self, eps=0.001):
+    def supportWeight(self, qx):
+        # TODO: remove this to keep a vanilla implementation of varifold
+        """
+        no boundary estimations. Return a constant weight 1.
+        """
+        return torch.ones(qx.shape[0], 1)
+
+    @property
+    def beta(self):
+        return self._beta
+
+    @beta.setter
+    def beta(self, beta):
+        self._beta = beta
+        self.update_cst_and_K()
+
+    def normalize_across_scale(self, Stilde, weight, zeta_S, pi_STinit):
+        self.set_normalization(Stilde, weight, zeta_S, pi_STinit)
+
+    def set_normalization(self, Stilde, w_S, zeta_S, pi_STinit):
+        """
+        sW0 : are the weights mask for the support of the target on the source domain
+        """
+
+        # set beta to make ||mu_S - mu_T||^2 = 1
+        tmp = (w_S * zeta_S) @ pi_STinit
+        beta = []
+        for sig in self.sigmaVar:
+            Kinit = self.GaussLinKernelSingle(sig, self.d, self.labs)
+            cinit = Kinit(self.Ttilde, self.Ttilde, self.w_T * self.zeta_T, self.w_T * self.zeta_T).sum()
+            k1 = Kinit(Stilde, Stilde, tmp, tmp).sum()
+            k2 = (- 2.0 * Kinit(Stilde, self.Ttilde, tmp, self.w_T * self.zeta_T)).sum()
+
+            beta.append((0.6 / sig) * 2.0 / (cinit + k1 + k2))
+
+            print("mu source norm ", k1)
+            print("mu target norm ", cinit)
+            print("total norm ", (cinit + k1 + k2))
+
+        self.beta = beta
+
+    def update_cst_and_K(self):
+        self.K = self.GaussLinKernel(self.sigmaVar, self._beta)
+
+        self.cst = self.K(self.Ttilde,
+                          self.Ttilde,
+                          self.w_T * self.zeta_T,
+                          self.w_T * self.zeta_T).sum()
+
+
+    def eval(self, sSx, sSw, zeta_S, pi_ST):
+        """
+        sSw : shot Source weights
+        sSx : shot Source locations
+        zeta_S : Source feature distribution weights
+        pi_ST : Source to Target features mapping
+        """
+
+        nu_Spi = (sSw * zeta_S) @ (pi_ST ** 2)  # Ns x L * L x F
+
+        k1 = self.K(sSx, sSx, nu_Spi, nu_Spi)
+        k2 = self.K(sSx, self.Ttilde, nu_Spi, self.w_T * self.zeta_T)
+
+        return (1.0 / 2.0) * (self.cst + k1.sum() - 2.0 * k2.sum())
+
+    def __call__(self, sSx, sSw, zeta_S, pi_ST):
+        return self.eval(sSx, sSw, zeta_S, pi_ST)
+
+
+
+class LossVarifoldNormBoundary(LossVarifoldNorm):
+    """
+    lamb : mask for the support of the varifold
+    """
+    def __init__(self, sigmaVar, w_T, zeta_T, Ttilde, lamb0):
         """
         This function defined the support of ROI as a zone of  the ambient space. It is actually a neighborhood of the
          *target* (defined by a sigmoid function, tanh). Coefficient alpha is though as 'transparency coefficient'.
@@ -111,6 +134,9 @@ class LossVarifoldNorm:
         Return:
             `alphaSupportWeight
         """
+        super().__init__(sigmaVar, w_T, zeta_T, Ttilde)
+
+    def definedSlicedSupport(self, eps=1e-3):
         zMin = torch.min(self.Ttilde[:, -1])
         zMax = torch.max(self.Ttilde[:, -1])
 
@@ -212,31 +238,48 @@ class LossVarifoldNorm:
                 n1 = -1.0 * n1
 
         # normalize vectors
-        n0 = n0 / torch.sqrt(torch.sum(n0**2))
-        n1 = n1 / torch.sqrt(torch.sum(n1**2))
+        n0 = n0 / torch.sqrt(torch.sum(n0 ** 2))
+        n1 = n1 / torch.sqrt(torch.sum(n1 ** 2))
 
         # ensure dot product with barycenter vector to point is positive, otherwise flip sign of normal
         print("n0: ", n0)
         print("n1: ", n1)
 
-        def alphaSupportWeight(qx, lamb):
-            return (
-                0.5 * torch.tanh(torch.sum((qx - a0) * n0, axis=-1) / lamb)
-                + 0.5 * torch.tanh(torch.sum((qx - a1) * n1, axis=-1) / lamb)
-            )[..., None]
+        return n0, n1, a0, a1
 
-        return alphaSupportWeight
+    def supportWeight(self, qx, lamb):
+        n0, n1, a0, a1 = self.definedSlicedSupport()
 
-    def __call__(self, sSx, sSw, pi_est):
-        if self.supportWeight is not None:
-            wSupport = self.supportWeight(sSx, pi_est[-1] ** 2)
-            sSw = wSupport * sSw
-            pi_ST = (pi_est[:-1].view(self.zeta_S.shape[-1], self.zeta_T.shape[-1])) ** 2
-        else:
-            pi_ST = (pi_est.view(self.zeta_S.shape[-1], self.zeta_T.shape[-1])) ** 2
-        nu_Spi = (sSw * self.zeta_S) @ pi_ST  # Ns x L * L x F
+        return (0.5 * torch.tanh(torch.sum((qx - a0) * n0, axis=-1) / lamb)
+                + 0.5 * torch.tanh(torch.sum((qx - a1) * n1, axis=-1) / lamb))[..., None]
 
-        k1 = self.K(sSx, sSx, nu_Spi, nu_Spi)
-        k2 = self.K(sSx, self.Ttilde, nu_Spi, self.w_T * self.zeta_T)
 
-        return (1.0 / 2.0) * (self.cst + k1.sum() - 2.0 * k2.sum())
+    def normalize_across_scale(self, Stilde, weight, zeta_S, pi_STinit, lamb0):
+        self.set_normalization(Stilde, weight * self.supportWeight(Stilde, lamb0), zeta_S, pi_STinit)
+
+    def __call__(self, sSx, sSw, zeta_S, pi_ST, lamb):
+        return self.eval(sSx, sSw * self.supportWeight(sSx, lamb ** 2), zeta_S, pi_ST)
+
+
+if __name__ == "__main__":
+    #dataloss = LossVarifoldNorm(ldskf,dofjs,...)
+    #
+
+    n = 1000
+    sigmaVar = [torch.tensor(0.1), torch.tensor(0.3)]
+
+    Stilde = torch.randn(2 * n, 3)
+    w_S = torch.randn(2 * n, 1)
+    zeta_S = (torch.randn(2 * n, 2) > 0 ) + 0.
+
+    Ttilde = torch.randn(n, 3)
+    w_T = torch.randn(n, 1)
+    zeta_T = (torch.randn(n, 2) > 0 ) + 0.
+
+    pi_ST = torch.eye(2)
+
+    loss = LossVarifoldNorm(sigmaVar, w_T, zeta_T, Ttilde)
+    loss.set_normalization(Stilde, w_S, zeta_S, pi_ST)
+
+    print(loss(Stilde, w_S, zeta_S, pi_ST))
+    print(loss.cst)

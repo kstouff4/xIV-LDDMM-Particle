@@ -362,21 +362,14 @@ def callOptimize(
 
 
     dataloss = LossVarifoldNorm(
-        beta,
         sigmaVar,
-        d,
-        labs,
-        w_S,
         w_T,
-        zeta_S,
         zeta_T,
-        pi_STinit,
-        Stilde,
         Ttilde,
-        lamb0
     )
-
+    dataloss.normalize_across_scale(Stilde, w_S, zeta_S, pi_STinit)
     cst = dataloss.cst.detach()
+    print("cst ", cst)
 
     piLoss = PiRegularizationSystem(zeta_S, nu_T, numS, d)
 
@@ -453,7 +446,8 @@ def callOptimize(
                                 pw * pwTilde,
                                 qx,
                                 qw,
-                                pi_ST * Csqpi)
+                                pi_ST * Csqpi,
+                                zeta_S)
         L = LH + LDA + LPI + LL
 
         # move the value to cpu() to be matplotlib compatible
