@@ -21,6 +21,7 @@ class LossVarifoldNormBoundary(LossVarifoldNorm):
             `alphaSupportWeight
         """
         super().__init__(sigmaVar, w_T, zeta_T, Ttilde)
+        self.n0, self.n1, self.a0, self.a1 = self.definedSlicedSupport()
 
     def definedSlicedSupport(self, eps=1e-3):
         zMin = torch.min(self.Ttilde[:, -1])
@@ -134,10 +135,9 @@ class LossVarifoldNormBoundary(LossVarifoldNorm):
         return n0, n1, a0, a1
 
     def supportWeight(self, qx, lamb):
-        n0, n1, a0, a1 = self.definedSlicedSupport()
 
-        return (0.5 * torch.tanh(torch.sum((qx - a0) * n0, axis=-1) / lamb)
-                + 0.5 * torch.tanh(torch.sum((qx - a1) * n1, axis=-1) / lamb))[..., None]
+        return (0.5 * torch.tanh(torch.sum((qx - self.a0) * self.n0, axis=-1) / lamb)
+                + 0.5 * torch.tanh(torch.sum((qx - self.a1) * self.n1, axis=-1) / lamb))[..., None]
 
 
     def normalize_across_scale(self, Stilde, w_S, zeta_S, pi_STinit, lamb0):
