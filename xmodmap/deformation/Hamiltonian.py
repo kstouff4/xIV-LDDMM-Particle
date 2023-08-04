@@ -14,15 +14,19 @@ class Hamiltonian:
         self.numS = Stilde.shape[0]
 
         self.sigma = sigma
-        self.cA = cA
-        self.cS = cS
-        self.cT = cT
+        # coefficients for the Hamiltonian that weight the different kind of control
+        self.cA = cA  # rotation A
+        self.cS = cS  # non rigid U
+        self.cT = cT  # translation tau
         self.dimEff = dimEff
         self.single = single
 
         # Compute constants to weigh each kernel norm in RKHS by
-        self.uCoeff = uc.Ucoeff(self.sigma, Stilde, self.cS).uCoeff
+        self.uCoeff = uc.Ucoeff(self.sigma, Stilde).uCoeff
         self.K0 = self.GaussKernelHamiltonian(self.sigma, self.d, self.uCoeff)
+
+        # coefficient use in the final loss
+        self.weight = 1.0 # == gamma
 
     def GaussKernelHamiltonian(self, sigma, d, uCoeff):
         qxO = Vi(0, d)
@@ -59,7 +63,7 @@ class Hamiltonian:
         Anorm = (A * A).sum()
         Alphanorm = (Alpha * Alpha).sum()
         return (
-            k.sum()
+            self.cS * k.sum()
             + (self.cA / 2.0) * Anorm
             + (self.cT / 2.0) * (tau * tau).sum()
             + (0.5) * Alphanorm
@@ -76,7 +80,6 @@ class HamiltonianSystem(Hamiltonian):
     def __call__(self, px, pw, qx, qw):
         Gpx, Gpw, Gqx, Gqw = torch.autograd.grad(self.H(px, pw, qx, qw), (px, pw, qx, qw), create_graph=True)
         return -Gqx, -Gqw, Gpx, Gpw
-
 
 
 class HamiltonianSystemGrid(Hamiltonian):
@@ -102,8 +105,6 @@ class HamiltonianSystemGrid(Hamiltonian):
         )
 
         return -Gqx, -Gqw, Gpx, Gpw, Gg, Ggw
-
-
 
 
 class HamiltonianSystemBackwards(Hamiltonian):

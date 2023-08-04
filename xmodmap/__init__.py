@@ -1,7 +1,16 @@
 import torch
-
-
 import numpy as np
+
+# Set data type in: fromScratHamiltonianAT, analyzeOutput, getInput, initialize
+use_cuda = torch.cuda.is_available()
+if use_cuda:
+    dtype = torch.cuda.FloatTensor  # DoubleTensor
+    map_location = lambda storage, loc: storage.cuda(0)
+else:
+    dtype = torch.FloatTensor
+    map_location = torch.device("cpu")
+
+torch.set_default_tensor_type(dtype)
 
 
 def normalize(x, p=1.0, dim=1):
@@ -44,3 +53,8 @@ def normalize(x, p=1.0, dim=1):
 #
 # print(c)
 # print(d)
+
+
+import xmodmap.distance as distance
+import xmodmap.deformation as deformation
+import xmodmap.model as model
