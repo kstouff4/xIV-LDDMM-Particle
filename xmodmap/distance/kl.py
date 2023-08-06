@@ -18,7 +18,7 @@ class PiRegularizationSystem:
         self.zeta_S = zeta_S
         self.nu_T = nu_T
 
-        self.weight = 1.0 / torch.log(torch.tensor(nu_T.shape[-1])) if nu_T.shape[-1] > 1 else 1.0
+        self.weight = 1.0 #TODO: put normalizing cste here ?1.0 / torch.log(torch.tensor(nu_T.shape[-1]))
 
     def __call__(self, qw, pi_est):
 
