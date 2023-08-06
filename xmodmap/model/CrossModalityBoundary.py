@@ -4,16 +4,18 @@ import torch
 class CrossModalityBoundary:
     """Boundary loss for cross-modality LDDMM"""
 
-    def __init__(self, hamiltonian, shooting, dataLoss, piLoss, lambLoss, variables, variables_to_optimize, pwTilde=None, pxTilde=None, Csqpi=None):
+    def __init__(self, hamiltonian, shooting, dataLoss, piLoss, lambLoss, variables, variables_to_optimize, pwTilde=None, pxTilde=None, Csqpi=None, Csqlamb=None):
         self.hamiltonian = hamiltonian
         self.shooting = shooting
         self.dataLoss = dataLoss
         self.piLoss = piLoss
         self.lambLoss = lambLoss
 
+        # store the ptilde variable, TODO: move this as a preconditionner
         self.pwTilde = pwTilde
         self.pxTilde = pxTilde
         self.Csqpi = Csqpi
+        self.Csqlamb = Csqlamb
 
         self.variables = variables
         self.variables_to_optimize = [self.variables[i] for i in variables_to_optimize]
@@ -44,7 +46,7 @@ class CrossModalityBoundary:
                                                self.variables["qw"],
                                                self.variables["pi_ST"] * self.Csqpi,
                                                self.variables["zeta_S"],
-                                               self.variables["lamb"])
+                                               self.variables["lamb"] * self.Csqlamb)
         loss = hLoss + dLoss + pLoss + lLoss
 
         # move the value to cpu() to be matplotlib compatible

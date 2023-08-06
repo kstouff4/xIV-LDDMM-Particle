@@ -17,11 +17,6 @@ class LossVarifoldNorm:
         self.d = Ttilde.shape[1]
         self.labs = zeta_T.shape[1]
 
-        # supportWeight is a function that takes as input cordiantes (ie points of Stilde) and lamb0 (a bandwith
-        # of some tanh sigmoid function) and returns the support weight
-        #self.supportWeights = self.defineSupport()
-
-
         self.beta = [1. for _ in range(len(sigmaVar))]
 
         self.weight = 1. # weight coeff infront of dataloss, correspond to 1 / gamma
@@ -92,7 +87,7 @@ class LossVarifoldNorm:
         self.beta = beta
 
     def update_cst_and_K(self):
-        self.K = self.GaussLinKernel(self.sigmaVar, self._beta)
+        self.K = self.GaussLinKernel(self.sigmaVar, self.beta)
 
         self.cst = self.K(self.Ttilde,
                           self.Ttilde,
