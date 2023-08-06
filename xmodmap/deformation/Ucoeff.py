@@ -5,7 +5,8 @@ class Ucoeff():
     Compute the coefficients that basically scale the velocity field cost
     to be on the order of 1.0 for each scale.
     """
-    def __init__(self, sigma, Stilde):
+    def __init__(self, sigma, Stilde, cS):
+        #TODO: check where  cS may be move!
         self.N = Stilde.shape[0]
         self.d = Stilde.shape[1]
 
@@ -15,7 +16,8 @@ class Ucoeff():
         self._uCoeff = []
         for sig in self.sigma:
             Kinit = self.GaussKernelSpaceSingle(sig)
-            self._uCoeff.append(Kinit(self.Stilde, self.Stilde).sum() / (self.N * self.N * sig * sig))
+            self._uCoeff.append(cS * Kinit(self.Stilde, self.Stilde).sum() / (self.N * self.N * sig * sig))
+            print("sig is ", sig, "\n uCoeff ", self._uCoeff[-1])
 
 
     def GaussKernelSpaceSingle(self, sig):
