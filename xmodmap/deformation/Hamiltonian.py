@@ -22,7 +22,7 @@ class Hamiltonian:
         self.single = single
 
         # Compute constants to weigh each kernel norm in RKHS by
-        self.uCoeff = uc.Ucoeff(self.sigma, Stilde).uCoeff
+        self.uCoeff = uc.Ucoeff(self.sigma, Stilde, self.cS).uCoeff
         self.K0 = self.GaussKernelHamiltonian(self.sigma, self.d, self.uCoeff)
 
         # coefficient use in the final loss
@@ -63,7 +63,7 @@ class Hamiltonian:
         Anorm = (A * A).sum()
         Alphanorm = (Alpha * Alpha).sum()
         return (
-            self.cS * k.sum()
+            k.sum()
             + (self.cA / 2.0) * Anorm
             + (self.cT / 2.0) * (tau * tau).sum()
             + (0.5) * Alphanorm
