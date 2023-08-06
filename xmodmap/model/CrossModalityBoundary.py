@@ -55,6 +55,11 @@ class CrossModalityBoundary:
         self.lossListPI.append(pLoss.detach().clone().cpu())
         self.lossListL.append(lLoss.detach().clone().cpu())
 
+        print("H loss: ", self.lossListH[-1].numpy(), end="; ")
+        print("Var loss: ", self.lossListDA[-1].numpy(), end="; ")
+        print("Pi lossL ", self.lossListPI[-1].numpy(), end="; ")
+        print("Lambda loss ", self.lossListL[-1].numpy())
+
         loss.backward()
         return loss
 
@@ -83,10 +88,10 @@ class CrossModalityBoundary:
 
             # print current losses values
             print("Current Losses", flush=True)
-            print("H loss: ", self.lossListH[-1])
-            print("Var loss: ", self.lossListDA[-1])
-            print("Pi lossL ", self.lossListPI[-1])
-            print("Lambda loss ", self.lossListL[-1])
+            print("H loss: ", self.lossListH[-1].numpy())
+            print("Var loss: ", self.lossListDA[-1].numpy())
+            print("Pi lossL ", self.lossListPI[-1].numpy())
+            print("Lambda loss ", self.lossListL[-1].numpy())
 
             # check for NaN
             osd = self.optimizer.state_dict()

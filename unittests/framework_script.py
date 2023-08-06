@@ -75,7 +75,7 @@ lambLoss.weight = gamma
 
 ## Cross-Modality
 piLoss = xmodmap.distance.PiRegularizationSystem(zeta_S, nu_T)
-piLoss.weight = gamma * 1.0 / torch.log(torch.tensor(nu_T.shape[-1]))
+piLoss.weight = gamma * 0.1 / torch.log(torch.tensor(nu_T.shape[-1]))
 
 ## non-rigid and affine deformations
 hamiltonian = xmodmap.deformation.Hamiltonian(sigmaRKHS, Stilde, cA=1.0, cS=10.0,  cT=1.0, dimEff=2, single=False)
