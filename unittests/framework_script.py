@@ -96,11 +96,15 @@ variable_init = {
 
 variable_to_optimize = ["px", "pw", "pi_ST", "lamb"]
 
-#TODO: check if this is correct
-pwTilde = torch.rsqrt(kScale) / dimEff / w_S
-pxTilde = torch.rsqrt(kScale)
+precond = {
+    "px": torch.rsqrt(kScale),
+    "pw": torch.rsqrt(kScale) / dimEff / w_S,
+    "pi_ST": Csqpi,
+    "lamb": Csqlamb
+}
 
-loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss, variable_init, variable_to_optimize, pwTilde=pwTilde, pxTilde=pxTilde, Csqpi=Csqpi, Csqlamb=Csqlamb)
+loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
+loss.set_variables(variable_init, variable_to_optimize, precond=precond)
 loss.optimize()
 
 # Plotting

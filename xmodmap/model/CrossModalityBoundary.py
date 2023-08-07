@@ -4,27 +4,36 @@ import torch
 class CrossModalityBoundary:
     """Boundary loss for cross-modality LDDMM"""
 
-    def __init__(self, hamiltonian, shooting, dataLoss, piLoss, lambLoss, variables, variables_to_optimize, pwTilde=None, pxTilde=None, Csqpi=None, Csqlamb=None):
+    variables = None
+    variables_to_optimize = None
+    precond = lambda *x: x  # identity function
+
+    def __init__(self, hamiltonian, shooting, dataLoss, piLoss, lambLoss):
         self.hamiltonian = hamiltonian
         self.shooting = shooting
         self.dataLoss = dataLoss
         self.piLoss = piLoss
         self.lambLoss = lambLoss
-
-        # store the ptilde variable, TODO: move this as a preconditionner
-        self.pwTilde = pwTilde
-        self.pxTilde = pxTilde
-        self.Csqpi = Csqpi
-        self.Csqlamb = Csqlamb
-
-        self.variables = variables
-        self.variables_to_optimize = [self.variables[i] for i in variables_to_optimize]
+        #setattr(self, f"{key}Precond", value)
 
         self.lossListH = []
         self.lossListDA = []
         self.lossListPI = []
         self.lossListL = []
 
+    def set_variables(self, variables, variables_to_optimize, precond=None):
+        self.variables = variables
+        self.variables_to_optimize = [self.variables[i] for i in variables_to_optimize]
+        if precond is not None:
+            self.set_precond(**precond)
+
+    def set_precond(self, **kwargs):
+        # check if the keys of kwargs are in self.variables
+        assert kwargs.keys() <= self.variables.keys()
+        # init a dict with value 1
+        self.precond = {key: 1.0 for key in self.variables}
+        # update the dict with the kwargs
+        self.precond.update(kwargs)
 
     def loss(self, px0, pw0, qx0, qw0, pi_ST, zeta_S, lamb):
         hLoss = self.hamiltonian.weight * self.hamiltonian(px0, pw0, qx0, qw0)
@@ -40,13 +49,13 @@ class CrossModalityBoundary:
 
     def closure(self):
         self.optimizer.zero_grad()
-        hLoss, dLoss, pLoss, lLoss = self.loss(self.variables["px"] * self.pxTilde,
-                                               self.variables["pw"] * self.pwTilde,
-                                               self.variables["qx"],
-                                               self.variables["qw"],
-                                               self.variables["pi_ST"] * self.Csqpi,
-                                               self.variables["zeta_S"],
-                                               self.variables["lamb"] * self.Csqlamb)
+        hLoss, dLoss, pLoss, lLoss = self.loss(self.variables["px"] * self.precond["px"],
+                                               self.variables["pw"] * self.precond["pw"],
+                                               self.variables["qx"] * self.precond["qx"],
+                                               self.variables["qw"] * self.precond["qw"],
+                                               self.variables["pi_ST"] * self.precond["pi_ST"],
+                                               self.variables["zeta_S"] * self.precond["zeta_S"],
+                                               self.variables["lamb"] * self.precond["lamb"])
         loss = hLoss + dLoss + pLoss + lLoss
 
         # move the value to cpu() to be matplotlib compatible
