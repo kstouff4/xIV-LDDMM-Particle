@@ -20,6 +20,14 @@ class PiRegularizationSystem:
 
         self.weight = 1.0 #TODO: put normalizing cste here ?1.0 / torch.log(torch.tensor(nu_T.shape[-1]))
 
+    def get_params(self):
+        params_dict = {
+            "weight": self.weight,
+            "norm": True,
+            "nuTconst": self.nuTconst
+        }
+        return params_dict
+
     def __call__(self, qw, pi_est):
 
         mass_S = torch.sum(qw * self.zeta_S, dim=0)

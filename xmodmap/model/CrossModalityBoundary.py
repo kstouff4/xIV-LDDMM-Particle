@@ -1,12 +1,20 @@
+import logging.handlers
+import os
 import time
-
 import torch
+
+from xmodmap.optimizer.config import lbfgsConfigDefaults
+
 class CrossModalityBoundary:
     """Boundary loss for cross-modality LDDMM"""
 
     variables = None
     variables_to_optimize = None
     precond = lambda *x: x  # identity function
+    optimizer = None
+    log = []
+    current_step = 0
+    _savedir = None
 
     def __init__(self, hamiltonian, shooting, dataLoss, piLoss, lambLoss):
         self.hamiltonian = hamiltonian
@@ -16,32 +24,65 @@ class CrossModalityBoundary:
         self.lambLoss = lambLoss
         #setattr(self, f"{key}Precond", value)
 
-        self.lossListH = []
-        self.lossListDA = []
-        self.lossListPI = []
-        self.lossListL = []
+    def get_params(self):
+        params_dict = {
+            "hamiltonian": self.hamiltonian.get_params(),
+            "dataLoss": self.dataLoss.get_params(),
+            "piLoss": self.piLoss.get_params(),
+            "lambLoss": self.lambLoss.get_params(),
+        }
+        return params_dict
 
-    def set_variables(self, variables, variables_to_optimize, precond=None):
+    def init(self, variables, variables_to_optimize, precond=None, savedir=os.path.join(os.getcwd(), "output")):
+        # a dict containing all the variables of the model
         self.variables = variables
-        self.variables_to_optimize = [self.variables[i] for i in variables_to_optimize]
+
+        # a list of the variables to optimize
+        self.variables_to_optimize = {key: self.variables[key] for i, key in enumerate(variables_to_optimize)}
+
+        # no precond by default, see self.set_precond()
         if precond is not None:
-            self.set_precond(**precond)
+            self.set_precond(precond)
 
-    def set_precond(self, **kwargs):
+        # init the optimizer
+        self.set_optimizer()
+
+        # init the logger
+        self.savedir = savedir
+
+    @property
+    def savedir(self):
+        return self._savedir
+
+    @savedir.setter
+    def savedir(self, savedir):
+        os.makedirs(savedir, exist_ok=True)
+        self._savedir = savedir
+
+    def set_optimizer(self, state=None):
+        self.optimizer = torch.optim.LBFGS(self.variables_to_optimize.values(), **lbfgsConfigDefaults)
+        if state is not None:
+            self.optimizer.load_state_dict(state)
+    def set_precond(self, weights=None):
         # check if the keys of kwargs are in self.variables
-        assert kwargs.keys() <= self.variables.keys()
+        assert weights.keys() <= self.variables.keys()
+
+        self.precondWeights = weights
         # init a dict with value 1
-        self.precond = {key: 1.0 for key in self.variables}
+        precond = {key: 1.0 for key in self.variables}
         # update the dict with the kwargs
-        self.precond.update(kwargs)
+        precond.update(weights)
 
-    def loss(self, px0, pw0, qx0, qw0, pi_ST, zeta_S, lamb):
-        hLoss = self.hamiltonian.weight * self.hamiltonian(px0, pw0, qx0, qw0)
+        # create a function that returns the precond for each variable
+        self.precond = lambda x: {key: x[key] * precond[key] for key in self.variables}
 
-        _, _, qx, qw = self.shooting(px0, pw0, qx0, qw0)[-1]
-        dLoss = self.dataLoss.weight * self.dataLoss(qx, qw, zeta_S, pi_ST, lamb)
+    def loss(self, px=None, pw=None, qx=None, qw=None, pi_ST=None, zeta_S=None, lamb=None):
+        hLoss = self.hamiltonian.weight * self.hamiltonian(px, pw, qx, qw)
 
-        pLoss = self.piLoss.weight * self.piLoss(qw, pi_ST)
+        _, _, qx1, qw1 = self.shooting(px, pw, qx, qw)[-1]
+        dLoss = self.dataLoss.weight * self.dataLoss(qx1, qw1, zeta_S, pi_ST, lamb)
+
+        pLoss = self.piLoss.weight * self.piLoss(qw1, pi_ST)
 
         lLoss = self.lambLoss.weight * self.lambLoss(lamb)
 
@@ -49,71 +90,99 @@ class CrossModalityBoundary:
 
     def closure(self):
         self.optimizer.zero_grad()
-        hLoss, dLoss, pLoss, lLoss = self.loss(self.variables["px"] * self.precond["px"],
-                                               self.variables["pw"] * self.precond["pw"],
-                                               self.variables["qx"] * self.precond["qx"],
-                                               self.variables["qw"] * self.precond["qw"],
-                                               self.variables["pi_ST"] * self.precond["pi_ST"],
-                                               self.variables["zeta_S"] * self.precond["zeta_S"],
-                                               self.variables["lamb"] * self.precond["lamb"])
-        loss = hLoss + dLoss + pLoss + lLoss
+        losses = self.loss(**self.precond(self.variables))
 
-        # move the value to cpu() to be matplotlib compatible
-        self.lossListH.append(hLoss.detach().clone().cpu())
-        self.lossListDA.append(dLoss.detach().clone().cpu())
-        self.lossListPI.append(pLoss.detach().clone().cpu())
-        self.lossListL.append(lLoss.detach().clone().cpu())
+        loss = sum(losses)
+        self.log.append([l.detach().cpu() for l in losses])
 
-        print("H loss: ", self.lossListH[-1].numpy(), end="; ")
-        print("Var loss: ", self.lossListDA[-1].numpy(), end="; ")
-        print("Pi lossL ", self.lossListPI[-1].numpy(), end="; ")
-        print("Lambda loss ", self.lossListL[-1].numpy())
+        print(f"H loss: {self.log[-1][0].numpy()}; "
+              f"Var loss: {self.log[-1][1].numpy()}; "
+              f"Pi loss: {self.log[-1][2].numpy()}; "
+              f"Lambda loss: {self.log[-1][3].numpy()}")
 
         loss.backward()
         return loss
 
-    def optimize(self,max_eval=15, max_iter=100,
-            line_search_fn="strong_wolfe",
-            history_size=100,
-            tolerance_grad=1e-8,
-            tolerance_change=1e-10):
+    def optimize(self, steps=100):
 
-        self.optimizer = torch.optim.LBFGS(
-            self.variables_to_optimize,
-            max_eval=max_eval,
-            max_iter=max_iter,
-            line_search_fn=line_search_fn,
-            history_size=history_size,
-            tolerance_grad=tolerance_grad,
-            tolerance_change=tolerance_change
-        )
+        self.steps = steps
 
         print("performing optimization...")
         start = time.time()
 
-        for i in range(max_iter):
+        for i in range(self.current_step, self.current_step + self.steps):
             print("it ", i, ": ", end="")
             self.optimizer.step(self.closure)
 
-            # print current losses values
-            print("Current Losses", flush=True)
-            print("H loss: ", self.lossListH[-1].numpy())
-            print("Var loss: ", self.lossListDA[-1].numpy())
-            print("Pi lossL ", self.lossListPI[-1].numpy())
-            print("Lambda loss ", self.lossListL[-1].numpy())
+            if self.stoppingCondition():
+                break
 
-            # check for NaN
-            osd = self.optimizer.state_dict()
+            self.current_step += 1
+            self.saveState()
 
-            assert not torch.isnan(self.lossListH[-1]), "H loss is NaN" + str(osd)
-            assert not torch.isnan(self.lossListDA[-1]), "Var loss is NaN" + str(osd)
-            assert not torch.isnan(self.lossListPI[-1]), "Pi loss is NaN" + str(osd)
-            assert not torch.isnan(self.lossListL[-1]), "Lambda loss is NaN" + str(osd)
 
         print("Optimization (L-BFGS) time: ", round(time.time() - start, 2), " seconds")
 
 
+    def stoppingCondition(self):
+        # check for NaN
+        if any(torch.isnan(l) for l in self.log[-1]):
+            print(f"NaN encountered at iteration {self.current_step}.")
 
+        # check for convergence
+        if (self.current_step > 0) and torch.allclose(torch.tensor(self.log[-1]),
+                                                      torch.tensor(self.log[-2]),
+                                                      atol=1e-6, rtol=1e-5):
+            print(f"Local minimum reached at iteration {self.current_step}.")
 
+        if self.current_step == self.steps:
+            print(f"Maximum number {self.steps} of iterations reached.")
 
+        return 0
 
+    def saveState(self):
+        """
+        osd = state of optimizer
+        its = total iterations
+        i = current iteration
+        xopt = current optimization variable (p0*pTilde)
+        """
+
+        checkpoint = {
+            "variables_to_optimize": self.variables_to_optimize,
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "precondWeights": self.precondWeights,
+            "steps": self.steps,
+            "current_step": self.current_step,
+            "log": self.log,
+            "savedir": self.savedir,
+        }
+        checkpoint.update(self.get_params())
+
+        filename = os.path.join(self.savedir, f"checkpoint.pt")
+        torch.save(checkpoint, filename)
+
+    def resume(self, variables, filename):
+
+        print(f"Resuming optimization from {filename}. Loading... ", end="")
+
+        checkpoint = torch.load(filename)
+
+        self.variables = variables
+        self.variables.update(checkpoint["variables_to_optimize"])
+        self.variables_to_optimize = checkpoint["variables_to_optimize"]
+
+        self.set_optimizer(state=checkpoint["optimizer_state_dict"])
+        self.set_precond(weights=checkpoint["precondWeights"])
+
+        self.steps = checkpoint["steps"]
+        self.current_step = checkpoint["current_step"]
+        self.log = checkpoint["log"]
+        self.savedir = checkpoint["savedir"]
+
+        assert self.dataLoss.get_params() == checkpoint["dataLoss"]
+        assert self.hamiltonian.get_params() == checkpoint["hamiltonian"]
+        assert self.piLoss.get_params() == checkpoint["piLoss"]
+        assert self.lambLoss.get_params() == checkpoint["lambLoss"]
+
+        print("done.")

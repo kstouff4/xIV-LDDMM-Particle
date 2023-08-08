@@ -21,6 +21,14 @@ class LossVarifoldNorm:
 
         self.weight = 1. # weight coeff infront of dataloss, correspond to 1 / gamma
 
+    def get_params(self):
+        params_dict = {
+            "sigmaVar": self.sigmaVar,
+            "beta": self.beta,
+            "weight": self.weight,
+        }
+        return params_dict
+
     @staticmethod
     def GaussLinKernelSingle(sig, d, l):
         # u and v are the feature vectors
