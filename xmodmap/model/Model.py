@@ -114,50 +114,50 @@ class Model:
         return 0
 
 
-def saveState(self):
-    """
-    osd = state of optimizer
-    its = total iterations
-    i = current iteration
-    xopt = current optimization variable (p0*pTilde)
-    """
+    def saveState(self):
+        """
+        osd = state of optimizer
+        its = total iterations
+        i = current iteration
+        xopt = current optimization variable (p0*pTilde)
+        """
 
-    checkpoint = {
-        "variables_to_optimize": self.variables_to_optimize,
-        "optimizer_state_dict": self.optimizer.state_dict(),
-        "precondWeights": self.precondWeights,
-        "steps": self.steps,
-        "current_step": self.current_step,
-        "log": self.log,
-        "savedir": self.savedir,
-    }
-    checkpoint.update(self.get_params())
+        checkpoint = {
+            "variables_to_optimize": self.variables_to_optimize,
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "precondWeights": self.precondWeights,
+            "steps": self.steps,
+            "current_step": self.current_step,
+            "log": self.log,
+            "savedir": self.savedir,
+        }
+        checkpoint.update(self.get_params())
 
-    filename = os.path.join(self.savedir, f"checkpoint.pt")
-    torch.save(checkpoint, filename)
-
-
-def resume(self, variables, filename):
-    print(f"Resuming optimization from {filename}. Loading... ", end="")
-
-    checkpoint = torch.load(filename)
-
-    self.variables = variables
-    self.variables.update(checkpoint["variables_to_optimize"])
-    self.variables_to_optimize = checkpoint["variables_to_optimize"]
-
-    self.set_optimizer(state=checkpoint["optimizer_state_dict"])
-    self.set_precond(weights=checkpoint["precondWeights"])
-
-    self.steps = checkpoint["steps"]
-    self.current_step = checkpoint["current_step"]
-    self.log = checkpoint["log"]
-    self.savedir = checkpoint["savedir"]
-
-    self.check_resume(checkpoint)
-
-    print("done.")
+        filename = os.path.join(self.savedir, f"checkpoint.pt")
+        torch.save(checkpoint, filename)
 
 
-def check_resume(self, checkpoint):
-    pass
+    def resume(self, variables, filename):
+        print(f"Resuming optimization from {filename}. Loading... ", end="")
+
+        checkpoint = torch.load(filename)
+
+        self.variables = variables
+        self.variables.update(checkpoint["variables_to_optimize"])
+        self.variables_to_optimize = checkpoint["variables_to_optimize"]
+
+        self.set_optimizer(state=checkpoint["optimizer_state_dict"])
+        self.set_precond(weights=checkpoint["precondWeights"])
+
+        self.steps = checkpoint["steps"]
+        self.current_step = checkpoint["current_step"]
+        self.log = checkpoint["log"]
+        self.savedir = checkpoint["savedir"]
+
+        self.check_resume(checkpoint)
+
+        print("done.")
+
+
+    def check_resume(self, checkpoint):
+        pass
