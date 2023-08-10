@@ -78,7 +78,7 @@ piLoss = xmodmap.distance.PiRegularizationSystem(zeta_S, nu_T)
 piLoss.weight = gamma * 0.1 / torch.log(torch.tensor(nu_T.shape[-1]))
 
 ## non-rigid and affine deformations
-hamiltonian = xmodmap.deformation.Hamiltonian(sigmaRKHS, Stilde, cA=1.0, cS=10.0,  cT=1.0, dimEff=2, single=False)
+hamiltonian = xmodmap.deformation.Hamiltonian(sigmaRKHS, Stilde, cA=1.0, cS=100.0,  cT=1.0, dimEff=2, single=False)
 hamiltonian.weight = gamma
 shooting = xmodmap.deformation.Shooting(sigmaRKHS, Stilde, cA=1.0, cS=10.0,  cT=1.0, dimEff=2, single=False)
 
@@ -104,11 +104,14 @@ precond = {
 }
 
 loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
-loss.set_variables(variable_init, variable_to_optimize, precond=precond)
-loss.optimize()
+loss.init(variable_init, variable_to_optimize, precond=precond, savedir=savedir)
+loss.optimize(1)
 
-# Plotting
-
-
+# Example of resuming == equivalent of loss.optimize(3)
+loss2 = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
+loss2.resume(variable_init, os.path.join(savedir, 'checkpoint.pt'))
+loss2.optimize(2)
 
 # Saving
+
+

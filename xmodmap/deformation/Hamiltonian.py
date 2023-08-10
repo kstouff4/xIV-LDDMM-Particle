@@ -28,6 +28,18 @@ class Hamiltonian:
         # coefficient use in the final loss
         self.weight = 1.0 # == gamma
 
+    def get_params(self):
+        params_dict = {
+            "sigma": self.sigma,
+            "cA": self.cA,
+            "cS": self.cS,
+            "cT": self.cT,
+            "dimEff": self.dimEff,
+            "single": self.single,
+            "weight": self.weight,
+        }
+        return params_dict
+
     def GaussKernelHamiltonian(self, sigma, d, uCoeff):
         qxO = Vi(0, d)
         qyO = Vj(1, d)
