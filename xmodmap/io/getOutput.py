@@ -285,7 +285,7 @@ def writeParticleVTK(Xt, nu_Xt, savename, condense=False, featNames=None):
     if len(nuX.shape) < 2 or nuX.shape[-1] < 2:
         imageNames = ["Weight"]
         imageVals = [np.squeeze(nuX)]
-        writeVTK(X, imageVals, imageNames, savname)
+        writeVTK(X, imageVals, imageNames, savename)
     else:
         imageNames = ["Weight", "Maximum_Feature_Dimension", "Entropy"]
         imageVals = [np.sum(nuX, axis=-1), np.argmax(nuX, axis=-1) + 1]
