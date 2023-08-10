@@ -5,7 +5,7 @@ sys_path.append("..")
 
 import torch
 
-legacy = False
+legacy = True
 
 if legacy:
     from sandbox.crossModalityHamiltonianATSCalibrated_Boundary_legacy import *

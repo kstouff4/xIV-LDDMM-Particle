@@ -102,4 +102,4 @@ precond = {
 
 loss = xmodmap.model.CrossModality(hamiltonian, shooting, dataloss, piLoss)
 loss.init(variable_init, variable_to_optimize, precond=precond, savedir=savedir)
-loss.optimize(1)
+loss.optimize(5)
