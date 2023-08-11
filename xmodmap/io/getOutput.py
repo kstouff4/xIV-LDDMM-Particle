@@ -274,7 +274,7 @@ def writeVTK(
     return
 
 
-def writeParticleVTK(Xt, nu_Xt, savename, condense=False, featNames=None):
+def writeParticleVTK(Xt, nu_Xt, savename, norm=True, condense=False, featNames=None):
     if torch.is_tensor(Xt):
         X = Xt.cpu().numpy()
         nuX = nu_Xt.cpu().numpy()
@@ -295,11 +295,18 @@ def writeParticleVTK(Xt, nu_Xt, savename, condense=False, featNames=None):
         imageVals.append(np.sum(e, axis=-1))
         if not condense:
             for f in range(nuX.shape[-1]):
-                if featNames is not None:
-                    imageNames.append(featNames[f] + "_Probabilities")
+                if norm:
+                    if featNames is not None:
+                        imageNames.append(featNames[f] + "_Probabilities")
+                    else:
+                        imageNames.append("Feature_" + str(f) + "_Probabilities")
+                    imageVals.append(zetaX[:, f])
                 else:
-                    imageNames.append("Feature_" + str(f) + "_Probabilities")
-                imageVals.append(zetaX[:, f])
+                    if featNames is not None:
+                        imageNames.append(featNames[f])
+                    else:
+                        imageNames.append("Feature_" + str(f) + "_Values")
+                    imageVals.append(nuX[:,f])
         writeVTK(X, imageVals, imageNames, savename)
     return
 

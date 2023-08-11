@@ -29,7 +29,7 @@ from sys import path as sys_path
 sys_path.append("..")
 sys_path.append("../xmodmap")
 sys_path.append("../xmodmap/io")
-import initialize as init
+
 import getOutput as gO
 
 #####################################################################################
@@ -95,6 +95,19 @@ def getSlicesFromWhole(files, zU):
         nu_Slist.append(torch.tensor(nu_X[slIndex == i, ...]).type(dtype))
     return Slist, nu_Slist, slIndex
 
+def getSlicesFromDir(filepath,numSlices,feat=1):
+    Slist = []
+    nu_Slist = []
+    totalPoints = 0
+    for i in range(1,numSlices+1):
+        info = np.load(filepath + str(i) + '.npz')
+        X = info[info.files[0]]
+        nu_X = info[info.files[feat]]
+        
+        Slist.append(torch.tensor(X[:,0:2]).type(dtype))
+        nu_Slist.append(torch.tensor(nu_X).type(dtype))
+        totalPoints += X.shape[0]
+    return Slist,nu_Slist,totalPoints
 
 def printTransformations(p0, savedir, it):
     thetaTot = []
@@ -253,6 +266,8 @@ def align(Slist, nu_Slist, sigma, its, savedir, norm=False):
         optimizer.step(closure)
         if np.mod(i, 25) == 0:
             printTransformations(p0, savedir, i)
+        if np.allclose(lossList[-1],lossList[-2]):
+            break
 
     printTransformations(p0, savedir, its)
     f, ax = plt.subplots()
