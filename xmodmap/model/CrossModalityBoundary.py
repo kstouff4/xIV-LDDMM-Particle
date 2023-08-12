@@ -1,5 +1,6 @@
 import time
 import torch
+from matplotlib import pyplot as plt
 
 
 from xmodmap.model.Model import Model
@@ -47,4 +48,24 @@ class CrossModalityBoundary(Model):
         assert self.hamiltonian.get_params() == checkpoint["hamiltonian"]
         assert self.piLoss.get_params() == checkpoint["piLoss"]
         assert self.lambLoss.get_params() == checkpoint["lambLoss"]
+    
+    def print_log(self):
+        # split logs
+        logH = []
+        logD = []
+        logP = []
+        logL = []
+        for i in range(0,len(self.log),4):
+            logH.append(self.log(i).numpy())
+            logD.append(self.log(i+1).numpy())
+            logP.append(self.log(i+2).numpy())
+            logL.append(self.log(i+3).numpy())
+        
+        f,ax = plt.subplots()
+        ax.plot(logH, label=f"Hamiltonian Loss, Final = {logH[-1]}")
+        ax.plot(logD, label=f"Data Loss, Final = {logD[-1]}")
+        ax.plot(logP, label=f"Pi Loss, Final = {logP[-1]}")
+        ax.plot(logL, label=f"Lambda Loss, Final = {logL[-1]}")
+        ax.legend()
+        return f
 

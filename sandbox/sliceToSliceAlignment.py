@@ -62,8 +62,6 @@ def GaussLinKernel(sigma, d, l, beta):
 
 ########################################################################################
 # Apply Transformation
-
-
 def applyRigid2D(S, nu_S, theta, tau):
     A = torch.zeros((2, 2)).type(dtype)
     A[0, 0] = torch.cos(theta).type(dtype)
@@ -72,6 +70,22 @@ def applyRigid2D(S, nu_S, theta, tau):
     A[1, 0] = torch.sin(theta).type(dtype)
 
     xc = torch.sum((torch.sum(nu_S, axis=-1)[..., None] * S) / torch.sum(nu_S), axis=0)
+
+    Snew = (S - xc) @ A.T + tau
+    print(Snew.detach())
+    return Snew
+
+def applyRigid2DNew(S,xc,theta,tau):
+    print(S.shape)
+    print(xc.shape)
+    print(theta.shape)
+    print(tau.shape)
+    
+    A = torch.zeros((2, 2)).type(dtype)
+    A[0, 0] = torch.cos(theta).type(dtype)
+    A[1, 1] = torch.cos(theta).type(dtype)
+    A[0, 1] = -torch.sin(theta).type(dtype)
+    A[1, 0] = torch.sin(theta).type(dtype)
 
     Snew = (S - xc) @ A.T + tau
     print(Snew.detach())
@@ -104,10 +118,32 @@ def getSlicesFromDir(filepath,numSlices,feat=1):
         X = info[info.files[0]]
         nu_X = info[info.files[feat]]
         
+        if (i == 1):
+            S = torch.tensor(X).type(dtype)
+            nu_S = torch.tensor(nu_X).type(dtype)
+        else:
+            S = torch.cat((S,torch.tensor(X).type(dtype)))
+            nu_S = torch.cat((nu_S,torch.tensor(nu_X).type(dtype)))
+        
         Slist.append(torch.tensor(X[:,0:2]).type(dtype))
         nu_Slist.append(torch.tensor(nu_X).type(dtype))
         totalPoints += X.shape[0]
-    return Slist,nu_Slist,totalPoints
+    return Slist,nu_Slist,totalPoints, S, nu_S
+
+    
+def getXcFromDir(filepath,numSlices,feat=1):
+    xcList = []
+    for s in range(1,numSlices+1):
+        info = np.load(filepath + str(s) + '.npz')
+        S = torch.tensor(info[info.files[0]]).type(dtype)
+        nu_S = torch.tensor(info[info.files[feat]]).type(dtype)
+        
+        xc = torch.sum((torch.sum(nu_S, axis=-1)[..., None] * S[:,0:2]) / torch.sum(nu_S), axis=0)
+        xcList.append(xc.detach().cpu().numpy())
+        
+    return xcList
+
+
 
 def printTransformations(p0, savedir, it):
     thetaTot = []

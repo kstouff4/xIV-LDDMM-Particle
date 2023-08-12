@@ -125,7 +125,7 @@ def analyzeLongitudinalMass(listOfNu, S, ages, savename, labels):
     return
 
 
-def getJacobian(Di, nu_Si, nu_Di, savename):
+def getJacobian(Di, nu_Si, nu_Di, savename=None):
     if torch.is_tensor(Di):
         D = Di.cpu().numpy()
         nu_S = nu_Si.cpu().numpy()
@@ -137,9 +137,14 @@ def getJacobian(Di, nu_Si, nu_Di, savename):
     j = np.sum(nu_D, axis=-1) / np.sum(nu_S, axis=-1)
     imageNames = ["maxVal", "totalMass", "jacobian"]
     imageVals = [np.argmax(nu_D, axis=-1) + 1, np.sum(nu_D, axis=-1), j]
-    writeVTK(D, imageVals, imageNames, savename, polyData=None)
-    np.savez(savename.replace(".vtk", ".npz"), j=j)
-    return savename.replace(".vtk", ".npz")
+    #writeVTK(D, imageVals, imageNames, savename, polyData=None)
+    #np.savez(savename.replace(".vtk", ".npz"), j=j)
+    
+    if torch.is_tensor(Di):
+        return torch.tensor(j)
+    else:
+        return j
+    #return savename.replace(".vtk", ".npz")
 
 
 def splitZs(Ti, nu_Ti, Di, nu_Di, savename, units=10, jac=None):
@@ -273,22 +278,46 @@ def writeVTK(
         f_out.writelines(f_out_data)
     return
 
+def getEntropy(nu_D):
+    if torch.is_tensor(nu_D):
+        nu_DD = nu_D.cpu().numpy()
+    else:
+        nu_DD = nu_D
+    zeta_DD = nu_DD / np.sum(nu_DD,axis=-1)[...,None]
+    e = np.zeros_like(zeta_DD)
+    e[zeta_DD > 0] = zeta_DD[zeta_DD > 0] * np.log(zeta_DD[zeta_DD > 0])
+    if torch.is_tensor(nu_D):
+        return torch.tensor(np.sum(e,axis=-1))
+    else:
+        return np.sum(e,axis=-1)
 
-def writeParticleVTK(Xt, nu_Xt, savename, norm=True, condense=False, featNames=None):
+def writeParticleVTK(Xt, nu_Xt, savename, norm=True, condense=False, featNames=None, sW=None):
     if torch.is_tensor(Xt):
         X = Xt.cpu().numpy()
         nuX = nu_Xt.cpu().numpy()
     else:
         X = Xt
         nuX = nu_Xt
+    
+    if sW is not None:
+        if torch.is_tensor(sW)
+            sWW = sW.cpu().numpy()
+        else:
+            sWW = sW
 
     if len(nuX.shape) < 2 or nuX.shape[-1] < 2:
         imageNames = ["Weight"]
         imageVals = [np.squeeze(nuX)]
+        if sW is not None:
+            imageNames.append("Support Weights")
+            imageVals.append(np.squeeze(sWW))
         writeVTK(X, imageVals, imageNames, savename)
     else:
         imageNames = ["Weight", "Maximum_Feature_Dimension", "Entropy"]
         imageVals = [np.sum(nuX, axis=-1), np.argmax(nuX, axis=-1) + 1]
+        if sW is not None:
+            imageNames.append("Support Weights")
+            imageVals.append(np.squeeze(sWW))
         zetaX = nuX / np.sum(nuX, axis=-1)[..., None]
         e = np.zeros_like(zetaX)
         e[zetaX > 0] = zetaX[zetaX > 0] * np.log(zetaX[zetaX > 0])

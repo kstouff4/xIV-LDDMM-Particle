@@ -19,6 +19,11 @@ class Model:
 
     def get_params(self):
         pass
+    
+    def get_variables_optimized(self):
+        # set gradients to zero before returning
+        self.optimizer.zero_grad() 
+        return self.precond(self.variables)
 
     def init(self, variables, variables_to_optimize, precond=None, savedir=os.path.join(os.getcwd(), "output")):
         # a dict containing all the variables of the model
@@ -160,4 +165,7 @@ class Model:
 
 
     def check_resume(self, checkpoint):
+        pass
+    
+    def print_log(self):
         pass
