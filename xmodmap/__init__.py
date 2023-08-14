@@ -11,6 +11,7 @@ else:
     map_location = torch.device("cpu")
 
 torch.set_default_tensor_type(dtype)
+torch_dtype = torch.float32
 
 
 def normalize(x, p=1.0, dim=1):

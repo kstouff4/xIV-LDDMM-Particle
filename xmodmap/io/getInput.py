@@ -3,11 +3,10 @@ import torch
 
 import nibabel as nib
 import pandas as pd
-import os
 
-# os.environ['CUDA_VISIBLE_DEVICES'] = '1'
 
 from matplotlib import pyplot as plt
+from xmodmap import torch_dtype
 
 
 def applyAffine(Z, nu_Z, A, tau):
@@ -39,8 +38,10 @@ def getFromFile(npzFile):
     print("min and max")
     print(np.min(npz[npz.files[0]], axis=0))
     print(np.max(npz[npz.files[0]], axis=0))
-    S = torch.tensor(npz[npz.files[0]])
-    nu_S = torch.tensor(npz[npz.files[1]])
+    print("X dtype: ", npz[npz.files[0]].dtype)
+    print("nu_X dtype: ", npz[npz.files[1]].dtype)
+    S = torch.tensor(npz[npz.files[0]],dtype=torch_dtype)
+    nu_S = torch.tensor(npz[npz.files[1]],dtype=torch_dtype)
     return S, nu_S
 
 

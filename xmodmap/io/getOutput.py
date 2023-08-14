@@ -127,9 +127,9 @@ def analyzeLongitudinalMass(listOfNu, S, ages, savename, labels):
 
 def getJacobian(Di, nu_Si, nu_Di, savename=None):
     if torch.is_tensor(Di):
-        D = Di.cpu().numpy()
+        D = torch.clone(Di).detach().cpu().numpy()
         nu_S = nu_Si.cpu().numpy()
-        nu_D = nu_Di.cpu().numpy()
+        nu_D = torch.clone(nu_Di).detach().cpu().numpy()
     else:
         D = Di
         nu_S = nu_Si
@@ -300,7 +300,7 @@ def writeParticleVTK(Xt, nu_Xt, savename, norm=True, condense=False, featNames=N
         nuX = nu_Xt
     
     if sW is not None:
-        if torch.is_tensor(sW)
+        if torch.is_tensor(sW):
             sWW = sW.cpu().numpy()
         else:
             sWW = sW

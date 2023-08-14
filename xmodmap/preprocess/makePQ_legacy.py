@@ -47,9 +47,13 @@ def makePQ(
     w_T = nu_T.sum(axis=-1)[..., None]
     zeta_S = (nu_S / w_S)
     zeta_T = (nu_T / w_T)
-    zeta_S[torch.squeeze(w_S == 0), ...] = torch.tensor(0.0)
-    zeta_T[torch.squeeze(w_T == 0), ...] = torch.tensor(0.0)
+    print("zeta_S dtype: ", zeta_S.dtype)
+    print("zeta_T dtype: ", zeta_T.dtype)
+    zeta_S[torch.squeeze(w_S == 0), ...] = 0.0 # torch.tensor(0.0)
+    zeta_T[torch.squeeze(w_T == 0), ...] = 0.0 # torch.tensor(0.0)
     numS = w_S.shape[0]
+    print("zeta_S dtype: ", zeta_S.dtype)
+    print("zeta_T dtype: ", zeta_T.dtype)
 
     Stilde, Ttilde, s, m = preprocess.rescaleData(S, T)
 

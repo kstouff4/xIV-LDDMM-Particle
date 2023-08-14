@@ -55,11 +55,12 @@ class CrossModalityBoundary(Model):
         logD = []
         logP = []
         logL = []
-        for i in range(0,len(self.log),4):
-            logH.append(self.log(i).numpy())
-            logD.append(self.log(i+1).numpy())
-            logP.append(self.log(i+2).numpy())
-            logL.append(self.log(i+3).numpy())
+        print("log length: ", len(self.log))
+        for i in range(0,len(self.log)-3,4):
+            logH.append(self.log[i])
+            logD.append(self.log[i+1])
+            logP.append(self.log[i+2])
+            logL.append(self.log[i+3])
         
         f,ax = plt.subplots()
         ax.plot(logH, label=f"Hamiltonian Loss, Final = {logH[-1]}")
