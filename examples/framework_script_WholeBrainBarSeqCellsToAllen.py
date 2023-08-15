@@ -92,12 +92,12 @@ torch.set_printoptions(precision=6)
 
 
 # Data Loading
-savedir = os.path.join("output", "BarSeq", "Half_Brain_D079","200umTo200um")
+savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo200um")
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/approx200um_flipZ.npz"
-tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Half_Brain_D079/sig0.25Align_200um/all_optimal_all.npz'
+tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Whole_Brain_2023/sig0.25Align_200um/all_optimal_all.npz'
 
-origDataFP = '/cis/home/kstouff4/Documents/SpatialTranscriptomics/BarSeq/Half_Brain_D079/'
-pref = 'filt_neurons_D079_3L_goodsubset_CCFv2'
+origDataFP = '/cis/home/kstouff4/Documents/SpatialTranscriptomics/BarSeq/Whole_Brain_2023/'
+pref = 'filt_neurons-clust3'
 
 rtList = []
 rt = sp.io.loadmat(origDataFP + pref + '_regionTypes.mat',appendmat=False)
@@ -199,15 +199,6 @@ precond = {
     "pi_ST": Csqpi,
     "lamb": Csqlamb
 }
-
-# check
-print("qx size: ", variable_init["qx"].shape)
-print("qw size: ", variable_init["qw"].shape)
-print("px size: ", variable_init["px"].shape)
-print("pw size: ", variable_init["pw"].shape)
-print("pi_ST size: ", variable_init["pi_ST"].shape)
-print("zeta_S size: ", variable_init["zeta_S"].shape)
-
 
 loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
 loss.init(variable_init, variable_to_optimize, precond=precond, savedir=savedir)
