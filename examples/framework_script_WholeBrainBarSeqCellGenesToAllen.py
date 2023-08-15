@@ -92,19 +92,15 @@ torch.set_printoptions(precision=6)
 
 
 # Data Loading
-savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo200um")
+savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo100um","top16CellGenes")
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/approx200um_flipZ.npz"
-tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Whole_Brain_2023/sig0.25Align_200um/Cells/all_optimal_all.npz'
+tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Whole_Brain_2023/sig0.25Align_100um/CellGenes/all_optimal_all.npz'
 
-origDataFP = '/cis/home/kstouff4/Documents/SpatialTranscriptomics/BarSeq/Whole_Brain_2023/'
-pref = 'filt_neurons-clust3'
+origDataFP = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Whole_Brain_2023/sig0.25/Genes/MI_ResultsCellGenes/'
+pref = 'top16.npz'
 
-rtList = []
-rt = sp.io.loadmat(origDataFP + pref + '_regionTypes.mat',appendmat=False)
-regionTypeNames = rt['regionTypes']
-for i in range(len(regionTypeNames)):
-    rtList.append(regionTypeNames[i][0][0])
-regionTypeNames = rtList
+fil = np.load(origDataFP + pref,allow_pickle=True)
+regionTypeNames = list(fil['names'])
 
 os.makedirs(savedir, exist_ok=True)
 print(torch.get_default_dtype)
