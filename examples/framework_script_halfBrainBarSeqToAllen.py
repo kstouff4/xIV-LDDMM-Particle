@@ -157,6 +157,12 @@ from xmodmap.preprocess.makePQ_legacy import makePQ
            Csqpi=Csqpi,
            lambInit=lambInit,
            Csqlamb=Csqlamb)
+sm = {
+    "s": s,
+    "m", m
+}
+
+torch.save(os.path.join(savedir,"sm.pt"))
 
 
 # Model Setup
@@ -208,17 +214,18 @@ print("pw size: ", variable_init["pw"].shape)
 print("pi_ST size: ", variable_init["pi_ST"].shape)
 print("zeta_S size: ", variable_init["zeta_S"].shape)
 
-
+# Example of starting from scratch
+'''
 loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
 loss.init(variable_init, variable_to_optimize, precond=precond, savedir=savedir)
 loss.optimize(steps)
-
-# Example of resuming == equivalent of loss.optimize(3)
 '''
+# Example of resuming == equivalent of loss.optimize(3)
+
 loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
 loss.resume(variable_init, os.path.join(savedir, 'checkpoint.pt'))
 loss.optimize(0)
-'''
+
 
 # Saving
 precondVar = loss.get_variables_optimized()

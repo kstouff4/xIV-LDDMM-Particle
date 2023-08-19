@@ -1,7 +1,9 @@
 import numpy as np
 import scipy as sp
 import torch
+from pykeops.torch import Vi,Vj
 
+from xmodmap.io.getOutput import writeParticleVTK
 
 def applyAffine(Z, nu_Z, A, tau, bc=False):
     """
@@ -132,6 +134,13 @@ def resizeData(Xtilde, s, m):
     X = Xtilde * s + m
     return X
 
+def rescaleDataSM(X, s, m):
+    '''
+    Rescales data with given s, m found from rescaling based on S, T
+    '''
+    Xtilde = (X - m) * (1.0 / s)
+    return Xtilde
+
 
 def scaleDataByVolumes(S, nuS, T, nuT, dRel=3):
     """
@@ -222,3 +231,126 @@ def checkZ(S, T):
         Tn = T
 
     return Sn, Tn
+
+def findSymmetryPlane(T,nu_T,savename,axis=0,angleW=0.0):
+    '''
+    Find symmetry plane in data by aligning flipped source to original.
+    
+    Returns rotation and translation needed to align flipped source to original.
+    '''
+    
+    S = torch.clone(T)
+    S[:,axis] = -1.0*S[:,axis]
+    writeParticleVTK(S,nu_T,savename+"originalflip.vtk",norm=True, condense=True, featNames=None, sW=None)
+    
+    def getR(angle):
+        A = torch.eye(3)
+        A[0,0] = torch.cos(angle)
+        A[1,1] = torch.cos(angle)
+        A[0,1] = -torch.sin(angle)
+        A[1,0] = torch.sin(angle)
+        return A
+    
+    def makeLoss(T,nu_T,sigma):
+        Tj = Vj(T)/sigma
+        sW = (T[:,axis] >= -3.5)*(T[:,axis] <= -1.5) # bounds of comparison (support weights)
+        if nu_T.shape[-1] < 60:
+            W = (Vi(nu_T)*Vj(sW[...,None]*nu_T)).sum()
+        else:
+            ssW = sW[...,None]*nu_T
+            W = (Vi(nu_T[:,0:10])*Vj(ssW[:,0:10])).sum()
+            for j in range(10,nu_T.shape[-1]-10,10):
+                W += (Vi(nu_T[:,j:j+10])*Vj(ssW[:,j:j+10])).sum()
+                    
+        def loss(angle,tau2):
+            A = getR(angle)
+            tau3 = torch.zeros((1,3))
+            tau3[0,0:2] = tau2
+            
+            dS = S @ A.T + tau3
+            Si = Vi(dS)/sigma
+            D2 = Si.sqdist(Tj)
+            K = (-D2 * 0.5).exp()*W
+            return K.sum_reduction(axis=1)
+        
+        return loss
+    
+    angle0 = torch.zeros((1)).requires_grad_(True)
+    tau0 = torch.zeros((1,2)).requires_grad_(True)
+    
+    optimizer = torch.optim.LBFGS(
+        [angle0,tau0],
+        max_eval=15,
+        max_iter=10,
+        line_search_fn="strong_wolfe",
+        history_size=100,
+        tolerance_grad=1e-8,
+        tolerance_change=1e-10,
+    )
+    
+    loss = makeLoss(T,nu_T,sigma=1.0)
+    
+    def closure():
+        optimizer.zero_grad()
+        L = loss(angle0,tau0)
+        L = -L.sum() + angleW*angle0**2 # limit rotation 
+        print("loss: ", L.detach())
+        L.backward()
+        return L
+    
+    for i in range(10):
+        optimizer.step(closure)
+    
+    A=getR(angle0.detach())
+    tau3 = torch.zeros((1,3))
+    tau3[0,0:2] = tau0.detach()
+    
+    dS = S @ A.T + tau3
+    
+    params = {
+        "A": A,
+        "angle": angle0,
+        "tau": tau0,
+        "D": dS
+    }
+    
+    torch.save(params,savename+'.pt')
+    print("A: ", A)
+    print("angle: ", angle0)
+    print("tau: ", tau0)
+    return A,tau3,dS
+
+def makeWhole(T,nu_T,savename,axis=0,thresh=0.02):
+    '''
+    Make whole slice by mapping reflection onto original slice.
+    Take union of points (remove those too close to originals).
+    
+    if minimum distance is less than thresh = remove points
+    '''
+    A,tau3,dS = findSymmetryPlane(T,nu_T,savename,axis)
+    
+    # save deformed reflection
+    writeParticleVTK(dS, nu_T, savename + 'dS.vtk', norm=True, condense=True, featNames=None, sW=None)
+    writeParticleVTK(T,nu_T,savename+'.vtk', norm=True, condense=True, featNames=None, sW=None)
+    
+    Di = Vi(dS)
+    Tj = Vj(T)
+    
+    D2 = Di.sqdist(Tj)
+    minDist = D2.min(axis=1) # find minimum distance to point
+    indsToKeep = torch.squeeze(minDist > thresh)
+    D = dS[indsToKeep,:]
+    nu_D = nu_T[indsToKeep,:]
+    
+    S = torch.cat((T,D))
+    nu_S = torch.cat((nu_T,nu_D))
+    
+    writeParticleVTK(S,nu_S,savename+'total.vtk',norm=True,condense=True,featNames=None,sW=None)
+    np.savez(savename+'total.npz',X=S.cpu().numpy(),nu_X=nu_S.cpu().numpy())
+    return
+
+
+
+
+    
+    
