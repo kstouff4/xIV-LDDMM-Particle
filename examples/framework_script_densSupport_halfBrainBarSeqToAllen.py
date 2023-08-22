@@ -21,6 +21,7 @@ def saveAtlas(qx1,qw1,zeta_S,pi_ST,lamb,s,m):
     nu_Dpi = nu_D@pi_ST
     
     sW = dataloss.supportWeight(qx1,lamb)
+    dW = dataloss.densityWeight(qx1)
     jac = getJacobian(D,nu_S,nu_D)
     
     writeParticleVTK(D, nu_D, os.path.join(savedir,"atlas_nu_D.vtk"), norm=True, condense=False, featNames=None, sW=None)
@@ -30,6 +31,7 @@ def saveAtlas(qx1,qw1,zeta_S,pi_ST,lamb,s,m):
         "nu_D": nu_D,
         "nu_Dpi": nu_Dpi,
         "sW": sW,
+        "dW": dW,
         "jac": jac
     }
     torch.save(summary,os.path.join(savedir,"atlas_deformationSummary.pt"))
@@ -39,6 +41,7 @@ def saveAtlas(qx1,qw1,zeta_S,pi_ST,lamb,s,m):
         np.sum(nu_Dpi.cpu().numpy(),axis=-1),
         np.argmax(nu_Dpi.cpu().numpy(),axis=-1)+1,
         np.squeeze(sW.cpu().numpy()),
+        np.squeeze(dW.cpu().numpy()),
         np.squeeze(jac.cpu().numpy()),
         np.squeeze(getEntropy(nu_Dpi.cpu().numpy())),
     ]
@@ -48,6 +51,7 @@ def saveAtlas(qx1,qw1,zeta_S,pi_ST,lamb,s,m):
         "Weight_TargetFeaturs",
         "MaxVal_TargetFeatures",
         "SupportWeight_TargetSpace",
+        "DensityWeight_TargetSpace",
         "Jacobian",
         "Entropy"
     ]
@@ -92,7 +96,7 @@ torch.set_printoptions(precision=6)
 
 
 # Data Loading
-savedir = os.path.join("output", "BarSeq", "Half_Brain_D079","200umTo200um_Rigid")
+savedir = os.path.join("output", "BarSeq", "Half_Brain_D079","200umTo200um_Density")
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/approx200um_flipZ.npz"
 tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Half_Brain_D079/sig0.25Align_200um/all_optimal_all.npz'
 
@@ -137,6 +141,7 @@ eta0 = torch.tensor(0.2).sqrt()
 lambInit = torch.tensor(0.4)
 single = False
 gamma = 0.1 #0.01 #10.0
+densSigma = 0.1
 
 from xmodmap.preprocess.makePQ_legacy import makePQ
 (
@@ -166,15 +171,17 @@ sm = {
     "sigmaRKHS": sigmaRKHS,
     "d": d,
     "dimEff": dimEff,
-    "single": single
+    "single": single,
+    "densSigma": densSigma
 }
 
 torch.save(sm,os.path.join(savedir,"sm.pt"))
 
+
 # Model Setup
 
 ## Varifold distance with boundaries
-dataloss = xmodmap.distance.LossVarifoldNormBoundary(sigmaVar, w_T, zeta_T, Ttilde)   # Dream of : (sigmaVar, T, nu_T)
+dataloss = xmodmap.distance.LossVarifoldNormBoundary_Partial(sigmaVar, w_T, zeta_T, Ttilde, densSigma)   # Dream of : (sigmaVar, T, nu_T)
 dataloss.normalize_across_scale(Stilde, w_S, zeta_S, pi_STinit, lambInit)
 dataloss.weight = 1.
 
@@ -221,7 +228,7 @@ print("pi_ST size: ", variable_init["pi_ST"].shape)
 print("zeta_S size: ", variable_init["zeta_S"].shape)
 
 # Example of starting from scratch
-'''
+
 loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
 loss.init(variable_init, variable_to_optimize, precond=precond, savedir=savedir)
 loss.optimize(steps)
@@ -231,7 +238,7 @@ loss.optimize(steps)
 loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
 loss.resume(variable_init, os.path.join(savedir, 'checkpoint.pt'))
 loss.optimize(0)
-
+'''
 
 # Saving
 precondVar = loss.get_variables_optimized()
