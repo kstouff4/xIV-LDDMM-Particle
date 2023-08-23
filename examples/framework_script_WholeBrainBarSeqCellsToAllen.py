@@ -121,8 +121,8 @@ d = 3
 dimEff = 3
 labs = nu_T.shape[-1]  # in target
 labS = nu_S.shape[-1]  # template
-sigmaRKHS = [0.2, 0.1, 0.05]  # [0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
-sigmaVar = [0.5, 0.2, 0.05, 0.02]  # as of 3/16, should be fraction of total domain of S+T #10.0
+sigmaRKHS = [0.1, 0.05, 0.01]  # [0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
+sigmaVar = [0.2, 0.05, 0.02, 0.01]  # as of 3/16, should be fraction of total domain of S+T #10.0
 steps = 80
 beta = None
 res = 1.0
@@ -213,17 +213,17 @@ precond = {
     "pi_ST": Csqpi,
     "lamb": Csqlamb
 }
-'''
+
 loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
 loss.init(variable_init, variable_to_optimize, precond=precond, savedir=savedir)
 loss.optimize(steps)
-'''
-# Example of resuming == equivalent of loss.optimize(3)
 
+# Example of resuming == equivalent of loss.optimize(3)
+'''
 loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
 loss.resume(variable_init, os.path.join(savedir, 'checkpoint.pt'))
 loss.optimize(0)
-
+'''
 
 # Saving
 precondVar = loss.get_variables_optimized()
@@ -241,4 +241,8 @@ saveTarget(Td.detach(),wTd.detach(),zeta_T,s,m)
 
 f = loss.print_log()
 f.savefig(os.path.join(savedir,"loss.png"),dpi=300)
+
+f = loss.print_log(logScale=True)
+f.savefig(os.path.join(savedir,"logloss.png"),dpi=300)
+
 
