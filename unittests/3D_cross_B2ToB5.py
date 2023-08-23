@@ -93,6 +93,7 @@ def main():
         eta0=eta0,
         lambInit=lamb0,
         loadPrevious=None,
+        single=single
     )
 
     print("Dlist", Dlist[-1])

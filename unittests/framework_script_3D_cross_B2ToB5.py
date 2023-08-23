@@ -27,7 +27,6 @@ labS = 28  # template
 sigmaRKHS = [0.2, 0.1, 0.05]  # [0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
 sigmaVar = [0.5, 0.2, 0.05, 0.02]  # as of 3/16, should be fraction of total domain of S+T #10.0
 its = 100
-alphaSt = 'B2toB5_NoBoundary'
 beta = None
 res = 1.0
 kScale = torch.tensor(1.)
@@ -102,4 +101,5 @@ precond = {
 
 loss = xmodmap.model.CrossModality(hamiltonian, shooting, dataloss, piLoss)
 loss.init(variable_init, variable_to_optimize, precond=precond, savedir=savedir)
-loss.optimize(5)
+#loss.resume(variable_init, os.path.join(savedir, 'checkpoint.pt'))
+loss.optimize(11)
