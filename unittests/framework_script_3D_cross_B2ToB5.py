@@ -83,10 +83,10 @@ shooting = xmodmap.deformation.Shooting(sigmaRKHS, Stilde, cA=cA, cS=cS,  cT=cT,
 # Optimization
 
 variable_init = {
-    "qx": Stilde.clone().detach().requires_grad_(True),
-    "qw": w_S.clone().detach().requires_grad_(True),
     "px": torch.zeros_like(Stilde).requires_grad_(True),
     "pw": torch.zeros_like(w_S).requires_grad_(True),
+    "qx": Stilde.clone().detach().requires_grad_(True),
+    "qw": w_S.clone().detach().requires_grad_(True),
     "pi_ST": ((1.0 / Csqpi) * torch.sqrt(pi_STinit).clone().detach()).requires_grad_(True),
     "zeta_S": zeta_S,
 }
@@ -102,4 +102,36 @@ precond = {
 loss = xmodmap.model.CrossModality(hamiltonian, shooting, dataloss, piLoss)
 loss.init(variable_init, variable_to_optimize, precond=precond, savedir=savedir)
 #loss.resume(variable_init, os.path.join(savedir, 'checkpoint.pt'))
-loss.optimize(11)
+loss.optimize(2)
+
+# an example with a single optimization variable as in legacy code
+variable_init = {
+    "p0": torch.cat([
+                torch.zeros_like(w_S).view(-1),
+                torch.zeros_like(Stilde).view(-1),
+                (1.0 / Csqpi) * torch.sqrt(pi_STinit).clone().detach().view(-1)
+            ], dim=0).requires_grad_(True),
+    "qx": Stilde.clone().detach().requires_grad_(True),
+    "qw": w_S.clone().detach().requires_grad_(True),
+    "zeta_S": zeta_S,
+}
+
+variable_to_optimize = ["p0"]
+
+def precond_fun(kwargs):
+    res = {
+        "pw": (kwargs["p0"][:1670] * torch.rsqrt(kScale) / dimEff / w_S.view(-1)).view(-1, 1),
+        "px": (kwargs["p0"][1670 : 1670 * 4] * torch.rsqrt(kScale)).view(-1, 3),
+        "pi_ST": (kwargs["p0"][1670 * 4 :] *  Csqpi).view(3, 6),
+    }
+    res["qx"] = kwargs["qx"]
+    res["qw"] = kwargs["qw"]
+    res["zeta_S"] = kwargs["zeta_S"]
+
+    return res
+
+
+loss = xmodmap.model.CrossModality(hamiltonian, shooting, dataloss, piLoss)
+loss.init(variable_init, variable_to_optimize, precond=precond_fun, savedir=savedir)
+#loss.resume(variable_init, os.path.join(savedir, 'checkpoint.pt'))
+loss.optimize(2)

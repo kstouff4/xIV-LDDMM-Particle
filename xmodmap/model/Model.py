@@ -1,3 +1,4 @@
+import inspect
 import os
 import time
 import torch
@@ -56,18 +57,27 @@ class Model:
         if state is not None:
             self.optimizer.load_state_dict(state)
 
-    def set_precond(self, weights=None):
-        # check if the keys of kwargs are in self.variables
-        assert weights.keys() <= self.variables.keys()
+    def set_precond(self, preprecond):
 
-        self.precondWeights = weights
-        # init a dict with value 1
-        precond = {key: 1.0 for key in self.variables}
-        # update the dict with the kwargs
-        precond.update(weights)
+        if isinstance(preprecond, dict):  # if preprecond is a dict, should store weights
+            # check if the keys of preprecond are in self.variables
+            assert preprecond.keys() <= self.variables.keys()
+            # init a dict with value 1
+            precond = {key: 1.0 for key in self.variables}
+            # update the dict with the kwargs
+            precond.update(preprecond)
 
-        # create a function that returns the precond for each variable
-        self.precond = lambda x: {key: x[key] * precond[key] for key in self.variables}
+            # create a function that returns the precond for each variable
+            self.precond = lambda x: {key: x[key] * precond[key] for key in self.variables}
+        elif callable(preprecond):  # if prepreconf is a function
+            # check if the keys output by preprecond are compatible with self.variables
+            assert preprecond(self.variables).keys() == inspect.signature(self.loss).parameters.keys()
+            self.precond = preprecond
+
+        self.precondWeights = preprecond
+
+    def loss(self, **kwargs):
+        pass
 
     def closure(self):
         self.optimizer.zero_grad()
