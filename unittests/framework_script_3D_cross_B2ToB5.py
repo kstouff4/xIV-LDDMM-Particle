@@ -102,8 +102,8 @@ precond = {
 loss = xmodmap.model.CrossModality(hamiltonian, shooting, dataloss, piLoss)
 loss.init(variable_init, variable_to_optimize, precond=precond, savedir=savedir)
 #loss.resume(variable_init, os.path.join(savedir, 'checkpoint.pt'))
-loss.optimize(2)
-
+loss.optimize(110)
+'''
 # an example with a single optimization variable as in legacy code
 variable_init = {
     "p0": torch.cat([
@@ -135,3 +135,4 @@ loss = xmodmap.model.CrossModality(hamiltonian, shooting, dataloss, piLoss)
 loss.init(variable_init, variable_to_optimize, precond=precond_fun, savedir=savedir)
 #loss.resume(variable_init, os.path.join(savedir, 'checkpoint.pt'))
 loss.optimize(2)
+'''
