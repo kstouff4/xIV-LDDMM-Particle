@@ -68,7 +68,7 @@ def main():
         eta0,
         lamb0,
         single,
-    ) = torch.load(os.path.join(datadir, "parameters_3D_B2ToB5.pt"))
+    ) = torch.load(os.path.join(datadir, "parameters_3D_B2ToB5.pt"), map_location=map_location)
 
     Dlist, nu_Dlist, nu_DPilist, Glist, nu_Glist, Tlist, nu_Tlist = callOptimize(
         S,
