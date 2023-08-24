@@ -24,6 +24,8 @@ if "DISPLAY" in os.environ:
 else:
     matplotlib.use("Agg")
 
+np.set_printoptions(precision=None, linewidth=200, suppress=True)
+
 
 import xmodmap.preprocess.preprocess as init
 from sandbox.saveState import *
@@ -1131,6 +1133,14 @@ def callOptimize(
         relLossList.append(np.copy(LDA.detach().cpu().numpy()) / cst)
         lossListPI.append(np.copy(LPI.detach().cpu().numpy()))
         lossListL.append(np.copy(LL.detach().cpu().numpy()))
+
+        # print current losses values
+        print(f"H loss: {lossListH[-1]}", end="; ")
+        print(f"Var loss: {lossListDA[-1]}", end="; ")
+        print(f"Pi lossL {lossListPI[-1]}", end="; ")
+        print(f"Lambda loss {lossListL[-1]}")
+
+
         L.backward()
         return L
 
