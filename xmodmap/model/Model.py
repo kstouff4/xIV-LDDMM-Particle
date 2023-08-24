@@ -162,7 +162,7 @@ class Model:
         self.variables_to_optimize = checkpoint["variables_to_optimize"]
 
         self.set_optimizer(state=checkpoint["optimizer_state_dict"])
-        self.set_precond(weights=checkpoint["precondWeights"])
+        self.set_precond(checkpoint["precondWeights"])
 
         self.steps = checkpoint["steps"]
         self.current_step = checkpoint["current_step"]

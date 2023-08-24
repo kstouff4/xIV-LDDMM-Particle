@@ -31,7 +31,7 @@ class PiRegularizationSystem:
     def __call__(self, qw, pi_est):
 
         mass_S = torch.sum(qw * self.zeta_S, dim=0)
-        pi_ST = (pi_est.view(self.zeta_S.shape[-1], self.nu_T.shape[-1])) ** 2
+        pi_ST = pi_est ** 2
         pi_S = torch.sum(pi_ST, dim=-1)
         pi_STprob = pi_ST / pi_S[..., None]
         numer = pi_STprob / self.nu_Tprob

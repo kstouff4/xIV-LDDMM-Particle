@@ -45,12 +45,13 @@ class LossVarifoldNorm:
         # u and v are the feature vectors
         x, y, u, v = Vi(0, self.d), Vj(1, self.d), Vi(2, self.labs), Vj(3, self.labs)
         D2 = x.sqdist(y)
-        retVal = LazyTensor(0.)
         for sInd in range(len(self.sigmaVar)):
             sig = self.sigmaVar[sInd]
             K = (-D2 / (2.0 * sig * sig)).exp() * (u * v).sum()
-            retVal += self.beta[sInd] * K
-
+            if sInd == 0:
+                retVal = beta[sInd] * K
+            else:
+                retVal += beta[sInd] * K
         return (retVal).sum_reduction(axis=1)
 
     def supportWeight(self, qx):
