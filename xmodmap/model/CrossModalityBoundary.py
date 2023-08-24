@@ -1,6 +1,7 @@
 import time
 import torch
 from matplotlib import pyplot as plt
+import numpy as np
 
 
 from xmodmap.model.Model import Model
