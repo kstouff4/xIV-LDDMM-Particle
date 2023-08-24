@@ -1,5 +1,6 @@
 from .LossVarifoldNorm import LossVarifoldNorm
 from .LossVarifoldNormBoundary import LossVarifoldNormBoundary
+from .LossVarifoldNormBoundary_Partial import LossVarifoldNormBoundary_Partial
 
 from .SupportRestrictionReg import SupportRestrictionReg
 from .kl import PiRegularizationSystem as PiRegularizationSystem

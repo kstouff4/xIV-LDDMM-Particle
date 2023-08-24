@@ -92,7 +92,7 @@ torch.set_printoptions(precision=6)
 
 
 # Data Loading
-savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo100um","top16CellGenes")
+savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo100um","top16CellGenes_sigmaSmall")
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/approx200um_flipZ.npz"
 tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Whole_Brain_2023/sig0.25Align_100um/CellGenes/all_optimal_all.npz'
 
@@ -117,8 +117,8 @@ d = 3
 dimEff = 3
 labs = nu_T.shape[-1]  # in target
 labS = nu_S.shape[-1]  # template
-sigmaRKHS = [0.2, 0.1, 0.05]  # [0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
-sigmaVar = [0.5, 0.2, 0.05, 0.02]  # as of 3/16, should be fraction of total domain of S+T #10.0
+sigmaRKHS = [0.1, 0.05, 0.01]  # [0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
+sigmaVar = [0.2, 0.05, 0.02, 0.01]  # as of 3/16, should be fraction of total domain of S+T #10.0
 steps = 80
 beta = None
 res = 1.0
@@ -153,6 +153,20 @@ from xmodmap.preprocess.makePQ_legacy import makePQ
            Csqpi=Csqpi,
            lambInit=lambInit,
            Csqlamb=Csqlamb)
+
+sm = {
+    "s": s,
+    "m": m,
+    "cA": cA,
+    "cT": cT,
+    "cS": cS,
+    "sigmaRKHS": sigmaRKHS,
+    "d": d,
+    "dimEff": dimEff,
+    "single": single
+}
+
+torch.save(sm,os.path.join(savedir,"sm.pt"))
 
 
 # Model Setup
@@ -223,4 +237,9 @@ saveTarget(Td.detach(),wTd.detach(),zeta_T,s,m)
 
 f = loss.print_log()
 f.savefig(os.path.join(savedir,"loss.png"),dpi=300)
+
+f = loss.print_log(logScale=True)
+f.savefig(os.path.join(savedir,"logloss.png"),dpi=300)
+
+
 

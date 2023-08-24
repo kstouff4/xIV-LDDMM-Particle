@@ -177,5 +177,5 @@ class Model:
     def check_resume(self, checkpoint):
         pass
     
-    def print_log(self):
+    def print_log(self, logScale=False):
         pass

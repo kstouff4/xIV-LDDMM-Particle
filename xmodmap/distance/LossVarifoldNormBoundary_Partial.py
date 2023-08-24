@@ -30,7 +30,9 @@ class LossVarifoldNormBoundary_Partial(LossVarifoldNormBoundary):
         
         # TO DO: normalize weights?
         weights = self.Kd(qx,self.Ttilde,torch.ones((qx.shape[0],1)),self.w_T)
-        return weights
+        
+        normWeights = (weights - torch.min(weights))/(torch.max(weights) - torch.min(weights))
+        return normWeights
     
     def supportWeight(self, qx, lamb):
 
