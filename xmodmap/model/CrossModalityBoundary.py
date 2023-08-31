@@ -45,6 +45,11 @@ class CrossModalityBoundary(Model):
 
 
     def check_resume(self, checkpoint):
+        print(self.dataLoss.get_params())
+        print(self.hamiltonian.get_params())
+        print(self.piLoss.get_params())
+        print(self.lambLoss.get_params())
+              
         assert self.dataLoss.get_params() == checkpoint["dataLoss"]
         assert self.hamiltonian.get_params() == checkpoint["hamiltonian"]
         assert self.piLoss.get_params() == checkpoint["piLoss"]
@@ -72,10 +77,10 @@ class CrossModalityBoundary(Model):
             ax.legend()
         else:
             f,ax = plt.subplots()
-            ax.plot(np.log(np.asarray(logH)), label=f"Hamiltonian Loss, Final = {logH[-1]}")
-            ax.plot(np.log(np.asarray(logD)), label=f"Data Loss, Final = {logD[-1]}")
-            ax.plot(np.log(np.asarray(logP)), label=f"Pi Loss, Final = {logP[-1]}")
-            ax.plot(np.log(np.asarray(logL)), label=f"Lambda Loss, Final = {logL[-1]}")
+            ax.plot(np.log(np.asarray(logH)+1.0), label=f"Hamiltonian Loss, Final = {logH[-1]}")
+            ax.plot(np.log(np.asarray(logD)+1.0), label=f"Data Loss, Final = {logD[-1]}")
+            ax.plot(np.log(np.asarray(logP)+1.0), label=f"Pi Loss, Final = {logP[-1]}")
+            ax.plot(np.log(np.asarray(logL)+1.0), label=f"Lambda Loss, Final = {logL[-1]}")
             ax.legend()
             
         

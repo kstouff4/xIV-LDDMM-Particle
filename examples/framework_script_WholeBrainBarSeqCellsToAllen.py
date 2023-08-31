@@ -92,7 +92,8 @@ torch.set_printoptions(precision=6)
 
 
 # Data Loading
-savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo200um_smallSigma")
+savedirOld = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo200um_smallSigma")
+savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo200um_smallSigmaRedo")
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/approx200um_flipZ.npz"
 tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Whole_Brain_2023/sig0.25Align_200um/Cells/all_optimal_all.npz'
 
@@ -121,9 +122,9 @@ d = 3
 dimEff = 3
 labs = nu_T.shape[-1]  # in target
 labS = nu_S.shape[-1]  # template
-sigmaRKHS = [0.1, 0.05, 0.01]  # [0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
-sigmaVar = [0.2, 0.05, 0.02, 0.01]  # as of 3/16, should be fraction of total domain of S+T #10.0
-steps = 80
+sigmaRKHS = [0.1, 0.05, 0.01] #[0.2,0.1,0.05] as of 3/16, should be fraction of total domain of S+T #[10.0]
+sigmaVar = [0.2, 0.05, 0.02, 0.01] #[0.5, 0.2, 0.05, 0.02]  # as of 3/16, should be fraction of total domain of S+T #10.0
+steps = 200
 beta = None
 res = 1.0
 kScale = torch.tensor(1.)
@@ -213,17 +214,17 @@ precond = {
     "pi_ST": Csqpi,
     "lamb": Csqlamb
 }
-
+'''
 loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
 loss.init(variable_init, variable_to_optimize, precond=precond, savedir=savedir)
 loss.optimize(steps)
-
+'''
 # Example of resuming == equivalent of loss.optimize(3)
-'''
+
 loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
-loss.resume(variable_init, os.path.join(savedir, 'checkpoint.pt'))
-loss.optimize(0)
-'''
+loss.resume(variable_init, os.path.join(savedirOld, 'checkpoint.pt'))
+loss.optimize(steps)
+
 
 # Saving
 precondVar = loss.get_variables_optimized()

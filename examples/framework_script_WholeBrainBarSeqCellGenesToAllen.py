@@ -1,4 +1,6 @@
 import os
+import psutil # for monitoring memory 
+import GPUtil as GPU
 from sys import path as sys_path
 sys_path.append("..")
 
@@ -85,15 +87,14 @@ def saveTarget(Td, w_Td, zeta_T,s,m):
     writeVTK(Td, imageVals, imageNames, os.path.join(savedir,"target_deformationSummary.vtk"))
     return
 
-
 # set random seed
 torch.manual_seed(0)
 torch.set_printoptions(precision=6)
 
 
 # Data Loading
-savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo100um_Redo","top16CellGenes")
-savedirOld = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo100um","top16CellGenes")
+savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo100um_Redo","top16CellGenes_smallSigma")
+savedirOld = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo100um","top16CellGenes_sigmaSmall")
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/approx200um_flipZ.npz"
 tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Whole_Brain_2023/sig0.25Align_100um/CellGenes/all_optimal_all.npz'
 
@@ -118,9 +119,9 @@ d = 3
 dimEff = 3
 labs = nu_T.shape[-1]  # in target
 labS = nu_S.shape[-1]  # template
-sigmaRKHS = [0.2,0.1,0.05] #[0.1, 0.05, 0.01] # as of 3/16, should be fraction of total domain of S+T #[10.0]
-sigmaVar = [0.5,0.2,0.05,0.02] #[0.2, 0.05, 0.02, 0.01]  # as of 3/16, should be fraction of total domain of S+T #10.0
-steps = 120
+sigmaRKHS =  [0.1, 0.05, 0.01] # [0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
+sigmaVar =  [0.2, 0.05, 0.02, 0.01] #[0.5,0.2,0.05,0.02]  # as of 3/16, should be fraction of total domain of S+T #10.0
+steps = 200
 beta = None
 res = 1.0
 kScale = torch.tensor(1.)
@@ -210,16 +211,42 @@ precond = {
     "pi_ST": Csqpi,
     "lamb": Csqlamb
 }
-'''
-loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
-loss.init(variable_init, variable_to_optimize, precond=precond, savedir=savedir)
-loss.optimize(steps)
-'''
-# Example of resuming == equivalent of loss.optimize(3)
 
 loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
+#loss.init(variable_init, variable_to_optimize, precond=precond, savedir=savedir)
 loss.resume(variable_init, os.path.join(savedirOld, 'checkpoint.pt'))
-loss.optimize(steps)
+GPU.showUtilization(all=True)
+# inner psutil function
+def process_memory():
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()
+    return mem_info.rss
+ 
+# decorator function
+def profile(func):
+    def wrapper(*args, **kwargs):
+ 
+        mem_before = process_memory()
+        func(*args, **kwargs)
+        mem_after = process_memory()
+        print("{}:consumed memory: {:,}".format(
+            func.__name__,
+            mem_before, mem_after, mem_after - mem_before))
+        print(mem_before)
+        print(mem_after)
+        print(mem_after - mem_before)
+ 
+        return
+    return wrapper
+
+@profile
+
+def func():
+    loss.optimize(steps)
+    return
+
+func()
+GPU.showUtilization(all=True)
 
 
 # Saving
