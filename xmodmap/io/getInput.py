@@ -33,15 +33,15 @@ def readFromPrevious(npzFile):
     return S, nu_S, T, nu_T
 
 
-def getFromFile(npzFile):
+def getFromFile(npzFile,featIndex=1):
     npz = np.load(npzFile)
     print("min and max")
     print(np.min(npz[npz.files[0]], axis=0))
     print(np.max(npz[npz.files[0]], axis=0))
     print("X dtype: ", npz[npz.files[0]].dtype)
-    print("nu_X dtype: ", npz[npz.files[1]].dtype)
+    print("nu_X dtype: ", npz[npz.files[featIndex]].dtype)
     S = torch.tensor(npz[npz.files[0]],dtype=torch_dtype)
-    nu_S = torch.tensor(npz[npz.files[1]],dtype=torch_dtype)
+    nu_S = torch.tensor(npz[npz.files[featIndex]],dtype=torch_dtype)
     return S, nu_S
 
 
