@@ -1,5 +1,8 @@
 import time
 import torch
+import matplotlib
+from matplotlib import pyplot as plt
+import numpy as np
 
 
 from xmodmap.model.Model import Model
@@ -43,4 +46,33 @@ class CrossModality(Model):
         assert self.dataLoss.get_params() == checkpoint["dataLoss"]
         assert self.hamiltonian.get_params() == checkpoint["hamiltonian"]
         assert self.piLoss.get_params() == checkpoint["piLoss"]
+    
+    def print_log(self, logScale=False):
+        # split logs
+        logH = []
+        logD = []
+        logP = []
+
+        for i in range(0,len(self.log)):
+            logH.append(self.log[i][0].numpy())
+            logD.append(self.log[i][1].numpy())
+            logP.append(self.log[i][2].numpy())
+        
+        if not logScale:
+            f,ax = plt.subplots()
+            ax.plot(logH, label=f"Hamiltonian Loss, Final = {logH[-1]}")
+            ax.plot(logD, label=f"Data Loss, Final = {logD[-1]}")
+            ax.plot(logP, label=f"Pi Loss, Final = {logP[-1]}")
+            ax.legend()
+        else:
+            f,ax = plt.subplots()
+            ax.plot(np.log(np.asarray(logH)+1.0), label=f"Hamiltonian Loss, Final = {logH[-1]}")
+            ax.plot(np.log(np.asarray(logD)+1.0), label=f"Data Loss, Final = {logD[-1]}")
+            ax.plot(np.log(np.asarray(logP)+1.0), label=f"Pi Loss, Final = {logP[-1]}")
+            ax.legend()
+            
+        
+        return f
+
+
 

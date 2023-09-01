@@ -81,6 +81,15 @@ def saveTarget(Td, w_Td, zeta_T,s,m):
     writeVTK(Td, imageVals, imageNames, os.path.join(savedir,"target_deformationSummary.vtk"))
     return
 
+def saveOriginal(S,nu_S,T,nu_T):
+    wS = torch.sum(nu_S,axis=-1)
+    wT = torch.sum(nu_T,axis=-1)
+    maxS = torch.argmax(nu_S,axis=-1)+1.0
+    maxT = torch.argmax(nu_T,axis=-1)+1.0
+    
+    writeVTK(S,[wS.cpu().numpy(),maxS.cpu().numpy()],['Weight','Max_Region'],os.path.join(savedir,"originalAtlas.vtk"))
+    writeVTK(T,[wT.cpu().numpy(),maxT.cpu().numpy()],['Weight','Max_CellType'],os.path.join(savedir,"originalTarget.vtk"))
+    return
 
 # set random seed
 torch.manual_seed(0)
@@ -90,6 +99,7 @@ torch.set_printoptions(precision=6)
 # Data Loading: 8-876; 9-856; 10-836; 11-816; 12-796
 savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","2DSlices")
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/2DSlices/slice876.npz"
+aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/2DSlices/slice876_ds5.npz"
 tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Whole_Brain_2023/sig0.25/Cells/filt_neurons-clust3_cellSlice8.npz'
 
 origDataFP = '/cis/home/kstouff4/Documents/SpatialTranscriptomics/BarSeq/Whole_Brain_2023/'
@@ -112,6 +122,8 @@ print("S type: ", S.dtype)
 print("nu_S type: ", nu_S.dtype)
 print("T type: ", T.dtype)
 print("nu_T type: ", nu_T.dtype)
+
+saveOriginal(S,nu_S,T,nu_T)
 
 d = 3
 dimEff = 2
