@@ -103,7 +103,7 @@ class HamiltonianSystemGrid(Hamiltonian):
         gw = qgridw.view(-1, 1)
 
         Gpx, Gpw, Gqx, Gqw = torch.autograd.grad(self.H(px, pw, qx, qw), (px, pw, qx, qw), create_graph=True)
-        A, tau, Alpha = getATauAlpha(px, qx, pw, qw, dimEff=self.dimEff, single=self.single)
+        A, tau, Alpha = getATauAlpha(px, qx, pw, qw, cA=self.cA, cT=self.cT, dimEff=self.dimEff, single=self.single)
         xc = (qw * qx).sum(dim=0) / (qw.sum(dim=0))
         Gg = (
             getU(self.sigma, self.d, self.uCoeff)(gx, qx, px, pw * qw)
@@ -133,7 +133,7 @@ class HamiltonianSystemBackwards(Hamiltonian):
     def __call__(self, px, pw, qx, qw, T, wT):
 
         Gpx, Gpw, Gqx, Gqw = torch.autograd.grad(self.H(px, pw, qx, qw), (px, pw, qx, qw), create_graph=True)
-        A, tau, Alpha = getATauAlpha(px, qx, pw, qw, dimEff=self.dimEff, single=self.single)
+        A, tau, Alpha = getATauAlpha(px, qx, pw, qw, cA=self.cA, cT=self.cT, dimEff=self.dimEff, single=self.single)
         xc = (qw * qx).sum(dim=0) / (qw.sum(dim=0))
         Tx = T.view(-1, self.d)
         wTw = wT.view(-1, 1)

@@ -131,7 +131,7 @@ def resizeData(Xtilde, s, m):
     """
     Inverse of rescaleData. Takes coefficient of scaling s and rescales it appropriately.
     """
-    X = Xtilde * s + m
+    X = (Xtilde * s) + m
     return X
 
 def rescaleDataSM(X, s, m):
