@@ -287,9 +287,9 @@ def getEntropy(nu_D):
     e = np.zeros_like(zeta_DD)
     e[zeta_DD > 0] = zeta_DD[zeta_DD > 0] * np.log(zeta_DD[zeta_DD > 0])
     if torch.is_tensor(nu_D):
-        return torch.tensor(np.sum(e,axis=-1))
+        return -1.0*torch.tensor(np.sum(e,axis=-1))
     else:
-        return np.sum(e,axis=-1)
+        return -1.0*np.sum(e,axis=-1)
 
 def writeParticleVTK(Xt, nu_Xt, savename, norm=True, condense=False, featNames=None, sW=None):
     if torch.is_tensor(Xt):
