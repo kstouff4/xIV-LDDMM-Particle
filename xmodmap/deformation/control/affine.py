@@ -24,7 +24,7 @@ def getATauAlpha(px, qx, pw, qw, cA=1.0, cT=1.0, dimEff=3, single=False):
     tau = ((1.0 / cT) * (px.sum(dim=0)))
     if qx.shape[-1] == 2:
         #print("d is 2")
-        alpha = ((px * (qx - xc)).sum() + (pw * qw).sum())
+        alpha = 0.5 * ((px * (qx - xc)).sum() + (pw * qw * 2.0).sum())
         Alpha = torch.eye(2) * alpha
     elif dimEff == 2:
         alpha = (1.0/dimEff) * ((px * (qx - xc)).sum() + (pw * qw * dimEff).sum())
