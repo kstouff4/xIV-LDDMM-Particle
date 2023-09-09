@@ -217,12 +217,21 @@ def splitZs(Ti, nu_Ti, Di, nu_Di, savename, units=10, jac=None):
 
 
 def writeVTK(
-    YXZ, features, featureNames, savename, polyData=None, fields=None, fieldNames=None
+    YXZi, features, featureNames, savename, polyData=None, fields=None, fieldNames=None
 ):
     """
     Write YXZ coordinates (assume numpts x 3 as X,Y,Z in vtk file)
     polyData should be in format 3 vertex, vertex, vertex (0 based numbering)
     """
+    if YXZi.shape[-1] == 2:
+        if torch.is_tensor(YXZi):
+            YXZ = torch.zeros((YXZi.shape[0],3))
+            YXZ[:,0:2] = YXZi
+        else:
+            YXZ = np.zeros((YXZi.shape[0],3))
+            YXZ[:,0:2] = YXZi
+    else:
+        YXZ = YXZi
     f_out_data = []
 
     # Version 3.0 header

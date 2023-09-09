@@ -12,12 +12,14 @@ class Ucoeff():
 
         self.sigma = sigma
         self.Stilde = Stilde
+        #print("cS is : ", cS)
+        #print("d in Ucoeff is: ", self.d)
 
         self._uCoeff = []
         for sig in self.sigma:
             Kinit = self.GaussKernelSpaceSingle(sig)
             self._uCoeff.append(cS * Kinit(self.Stilde, self.Stilde).sum() / (self.N * self.N * sig * sig))
-            print("sig is ", sig, "\n uCoeff ", self._uCoeff[-1])
+            #print("sig is ", sig, "\n uCoeff ", self._uCoeff[-1])
 
 
     def GaussKernelSpaceSingle(self, sig):

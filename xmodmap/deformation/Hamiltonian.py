@@ -115,9 +115,11 @@ class HamiltonianSystemGrid(Hamiltonian):
             getUdiv(self.sigma, self.d, self.uCoeff)(gx, qx, px, pw * qw) * gw
             + Alpha.sum() * gw
         )
+        print("Alpha shape: ", Alpha.shape)
+        print("Alpha sum: ", Alpha.sum())
 
         return -Gqx, -Gqw, Gpx, Gpw, Gg, Ggw
-
+    
 
 class HamiltonianSystemBackwards(Hamiltonian):
     """
@@ -135,8 +137,6 @@ class HamiltonianSystemBackwards(Hamiltonian):
         Gpx, Gpw, Gqx, Gqw = torch.autograd.grad(self.H(px, pw, qx, qw), (px, pw, qx, qw), create_graph=True)
         A, tau, Alpha = getATauAlpha(px, qx, pw, qw, cA=self.cA, cT=self.cT, dimEff=self.dimEff, single=self.single)
         xc = (qw * qx).sum(dim=0) / (qw.sum(dim=0))
-        print("xc2: ", xc)
-        print("weight shape: ", Gqw.shape)
         Tx = T #.view(-1, self.d)
         wTw = wT #.view(-1, 1)
         Gt = (

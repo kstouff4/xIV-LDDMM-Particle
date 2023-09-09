@@ -19,16 +19,20 @@ def getATauAlpha(px, qx, pw, qw, cA=1.0, cT=1.0, dimEff=3, single=False):
         `Alpha`: is a diagonal matrix
     """
     xc = (qw * qx).sum(dim=0) / (qw.sum(dim=0))  # moving barycenters; should be 1 x 3
+    print("xc in get A tau alpha: ", xc)
     A = ((1.0 / (2.0 * cA)) * (px.T @ (qx - xc) - (qx - xc).T @ px))  # 3 x N * N x 3
     tau = ((1.0 / cT) * (px.sum(dim=0)))
-
-    if dimEff == 2:
-        alpha = ((px * (qx - xc)).sum() + (pw * qw * dimEff).sum())
+    if qx.shape[-1] == 2:
+        #print("d is 2")
+        alpha = ((px * (qx - xc)).sum() + (pw * qw).sum())
+        Alpha = torch.eye(2) * alpha
+    elif dimEff == 2:
+        alpha = (1.0/dimEff) * ((px * (qx - xc)).sum() + (pw * qw * dimEff).sum())
         Alpha = torch.eye(3) * alpha
         Alpha[-1, -1] = 0.0  # always scale Z by 0
     elif dimEff == 3 and single:
         print("dim Eff is 3 and single is True")
-        alpha = ((px * (qx - xc)).sum() + (pw * qw * dimEff).sum())
+        alpha = (1.0 / dimEff) * ((px * (qx - xc)).sum() + (pw * qw * dimEff).sum())
         Alpha = torch.eye(3) * alpha
     else:
         alpha_xy = 0.5 * (
