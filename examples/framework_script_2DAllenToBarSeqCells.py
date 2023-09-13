@@ -97,10 +97,10 @@ torch.set_printoptions(precision=6)
 
 
 # Data Loading: 8-876; 9-856; 10-836; 11-816; 12-796
-savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","2DSlices")
+savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","2DSlices","sl836_to_cell10_d2Rigid")
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/2DSlices/slice876.npz"
-aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/2DSlices/slice876_ds5.npz"
-tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Whole_Brain_2023/sig0.25/Cells/filt_neurons-clust3_cellSlice8.npz'
+aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/2DSlices/slice836_ds5.npz"
+tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Whole_Brain_2023/sig0.25/Cells/filt_neurons-clust3_cellSlice10.npz'
 
 origDataFP = '/cis/home/kstouff4/Documents/SpatialTranscriptomics/BarSeq/Whole_Brain_2023/'
 pref = 'filt_neurons-clust3'
@@ -118,14 +118,7 @@ print(torch.get_default_dtype)
 S,nu_S = getFromFile(aFile)
 T,nu_T = getFromFile(tFile,featIndex=4) # 1 = cell type (cluster); 2 = cell index; 3 = genes, 4 = regions
 
-print("S type: ", S.dtype)
-print("nu_S type: ", nu_S.dtype)
-print("T type: ", T.dtype)
-print("nu_T type: ", nu_T.dtype)
-
-saveOriginal(S,nu_S,T,nu_T)
-
-d = 3
+d = 2
 dimEff = 2
 labs = nu_T.shape[-1]  # in target
 labS = nu_S.shape[-1]  # template
@@ -138,13 +131,28 @@ kScale = torch.tensor(1.)
 extra = ""
 cA = 1.0
 cT = 1.0  # original is 0.5
-cS = 10.0
+cS = 10000.0 #10 vs. 10000 for rigid
 Csqpi = 10000.0
 Csqlamb = 100.0
 eta0 = torch.tensor(0.2).sqrt()
 lambInit = -1
 single = False
 gamma = 0.1 #0.01 #10.0
+
+# make them both in z = 0 plane
+if dimEff == 2:
+    S[:,-1] = 0
+    T[:,-1] = 0
+if d == 2:
+    S = S[:,0:2]
+    T = T[:,0:2]
+
+print("S type: ", S.dtype)
+print("nu_S type: ", nu_S.dtype)
+print("T type: ", T.dtype)
+print("nu_T type: ", nu_T.dtype)
+
+saveOriginal(S,nu_S,T,nu_T)
 
 from xmodmap.preprocess.makePQ_legacy import makePQ
 (
@@ -226,15 +234,17 @@ loss.optimize(steps)
 precondVar = loss.get_variables_optimized()
 torch.save(precondVar,os.path.join(savedir,"precondVar.pt"))
 
+print("shooting forward")
 px1,pw1,qx1,qw1 = shooting(precondVar['px'], precondVar['pw'], precondVar['qx'], precondVar['qw'])[-1] # get Deformed Atlas
 
-
+print("shooting back")
 shootingBack = xmodmap.deformation.ShootingBackwards(sigmaRKHS,Stilde,cA=cA,cS=cS,cT=cT, dimEff=dimEff, single=False)
 _,_,_,_,Td,wTd = shootingBack(px1, pw1, qx1, qw1, Ttilde, w_T)[-1] # get Deformed Target
 
 
 saveAtlas(qx1.detach(),qw1.detach(),zeta_S,precondVar['pi_ST'].detach()**2,s,m)
 saveTarget(Td.detach(),wTd.detach(),zeta_T,s,m)
+print("max of Td: ", torch.max(Td,axis=0))
 
 f = loss.print_log()
 f.savefig(os.path.join(savedir,"loss.png"),dpi=300)

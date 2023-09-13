@@ -85,6 +85,21 @@ def saveTarget(Td, w_Td, zeta_T,s,m):
     writeVTK(Td, imageVals, imageNames, os.path.join(savedir,"target_deformationSummary.vtk"))
     return
 
+def saveOriginal(S,nu_S,T,nu_T):
+    print("saving original with sizes")
+    wS = torch.sum(nu_S,axis=-1)
+    wT = torch.sum(nu_T,axis=-1)
+    print(S.shape)
+    print(nu_S.shape)
+    print(T.shape)
+    print(nu_T.shape)
+    maxS = torch.argmax(nu_S,axis=-1)+1.0
+    maxT = torch.argmax(nu_T,axis=-1)+1.0
+    
+    writeVTK(S,[wS.cpu().numpy(),maxS.cpu().numpy()],['Weight','Max_Feat'],os.path.join(savedir,"originalAtlas.vtk"))
+    writeVTK(T,[wT.cpu().numpy(),maxT.cpu().numpy()],['Weight','Max_Feat'],os.path.join(savedir,"originalTarget.vtk"))
+    return
+
 
 # set random seed
 torch.manual_seed(0)
@@ -93,7 +108,7 @@ torch.set_printoptions(precision=6)
 
 # Data Loading
 savedirOld = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo200um_smallSigma")
-savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo200um_smallSigmaRedo")
+savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo200um_smallSigmaRedor")
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/approx200um_flipZ.npz"
 tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Whole_Brain_2023/sig0.25Align_200um/Cells/all_optimal_all.npz'
 
