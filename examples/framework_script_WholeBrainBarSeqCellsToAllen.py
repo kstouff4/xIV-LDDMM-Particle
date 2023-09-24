@@ -96,8 +96,8 @@ def saveOriginal(S,nu_S,T,nu_T):
     maxS = torch.argmax(nu_S,axis=-1)+1.0
     maxT = torch.argmax(nu_T,axis=-1)+1.0
     
-    writeVTK(S,[wS.cpu().numpy(),maxS.cpu().numpy()],['Weight','Max_Feat'],os.path.join(savedir,"originalAtlas.vtk"))
-    writeVTK(T,[wT.cpu().numpy(),maxT.cpu().numpy()],['Weight','Max_Feat'],os.path.join(savedir,"originalTarget.vtk"))
+    writeVTK(S,[wS.cpu().numpy(),maxS.cpu().numpy()],['Weight','Allen_Atlas_Region'],os.path.join(savedir,"originalAtlas.vtk"))
+    writeVTK(T,[wT.cpu().numpy(),maxT.cpu().numpy()],['Weight','Max_Gene_Type'],os.path.join(savedir,"originalTarget.vtk"))
     return
 
 
@@ -108,7 +108,7 @@ torch.set_printoptions(precision=6)
 
 # Data Loading
 savedirOld = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo200um_smallSigma")
-savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","200umTo200um_smallSigmaRedor")
+savedir = os.path.join("output", "AllenMerfish", "Mouse1","200umTo200um")
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/approx200um_flipZ.npz"
 tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Whole_Brain_2023/sig0.25Align_200um/Cells/all_optimal_all.npz'
 
@@ -122,12 +122,20 @@ for i in range(len(regionTypeNames)):
     rtList.append(regionTypeNames[i][0][0])
 regionTypeNames = rtList
 
+# MERFISH (HONGKUI)
+tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/AllenMerfish/0.5/allSlices.npz'
+tFile = '/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenMerfishAligned/sig0.2_its20-58__optimalZnu_ZAllwC1.2_sig[0.2]_Nmax1500.0_Npart2000.0.npz'
+regionTypeNames = ['Dipk1b', 'Grin2a', 'Ank1', 'Kcng1', 'Sorcs3', 'Cnih3', 'Kirrel3',
+       'Pcdh8', 'Rph3a', 'Caln1', 'Fndc5', 'Whrn', 'Ankrd6', 'Mdga1',
+       'Gucy1a1', 'Hs6st3', 'Stum', 'Wipf3', 'Trp53i11', 'Gfap']
+
 os.makedirs(savedir, exist_ok=True)
 print(torch.get_default_dtype)
 
 S,nu_S = getFromFile(aFile)
-T,nu_T = getFromFile(tFile)
 
+T,nu_T = getFromFile(tFile)
+T[:,-1] = -1.0*T[:,-1]
 print("S type: ", S.dtype)
 print("nu_S type: ", nu_S.dtype)
 print("T type: ", T.dtype)
@@ -153,6 +161,8 @@ eta0 = torch.tensor(0.2).sqrt()
 lambInit = torch.tensor(0.4)
 single = False
 gamma = 0.1 #0.01 #10.0
+
+saveOriginal(S,nu_S,T,nu_T)
 
 from xmodmap.preprocess.makePQ_legacy import makePQ
 (
@@ -229,17 +239,17 @@ precond = {
     "pi_ST": Csqpi,
     "lamb": Csqlamb
 }
-'''
+
 loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
 loss.init(variable_init, variable_to_optimize, precond=precond, savedir=savedir)
 loss.optimize(steps)
-'''
-# Example of resuming == equivalent of loss.optimize(3)
 
+# Example of resuming == equivalent of loss.optimize(3)
+'''
 loss = xmodmap.model.CrossModalityBoundary(hamiltonian, shooting, dataloss, piLoss, lambLoss)
 loss.resume(variable_init, os.path.join(savedirOld, 'checkpoint.pt'))
 loss.optimize(steps)
-
+'''
 
 # Saving
 precondVar = loss.get_variables_optimized()

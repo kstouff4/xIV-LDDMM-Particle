@@ -7,6 +7,7 @@ import pandas as pd
 
 from matplotlib import pyplot as plt
 from xmodmap import torch_dtype
+from PIL import Image
 
 
 def applyAffine(Z, nu_Z, A, tau):
@@ -389,3 +390,153 @@ def makeBinsFromDistance(
         S = S[keep, ...]
 
     return S, nu_S
+
+def makeBinsFromImageValues(filename,binNum,origRes,ds=False,maxBins=50):
+    '''
+    binNum = 'auto', 'fd' or number for bins of equal size
+    '''
+    im = np.squeeze(Image.open(filename))
+    imR = np.ravel(im)
+    inds = imR > 0
+    imR_noBG = imR[inds,...]
+    hi,bi = np.histogram(imR_noBG,bins=binNum)
+    indsH = np.digitize(im,bins=bi)
+    indsHr = np.ravel(indsH)
+    if np.max(indsHr) > maxBins:
+        binSqueeze = np.max(indsHr) / maxBins
+        binSqueeze = np.rint(binSqueeze).astype('int')
+        indsHn = np.zeros_like(indsHr)
+        j = 0
+        for i in range(np.min(indsH),np.max(indsH)+1,binSqueeze):
+            indsHn[(indsHr >= i)*(indsHr < i+binSqueeze)] = j
+            j = j + 1
+        indsH = np.reshape(indsHn,indsH.shape)
+    if ds:
+        Z,nu_Z = downsampleParticles(indsH,binNum=np.max(indsH)-1,origRes=origRes)
+    else:
+        x = np.arange(indsH.shape[0])*origRes
+        y = np.arange(indsH.shape[1])*origRes
+        x = x - np.mean(x)
+        y = y - np.mean(y)
+        X,Y = np.meshgrid(x,y,indexing='ij')
+        indsHr = np.ravel(indsH)
+        nu_Z = np.zeros((indsHr.shape[0],np.max(indsH)+1))
+        Z = np.zeros((nu_Z.shape[0],3))
+        Z[:,0] = np.ravel(X)
+        Z[:,1] = np.ravel(Y)
+        nu_Z[np.arange(nu_Z.shape[0]),indsHr.astype(int)] = 1.0
+        nu_Z = nu_Z[:,1:]
+        inds = np.sum(nu_Z,axis=-1) > 0
+        Z = Z[inds,...]
+        nu_Z = nu_Z[inds,...]
+    
+    nu_Zs = np.sum(nu_Z,axis=0)
+    i = nu_Zs > 0
+    nu_Z = nu_Z[:,i]
+    
+    return Z,nu_Z
+
+
+
+def downsampleParticles(sl,binNum=20,origRes=0.00208):
+    '''
+    sl = X x Y x 1 nu_S where the feature value indicates bin number (0 based) to which the element belongs
+    downsamples and returns new Z, nu_Z based on downsampling by 5 and assigning physical coordinates based on origRes
+    eliminates any particles with all weights in 0 bin
+    '''
+    print("sl shape: ", sl.shape)
+    sl0 = sl[0::5,...]
+    sl1 = sl[1::5,...]
+    sl2 = sl[2::5,...]
+    sl3 = sl[3::5,...]
+    sl4 = sl[4::5,...]
+    if sl4.shape != sl0.shape:
+        sl4t = np.zeros_like(sl0)
+        sl4t[0:sl4.shape[0],0:sl4.shape[1],...] = sl4
+        sl4 = sl4t
+    if sl3.shape != sl0.shape:
+        sl3t = np.zeros_like(sl0)
+        sl3t[0:sl3.shape[0],0:sl3.shape[1],...] = sl3
+        sl3 = sl3t
+    if sl2.shape != sl0.shape:
+        sl2t = np.zeros_like(sl0)
+        sl2t[0:sl2.shape[0],0:sl2.shape[1],...] = sl2
+        sl2 = sl2t
+    if sl1.shape != sl0.shape:
+        sl1t = np.zeros_like(sl0)
+        sl1t[0:sl1.shape[0],0:sl1.shape[1],...] = sl1
+        sl1 = sl1t
+    
+    print(sl0.shape)
+    print(sl1.shape)
+    print(sl2.shape)
+    print(sl3.shape)
+    print(sl4.shape)
+            
+    sls = np.stack((sl0,sl1,sl2,sl3,sl4),axis=-1)
+        
+    sls0 = sls[:,0::5,...]
+    sls1 = sls[:,1::5,...]
+    sls2 = sls[:,2::5,...]
+    sls3 = sls[:,3::5,...]
+    sls4 = sls[:,4::5,...]
+    print("sls0 shape: ", sls0.shape)
+    if sls4.shape != sls0.shape:
+        sl4t = np.zeros_like(sls0)
+        sl4t[0:sls4.shape[0],0:sls4.shape[1],...] = sls4
+        sls4 = sl4t
+    if sls3.shape != sls0.shape:
+        sl3t = np.zeros_like(sls0)
+        sl3t[0:sls3.shape[0],0:sls3.shape[1],...] = sls3
+        sls3 = sl3t
+    if sls2.shape != sls0.shape:
+        sl2t = np.zeros_like(sls0)
+        sl2t[0:sls2.shape[0],0:sls2.shape[1],...] = sls2
+        sls2 = sl2t
+    if sls1.shape != sls0.shape:
+        sl1t = np.zeros_like(sls0)
+        sl1t[0:sls1.shape[0],0:sls1.shape[1],...] = sls1
+        sls1 = sl1t
+    print(sls1.shape)
+    print(sls2.shape)
+    print(sls3.shape)
+    print(sls4.shape)
+    
+    x = np.arange(sls0.shape[0])*5*origRes
+    x = x - np.mean(x)
+    y = np.arange(sls0.shape[1])*5*origRes
+    y = y - np.mean(y)
+        
+    print("ranges of x and y are: ")
+    print(np.min(x))
+    print(np.max(x))
+    print(np.min(y))
+    print(np.max(y))
+    X,Y = np.meshgrid(x,y,indexing='ij')
+    Zs = np.zeros((X.shape[0]*X.shape[1],3))
+    Zs[:,0] = np.ravel(X)
+    Zs[:,1] = np.ravel(Y)
+    
+        
+    newshape = (sls0.shape[0]*sls0.shape[1],5)
+    sls0 = np.reshape(sls0,newshape)
+    sls1 = np.reshape(sls1,newshape)
+    sls2 = np.reshape(sls2,newshape)
+    sls3 = np.reshape(sls3,newshape)
+    sls4 = np.reshape(sls4,newshape)
+        
+    nuZ = np.zeros((sls0.shape[0],binNum+2))
+    for i in range(5):
+        nuZ[np.arange(sls0.shape[0]),sls0[:,i].astype(int)] += 1.0
+        nuZ[np.arange(sls0.shape[0]),sls1[:,i].astype(int)] += 1.0
+        nuZ[np.arange(sls0.shape[0]),sls2[:,i].astype(int)] += 1.0
+        nuZ[np.arange(sls0.shape[0]),sls3[:,i].astype(int)] += 1.0
+        nuZ[np.arange(sls0.shape[0]),sls4[:,i].astype(int)] += 1.0
+        
+    nuZ = nuZ[:,1:] # remove 0 column
+    inds = np.sum(nuZ,axis=-1) > 0
+    Z = Zs[inds,...]
+    nu_Z = nuZ[inds,...]
+        
+    return Z,nu_Z
+    

@@ -35,7 +35,9 @@ class LossVarifoldNormBoundary_Partial(LossVarifoldNormBoundary):
         return normWeights
     
     def supportWeight(self, qx, lamb):
-
+        if (torch.sum(self.a0 + self.a1 + self.n0 + self.n1) == 0):
+            return self.densityWeight(qx)
+        
         sW = (0.5 * torch.tanh(torch.sum((qx - self.a0) * self.n0, axis=-1) / lamb)
                 + 0.5 * torch.tanh(torch.sum((qx - self.a1) * self.n1, axis=-1) / lamb))[..., None]
         return self.densityWeight(qx)*sW

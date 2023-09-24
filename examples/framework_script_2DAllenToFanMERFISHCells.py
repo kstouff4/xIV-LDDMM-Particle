@@ -97,12 +97,12 @@ torch.set_printoptions(precision=6)
 
 
 # Data Loading: 8-876; 9-856; 10-836; 11-816; 12-796
-savedir = os.path.join("output", "FanMERFISH", "Cells","AllenToS1R3_2d_redone")
+savedir = os.path.join("output", "FanMERFISH", "Cells","AllenToS1R2_2d_csqpi1cS50")
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/2DSlices/slice876.npz"
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/2DSlices/slice889_ds5.npz"
 tFile = '/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S1R1.npz'
 tFile = '/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S1R2.npz'
-tFile = '/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S1R3.npz'
+#tFile = '/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S1R3.npz'
 
 regionTypeNames = ['Astro1','Astro2','Astro3','Astro4','Astro5','CorticalExciteNeu1','CorticalExciteNeu2','Endothelial1','Endothelial2','Ependymal','ExciteGranulatory','ExciteNeu1','ExciteNeu2','ExcitePyrNeu1','ExcitePyrNeu2','GABAInterNeu1','GABAInterNeu2','GABAEstRecNeu','InhibitInterNeu','NA','Microglia1','Microglia2','NA','OligoNeu','OligoProg1','OligoProg2','Oligo1','Oligo2','Oligo3','Oligo4','Oligo5','Oligo6','Pericytes']
 
@@ -113,13 +113,14 @@ S,nu_S = getFromFile(aFile)
 S[:,1] = -1.0*S[:,1]
 T,nu_T = getFromFile(tFile,featIndex=1)
 # rotate T 45 degrees clockwise (for S1R2 and S1R3)
-
+'''
 Ar = torch.eye(2)
 Ar[0,0] = torch.cos(torch.tensor(torch.pi/4.0))
 Ar[1,1] = torch.cos(torch.tensor(torch.pi/4.0))
 Ar[0,1] = -1.0*torch.sin(torch.tensor(torch.pi/4.0))
 Ar[1,0] = torch.sin(torch.tensor(torch.pi/4.0))
 T[:,0:2] = T[:,0:2] @ Ar.T # N x 2 * 2x2
+'''
 
 d = 2
 dimEff = 2
@@ -134,8 +135,8 @@ kScale = torch.tensor(1.)
 extra = ""
 cA = 1.0 # allow for more rotation and translation than scale?
 cT = 1.0  # original is 0.5
-cS = 10.0 # less with the diffeomorphism
-Csqpi = 10000.0
+cS = 50.0 # less with the diffeomorphism
+Csqpi = 1.0 #10000.0
 Csqlamb = 100.0
 eta0 = torch.tensor(0.2).sqrt()
 lambInit = -1

@@ -24,6 +24,9 @@ class LossVarifoldNormBoundary(LossVarifoldNorm):
         self.n0, self.n1, self.a0, self.a1 = self.definedSlicedSupport()
 
     def definedSlicedSupport(self, eps=1e-3):
+        if self.Ttilde.shape[-1] < 3:
+            return torch.zeros((1,2)), torch.zeros((1,2)), torch.zeros((1,2)), torch.zeros((1,2))
+        
         zMin = torch.min(self.Ttilde[:, -1])
         zMax = torch.max(self.Ttilde[:, -1])
 
