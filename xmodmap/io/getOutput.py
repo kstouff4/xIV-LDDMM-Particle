@@ -1,6 +1,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 import torch
+from pykeops.torch import Vi, Vj
 
 
 def computeRegionStatisticsImage(npzFile, labels, plotOriginal=False):
@@ -76,6 +77,27 @@ def computeRegionStatisticsImage(npzFile, labels, plotOriginal=False):
         )
     return info["S"], nu_Dcomb
 
+def computeParticleDensity(S,nu_S):
+    if not torch.is_tensor(S):
+        Si = Vi(torch.tensor(S))
+        Sj = Vj(torch.tensor(S))
+        w = torch.tensor(np.sum(nu_S,axis=-1))
+    else:
+        Si = Vi(S)
+        Sj = Vj(S)
+        w = torch.sum(nu_S,axis=-1)
+    D = Si.sqdist(Sj)
+    K = D.Kmin(K=2,dim=1)
+    rad = torch.sqrt(K[:,1])/2.0
+    print(torch.min(rad))
+    print(torch.max(rad))
+    
+    area = torch.pi * rad**2
+    print(torch.min(area))
+    print(torch.max(area))
+    
+    return w/area, area, rad
+    
 
 def analyzeLongitudinalMass(listOfNu, S, ages, savename, labels):
     """
