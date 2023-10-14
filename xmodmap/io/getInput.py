@@ -65,9 +65,13 @@ def makeFromSingleChannelImage(
     ds = amount to downsample by
     axEx = tuple (axis along which to select one plane and plane number to select)
     """
-
-    imInfo = nib.load(imageFile)
-    im = np.squeeze(np.asanyarray(imInfo.dataobj)).astype("float32")
+    suff = imageFile.split('.')[-1]
+    if (suff == 'npz'):
+        im = np.load(imageFile)
+        im = np.squeeze(im[im.files[0]])
+    else:
+        imInfo = nib.load(imageFile)
+        im = np.squeeze(np.asanyarray(imInfo.dataobj)).astype("float32")
     if axEx is not None:
         if axEx[0] == 0:
             im = np.squeeze(im[axEx[1], ...])
