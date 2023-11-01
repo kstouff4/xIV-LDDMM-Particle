@@ -9,7 +9,7 @@ def makePQ(
     T,
     nu_T,
     Csqpi=1.,
-    lambInit=0.5,
+    lambInit=torch.tensor(0.5),
     Csqlamb=1.,
     norm=True,
 ):
