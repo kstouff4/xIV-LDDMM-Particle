@@ -97,9 +97,10 @@ torch.set_printoptions(precision=6)
 
 
 # Data Loading: 8-876; 9-856; 10-836; 11-816; 12-796
-savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","2DSlices","sl836_to_cell10_d2Rigid")
+savedir = os.path.join("output", "BarSeq", "Whole_Brain_2023","2DSlices","sl836_to_cell10_smallvar")
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/2DSlices/slice876.npz"
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/2DSlices/slice836_ds5.npz"
+#aFile = "/cis/home/kstouff4/Documents/MeshRegistration/ParticleImages/AllenAtlas10um/Slice10-Rainbow_2017_particlesDS2.npz"
 tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Whole_Brain_2023/sig0.25/Cells/filt_neurons-clust3_cellSlice10.npz'
 
 origDataFP = '/cis/home/kstouff4/Documents/SpatialTranscriptomics/BarSeq/Whole_Brain_2023/'
@@ -122,16 +123,16 @@ d = 2
 dimEff = 2
 labs = nu_T.shape[-1]  # in target
 labS = nu_S.shape[-1]  # template
-sigmaRKHS = [0.1, 0.05, 0.01] #[0.2,0.1,0.05] as of 3/16, should be fraction of total domain of S+T #[10.0]
-sigmaVar = [0.2, 0.05, 0.02, 0.01] #[0.5, 0.2, 0.05, 0.02]  # as of 3/16, should be fraction of total domain of S+T #10.0
-steps = 200
+sigmaRKHS = [0.2,0.1, 0.05] #[0.2,0.1,0.05] as of 3/16, should be fraction of total domain of S+T #[10.0]
+sigmaVar = [0.2, 0.1, 0.05, 0.02] #[0.5, 0.2, 0.05, 0.02]  # as of 3/16, should be fraction of total domain of S+T #10.0
+steps = 300
 beta = None
 res = 1.0
 kScale = torch.tensor(1.)
 extra = ""
 cA = 1.0
 cT = 1.0  # original is 0.5
-cS = 10000.0 #10 vs. 10000 for rigid
+cS = 10.0 #10 vs. 10000 for rigid
 Csqpi = 10000.0
 Csqlamb = 100.0
 eta0 = torch.tensor(0.2).sqrt()
@@ -151,6 +152,12 @@ print("S type: ", S.dtype)
 print("nu_S type: ", nu_S.dtype)
 print("T type: ", T.dtype)
 print("nu_T type: ", nu_T.dtype)
+'''
+A = torch.zeros((2,2))
+A[0,1] = 1
+A[1,0] = -1
+S = S @ A
+'''
 
 saveOriginal(S,nu_S,T,nu_T)
 

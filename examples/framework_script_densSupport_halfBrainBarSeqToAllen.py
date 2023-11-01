@@ -1,4 +1,5 @@
 import os
+import sys
 from sys import path as sys_path
 sys_path.append("..")
 
@@ -89,19 +90,29 @@ def saveTarget(Td, w_Td, zeta_T,s,m):
     writeVTK(Td, imageVals, imageNames, os.path.join(savedir,"target_deformationSummary.vtk"))
     return
 
+def saveOriginal(S,nu_S,T,nu_T):
+    wS = torch.sum(nu_S,axis=-1)
+    wT = torch.sum(nu_T,axis=-1)
+    maxS = torch.argmax(nu_S,axis=-1)+1.0
+    maxT = torch.argmax(nu_T,axis=-1)+1.0
+    
+    writeVTK(S,[wS.cpu().numpy(),maxS.cpu().numpy()],['Weight','Max_Region'],os.path.join(savedir,"originalAtlas.vtk"))
+    writeVTK(T,[wT.cpu().numpy(),maxT.cpu().numpy()],['Weight','Max_CellType'],os.path.join(savedir,"originalTarget.vtk"))
+    return
 
 # set random seed
 torch.manual_seed(0)
 torch.set_printoptions(precision=6)
 
+dataDir = sys.argv[1] # pass in the data directory as the second argument here (as string, e.g. "D076_1L")
 
 # Data Loading
-savedir = os.path.join("output", "BarSeq", "Half_Brain_D079","200umTo200um_Density")
+savedir = os.path.join("output", "BarSeq", "HalfBrains","200umTo200um_Density", dataDir )
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/approx200um_flipZ.npz"
-tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeqAligned/Half_Brain_D079/sig0.25Align_200um/all_optimal_all.npz'
+tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeq/HalfBrains/' + dataDir + '/approx/0.2/allCombined_optimal_all.npz'
 
-origDataFP = '/cis/home/kstouff4/Documents/SpatialTranscriptomics/BarSeq/Half_Brain_D079/'
-pref = 'filt_neurons_D079_3L_goodsubset_CCFv2'
+origDataFP = '/cis/home/kstouff4/Documents/SpatialTranscriptomics/BarSeq/HalfBrains/' + dataDir + '/'
+pref = 'filt_neurons_' + dataDir + '_CCFv2_newtypes'
 
 rtList = []
 rt = sp.io.loadmat(origDataFP + pref + '_regionTypes.mat',appendmat=False)
@@ -127,7 +138,7 @@ labs = nu_T.shape[-1]  # in target
 labS = nu_S.shape[-1]  # template
 sigmaRKHS = [0.2, 0.1, 0.05]  # [0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
 sigmaVar = [0.5, 0.2, 0.05, 0.02]  # as of 3/16, should be fraction of total domain of S+T #10.0
-steps = 80
+steps = 150
 beta = None
 res = 1.0
 kScale = torch.tensor(1.)
@@ -142,6 +153,8 @@ lambInit = torch.tensor(0.4)
 single = False
 gamma = 0.1 #0.01 #10.0
 densSigma = 0.1
+
+saveOriginal(S,nu_S,T,nu_T)
 
 from xmodmap.preprocess.makePQ_legacy import makePQ
 (
@@ -256,4 +269,8 @@ saveTarget(Td.detach(),wTd.detach(),zeta_T,s,m)
 
 f = loss.print_log()
 f.savefig(os.path.join(savedir,"loss.png"),dpi=300)
+
+f = loss.print_log(logScale=True)
+f.savefig(os.path.join(savedir,"logloss.png"),dpi=300)
+
 
