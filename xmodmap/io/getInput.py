@@ -119,7 +119,9 @@ def makeFromSingleChannelImage(
                 uniqueVals = uniqueVals[uniqueVals != bbg]
 
     numUnique = len(uniqueVals)
-
+    print("number of elements nonzero")
+    print(np.sum(im > 0))
+    
     keepSum = torch.zeros((S.shape[0], 1))
     for u in range(len(uniqueVals)):
         n = torch.tensor((im == uniqueVals[u]))
@@ -131,6 +133,10 @@ def makeFromSingleChannelImage(
         listOfNewNu.append(l[toKeep])
     nu_S = torch.stack(listOfNewNu, axis=-1)
 
+    print("number in toKeep")
+    print(torch.sum(toKeep))
+    print("to Keep shape")
+    print(toKeep.shape)
     # toKeep = nu_S.sum(axis=-1) > 0
     S = S[toKeep]
     # nu_S = nu_S[toKeep]

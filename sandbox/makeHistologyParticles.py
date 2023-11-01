@@ -32,7 +32,7 @@ def main():
     if not os.path.exists(outpath):
         os.mkdir(outpath)
 
-    imgfils = [
+    imgfils1 = [
         "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip1/BR_3_Bl_1_L1_3.TIF",
         "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip1/BR_3_Bl_1_L5_3.TIF",
         "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip1/BR_3_Bl_1_L10_3.TIF",
@@ -48,7 +48,7 @@ def main():
         "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip1/BR_3_Bl_1_L60_3.TIF",
     ]
 
-    imgfils = [
+    imgfils3 = [
         "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip3/BR1_BL3_L_1_3.TIF",
         "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip3/BR1_BL3_L_5_3.TIF",
         "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip3/BR1_BL3_L_10_3.TIF",
@@ -62,6 +62,21 @@ def main():
         "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip3/BR1_BL3_L_50_3.TIF",
         "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip3/BR1_BL3_L_55_3.TIF",
         "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip3/BR1_BL3_L_60_3.TIF",
+    ]
+    
+    imgfils2 = [
+        "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip2/Br_3_BL_2_L1_3.TIF",
+        "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip2/Br_3_BL_2_L5_3.TIF",
+        "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip2/Br_3_BL_2_L10_4.TIF",
+        "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip2/Br_3_BL_2_L15_4.TIF",
+        "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip2/Br_3_BL_2_L20_4.TIF",
+        "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip2/Br_3_BL_2_L25_4.TIF",
+        "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip2/Br_3_BL_2_L30_4.TIF",
+        "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip2/Br_3_BL_2_L35_4.TIF",
+        "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip2/Br_3_BL_2_L40_3.TIF",
+        "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip2/Br_3_BL_2_L45_3.TIF",
+        "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip2/Br_3_BL_2_L50_3.TIF",
+        "/cis/home/kstouff4/Documents/datasets/exvivohuman_11T/more_blocks/Brain3/histology/Restain_2023/AD_Hip2/Br_3_BL_2_L55_3.TIF",
     ]
 
     res = [0.00208, 0.00208, 0.00208]

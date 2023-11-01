@@ -1,6 +1,7 @@
 import torch
 from pykeops.torch import Vi, Vj, LazyTensor
 from xmodmap.preprocess.preprocess import rescaleData
+import math
 
 class LossVarifoldNorm:
     """
@@ -16,10 +17,20 @@ class LossVarifoldNorm:
 
         self.d = Ttilde.shape[1]
         self.labs = zeta_T.shape[1]
+        
+        bw = 10
+        
+        if self.labs > bw:
+            self.nb_bands = math.ceil(self.labs / bw)
+            self.bands = [(i * bw, min((i + 1) * bw, self.labs)) for i in range(self.nb_bands)]
+        else:
+            self.nb_bands = 1
+            self.bands = [(0,self.labs)]
 
         self.beta = [1. for _ in range(len(sigmaVar))]
 
         self.weight = 1. # weight coeff infront of dataloss, correspond to 1 / gamma
+        
 
     def get_params(self):
         params_dict = {
@@ -36,14 +47,14 @@ class LossVarifoldNorm:
         D2 = x.sqdist(y)
         K = (-D2 / (2.0 * sig * sig)).exp() * (u * v).sum()
         return K.sum_reduction(axis=1)
-
-    def GaussLinKernel(self, sigma_list, beta): #sigma, d, l, beta):
+    
+    def GaussLinKernel(self, sigma_list, beta, labs): #sigma, d, l, beta):
         """
         \sum_sigma \beta/2 * |\mu_s - \mu_T|^2_\sigma
         """
 
         # u and v are the feature vectors
-        x, y, u, v = Vi(0, self.d), Vj(1, self.d), Vi(2, self.labs), Vj(3, self.labs)
+        x, y, u, v = Vi(0, self.d), Vj(1, self.d), Vi(2, labs), Vj(3, labs)
         D2 = x.sqdist(y)
         for sInd in range(len(self.sigmaVar)):
             sig = self.sigmaVar[sInd]
@@ -96,12 +107,17 @@ class LossVarifoldNorm:
         self.beta = beta
 
     def update_cst_and_K(self):
-        self.K = self.GaussLinKernel(self.sigmaVar, self.beta)
+        self.K = self.GaussLinKernel(self.sigmaVar, self.beta, self.labs)
+        self.cst = self.K(self.Ttilde, self.Ttilde, self.w_T * self.zeta_T, self.w_T * self.zeta_T).sum()
+        '''
+        # separation of loss to speed up
+        self.K = [self.GaussLinKernel(self.sigmaVar, self.beta, self.bands[i][1] - self.bands[i][0]) for i in range(self.nb_bands)]
 
-        self.cst = self.K(self.Ttilde,
+        self.cst = sum([self.K[i](self.Ttilde,
                           self.Ttilde,
-                          self.w_T * self.zeta_T,
-                          self.w_T * self.zeta_T).sum()
+                          self.w_T * self.zeta_T[:,self.bands[i][0]:self.bands[i][1]],
+                          self.w_T * self.zeta_T[:,self.bands[i][0]:self.bands[i][1]]) for i in range(self.nb_bands)]).sum()
+        '''
 
     def __call__(self, sSx, sSw, zeta_S, pi_ST):
         """
@@ -112,10 +128,16 @@ class LossVarifoldNorm:
         """
 
         nu_Spi = (sSw * zeta_S) @ (pi_ST ** 2)  # Ns x L * L x F
+        
+        '''
+        # attempt at using bands for speed up 
+        k1 = sum([self.K[i](sSx, sSx, nu_Spi[:,self.bands[i][0]:self.bands[i][1]], nu_Spi[:,self.bands[i][0]:self.bands[i][1]]) for i in range(self.nb_bands)])
+        k2 = sum([self.K[i](sSx, self.Ttilde, nu_Spi[:,self.bands[i][0]:self.bands[i][1]], self.w_T * self.zeta_T[:,self.bands[i][0]:self.bands[i][1]]) for i in range(self.nb_bands)])
+        '''
 
         k1 = self.K(sSx, sSx, nu_Spi, nu_Spi)
         k2 = self.K(sSx, self.Ttilde, nu_Spi, self.w_T * self.zeta_T)
-
+        
         return (1.0 / 2.0) * (self.cst + k1.sum() - 2.0 * k2.sum())
 
 

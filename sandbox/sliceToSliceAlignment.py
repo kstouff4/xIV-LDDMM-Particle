@@ -109,12 +109,16 @@ def getSlicesFromWhole(files, zU):
         nu_Slist.append(torch.tensor(nu_X[slIndex == i, ...]).type(dtype))
     return Slist, nu_Slist, slIndex
 
-def getSlicesFromDir(filepath,numSlices,feat=1):
+def getSlicesFromDir(filepath,numSlices,feat=1,suff=None):
     Slist = []
     nu_Slist = []
     totalPoints = 0
+    if suff is None:
+        ending = '.npz'
+    else:
+        ending = suff + '.npz'
     for i in range(1,numSlices+1):
-        info = np.load(filepath + str(i) + '.npz')
+        info = np.load(filepath + str(i) + ending)
         X = info[info.files[0]]
         nu_X = info[info.files[feat]]
         
