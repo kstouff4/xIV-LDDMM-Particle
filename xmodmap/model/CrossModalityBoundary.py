@@ -35,11 +35,12 @@ class CrossModalityBoundary(Model):
         pLoss = self.piLoss.weight * self.piLoss(qw1, pi_ST)
 
         lLoss = self.lambLoss.weight * self.lambLoss(lamb)
-
+        '''
         print(f"H loss: {hLoss.detach().cpu().numpy()}; "
               f"Var loss: {dLoss.detach().cpu().numpy()}; "
               f"Pi loss: {pLoss.detach().cpu().numpy()}; "
               f"Lambda loss: {lLoss.detach().cpu().numpy()}")
+        '''
 
         return hLoss, dLoss, pLoss, lLoss
 
