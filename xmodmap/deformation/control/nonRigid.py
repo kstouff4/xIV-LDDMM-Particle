@@ -13,8 +13,6 @@ def getU(sigma, d, uCoeff):
     Return:
         `U`: is a KeOps function
     """
-    if d == 3:
-        print("d 3 in getU")
     xO, qyO, py, wpyO = Vi(0, d), Vj(1, d), Vj(2, d), Vj(3, 1)
     # retVal = xO.sqdist(qyO)*torch.tensor(0)
     for sInd in range(len(sigma)):
@@ -42,8 +40,6 @@ def getUdiv(sigma, d, uCoeff):
     Return:
         `Udiv`: is a KeOps function
     """
-    if d == 3:
-        print("d 3 in uDiv")
     xO, qyO, py, wpyO = Vi(0, d), Vj(1, d), Vj(2, d), Vj(3, 1)
     for sInd in range(len(sigma)):
         sig = sigma[sInd]
