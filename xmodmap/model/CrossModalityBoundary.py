@@ -27,20 +27,38 @@ class CrossModalityBoundary(Model):
         return params_dict
 
     def loss(self, px=None, pw=None, qx=None, qw=None, pi_ST=None, zeta_S=None, lamb=None):
+        import time
+        start = time.time()
         hLoss = self.hamiltonian.weight * self.hamiltonian(px, pw, qx, qw)
-
+        stop = time.time()
+        print("Hamiltonian time: ", (stop-start))
+        
+        start = time.time()
         _, _, qx1, qw1 = self.shooting(px, pw, qx, qw)[-1]
+        stop = time.time()
+        print("Shooting time: ", (stop-start))
+        
+        start = time.time()
         dLoss = self.dataLoss.weight * self.dataLoss(qx1, qw1, zeta_S, pi_ST, lamb)
-
+        stop = time.time()
+        print("Dataloss time: ", (stop-start))
+        
+        start = time.time()
         pLoss = self.piLoss.weight * self.piLoss(qw1, pi_ST)
+        stop = time.time()
+        print("Piloss time: ", (stop-start))
 
+        
+        start = time.time()
         lLoss = self.lambLoss.weight * self.lambLoss(lamb)
-        '''
+        stop = time.time()
+        print("Lambloss time: ", (stop-start))
+        
         print(f"H loss: {hLoss.detach().cpu().numpy()}; "
               f"Var loss: {dLoss.detach().cpu().numpy()}; "
               f"Pi loss: {pLoss.detach().cpu().numpy()}; "
               f"Lambda loss: {lLoss.detach().cpu().numpy()}")
-        '''
+        
 
         return hLoss, dLoss, pLoss, lLoss
 

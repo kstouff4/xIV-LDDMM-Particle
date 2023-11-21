@@ -108,7 +108,7 @@ torch.set_printoptions(precision=6)
 dataDir = sys.argv[1] # pass in the data directory as the second argument here (as string, e.g. "D076_1L")
 
 # Data Loading
-savedir = os.path.join("output", "BarSeq", "HalfBrains","200umTo200um_Density", dataDir )
+savedir = os.path.join("output", "BarSeq", "HalfBrains","200umTo200um_Density_allfeats", dataDir )
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/approx200um_flipZ.npz"
 tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeq/HalfBrains/' + dataDir + '/approx/0.2/allCombined_optimal_all.npz'
 
@@ -186,7 +186,11 @@ sm = {
     "d": d,
     "dimEff": dimEff,
     "single": single,
-    "densSigma": densSigma
+    "densSigma": densSigma,
+    "sigmaVar": sigmaVar,
+    "gamma": gamma,
+    "Csqpi": Csqpi,
+    "Csqlamb": Csqlamb
 }
 
 torch.save(sm,os.path.join(savedir,"sm.pt"))

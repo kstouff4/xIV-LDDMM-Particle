@@ -143,9 +143,11 @@ S = S@A180
 
 # center template and target around center of mass (challenging for reshooting though)
 comT = torch.mean(T,axis=0)
-#T = T - comT
+comT = comT*0.0
+T = T - comT
 comS = torch.mean(S,axis=0)
-#S = S - comS
+comS = comS*0.0
+S = S - comS
 
 saveOriginal(S,nu_S,T,nu_T)
 

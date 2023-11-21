@@ -115,8 +115,6 @@ class HamiltonianSystemGrid(Hamiltonian):
             getUdiv(self.sigma, self.d, self.uCoeff)(gx, qx, px, pw * qw) * gw
             + Alpha.sum() * gw
         )
-        print("Alpha shape: ", Alpha.shape)
-        print("Alpha sum: ", Alpha.sum())
 
         return -Gqx, -Gqw, Gpx, Gpw, Gg, Ggw
     
