@@ -25,7 +25,7 @@ tFile = os.path.join("..","data","2DhalfBrainBarSeqToAllen") + "filt_neurons_D07
 os.makedirs(savedir, exist_ok=True)
 
 S,nu_S = getFromFile(aFile)
-T,nu_T = getFromFile(tFile,featIndex=4)
+T,nu_T = getFromFile(tFile)
 
 d = 2
 dimEff = 2
