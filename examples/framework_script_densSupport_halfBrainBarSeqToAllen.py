@@ -108,7 +108,7 @@ torch.set_printoptions(precision=6)
 dataDir = sys.argv[1] # pass in the data directory as the second argument here (as string, e.g. "D076_1L")
 
 # Data Loading
-savedir = os.path.join("output", "BarSeq", "HalfBrains","200umTo200um_Density_allfeats", dataDir )
+savedir = os.path.join("output", "BarSeq", "HalfBrains","200umTo200um_Density_smallRKHS", dataDir )
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/approx200um_flipZ.npz"
 tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeq/HalfBrains/' + dataDir + '/approx/0.2/allCombined_optimal_all.npz'
 
@@ -137,8 +137,8 @@ d = 3
 dimEff = 3
 labs = nu_T.shape[-1]  # in target
 labS = nu_S.shape[-1]  # template
-sigmaRKHS = [0.2, 0.1, 0.05]  # [0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
-sigmaVar = [0.5, 0.2, 0.05, 0.02]  # as of 3/16, should be fraction of total domain of S+T #10.0
+sigmaRKHS = [0.05,0.01]  # [0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
+sigmaVar = [0.05, 0.02]  # as of 3/16, should be fraction of total domain of S+T #10.0
 steps = 150
 beta = None
 res = 1.0
