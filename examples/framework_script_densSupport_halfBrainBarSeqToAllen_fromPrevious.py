@@ -235,7 +235,10 @@ precond = {
 }
 
 previous_variables = torch.load(os.path.join(prevDir,'precondVar.pt'))
-previous_variables_init = lambda x: {key: x[key] / precond[key] for key in previous_variables}
+print(previous_variables)
+previous_variables_initF = lambda x: {key: x[key] / precond[key] for key in precond}
+previous_variables_init = previous_variables_initF(previous_variables)
+print(previous_variables)
 
 
 variable_init = {
