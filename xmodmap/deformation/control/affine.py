@@ -24,7 +24,7 @@ def getATauAlpha(px, qx, pw, qw, cA=1.0, cT=1.0, dimEff=3, single=False):
 
     if qx.shape[-1] == 2:
         alpha = (px * (qx - xc)).sum() / 2. + (pw * qw).sum()
-        Alpha = torch.diag(torch.tensor([alpha, alpha])
+        Alpha = torch.diag(torch.tensor([alpha, alpha]))
 
     elif dimEff == 2:
         alpha = ((px[:,:2] * (qx[:,:2] - xc[:,:2])).sum() / 2. + (pw * qw).sum())
