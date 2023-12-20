@@ -21,23 +21,19 @@ def getATauAlpha(px, qx, pw, qw, cA=1.0, cT=1.0, dimEff=3, single=False):
     xc = (qw * qx).sum(dim=0) / (qw.sum(dim=0))  # moving barycenters; should be 1 x 3
     A = ((1.0 / (2.0 * cA)) * (px.T @ (qx - xc) - (qx - xc).T @ px))  # 3 x N * N x 3
     tau = ((1.0 / cT) * (px.sum(dim=0)))
-    if qx.shape[-1] == 2:
-        #print("d is 2")
-        alpha = 0.5 * ((px * (qx - xc)).sum() + (pw * qw * 2.0).sum())
-        Alpha = torch.eye(2) * alpha
-    elif dimEff == 2:
-        alpha = (1.0/dimEff) * ((px * (qx - xc)).sum() + (pw * qw * dimEff).sum())
-        Alpha = torch.eye(3) * alpha
-        Alpha[-1, -1] = 0.0  # always scale Z by 0
+
+    if dimEff == 2:
+        alpha = ((px[:,:2] * (qx[:,:2] - xc[:,:2])).sum() / 2. + (pw * qw).sum())
+        Alpha = torch.diag(torch.tensor([alpha, alpha, 0.]))  # always scale Z by 0
+
     elif dimEff == 3 and single:
-        alpha = (1.0 / dimEff) * ((px * (qx - xc)).sum() + (pw * qw * dimEff).sum())
-        Alpha = torch.eye(3) * alpha
+        alpha = ((px * (qx - xc)).sum() / 3. + (pw * qw).sum())
+        Alpha = torch.diag(torch.tensor([alpha, alpha, alpha]))
+
     else:
-        alpha_xy = 0.5 * (
-            (px[:, 0:2] * (qx - xc)[:, 0:2]).sum() + (pw * qw * 2.0).sum()
-        )
+        alpha_xy = (px[:, 0:2] * (qx - xc)[:, 0:2]).sum() / 2. + (pw * qw).sum()
         alpha_z = ((px[:, -1] * (qx - xc)[:, -1]).sum() + (pw * qw).sum())
-        Alpha = torch.eye(3) * alpha_xy
-        Alpha[-1, -1] = alpha_z
+        Alpha = torch.diag(torch.tensor([alpha_xy, alpha_xy, alpha_z]))
+
 
     return A, tau, Alpha
