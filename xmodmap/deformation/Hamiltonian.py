@@ -72,6 +72,7 @@ class Hamiltonian:
         k = self.K0(qx, qx, px, px, wpq, wpq)  # k shape should be N x 1
         # px = N x 3, qx = N x 3, qw = N x 1
         A, tau, Alpha = getATauAlpha(px, qx, pw, qw, cA=self.cA, cT=self.cT, dimEff=self.dimEff, single=self.single)
+        
         Anorm = (A * A).sum()
         Alphanorm = (Alpha * Alpha).sum()
         return (
@@ -115,6 +116,8 @@ class HamiltonianSystemGrid(Hamiltonian):
             getUdiv(self.sigma, self.d, self.uCoeff)(gx, qx, px, pw * qw) * gw
             + Alpha.sum() * gw
         )
+        print(Gpx)
+        print(Gg)
 
         return -Gqx, -Gqw, Gpx, Gpw, Gg, Ggw
     

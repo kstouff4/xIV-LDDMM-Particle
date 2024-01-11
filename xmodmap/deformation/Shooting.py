@@ -82,7 +82,7 @@ class ShootingGrid(Abstract_Shooting):
         return self.integrator(
             self.HS,
             (px0, pw0, qx0, qw0, qGrid, qGridw),
-            self.nt,
+            self.nt
         )
 
 class ShootingBackwards(Abstract_Shooting):
