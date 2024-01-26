@@ -105,23 +105,34 @@ def saveOriginal(S,nu_S,T,nu_T):
 torch.manual_seed(0)
 torch.set_printoptions(precision=6)
 
-dataDir = sys.argv[1] # pass in the data directory as the second argument here (as string, e.g. "D076_1L")
+dataDir = sys.argv[1] # pass in the data directory as the second argument here (as string, e.g. "D076_1L" "_genes" or "/0.2")
+if len(sys.argv) > 2:
+    feat = sys.argv[2]
+else:
+    feat = ''
 
 # Data Loading
-savedir = os.path.join("output", "BarSeq", "HalfBrains","200umTo100um_Density_0.019", dataDir )
+savedir = os.path.join("output", "BarSeq", "HalfBrains","200umTo200um_Density_Sauron"+feat, dataDir )
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/Final/approx200um_flipZ.npz"
-tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeq/HalfBrains/' + dataDir + '/approx/0.1/allCombined_optimal_all.npz'
+tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeq/HalfBrains/' + dataDir + '/approx' + feat + '/allCombined_optimal_all.npz'
 #tFile = '/cis/home/kstouff4/Documents/MeshRegistration/ParticleLDDMMQP/sandbox/SliceToSlice/BarSeq/HalfBrains/' + dataDir + '/0.25/allCellSlices_filtered.npz'
 
 origDataFP = '/cis/home/kstouff4/Documents/SpatialTranscriptomics/BarSeq/HalfBrains/' + dataDir + '/'
 pref = 'filt_neurons_' + dataDir + '_CCFv2_newtypes'
 
+
 rtList = []
 rt = sp.io.loadmat(origDataFP + pref + '_regionTypes.mat',appendmat=False)
 regionTypeNames = rt['regionTypes']
+
+if 'gene' in feat:
+    rt = sp.io.loadmat(origDataFP + pref + '_geneTypes.mat',appendmat=False)
+    regionTypeNames = rt['geneNames']
+
 for i in range(len(regionTypeNames)):
     rtList.append(regionTypeNames[i][0][0])
 regionTypeNames = rtList
+
 
 os.makedirs(savedir, exist_ok=True)
 print(torch.get_default_dtype)
@@ -134,12 +145,24 @@ print("nu_S type: ", nu_S.dtype)
 print("T type: ", T.dtype)
 print("nu_T type: ", nu_T.dtype)
 
+if len(sys.argv) > 3:
+    select = sys.argv[3]
+    if 'mi' in select:
+        savedir = os.path.join("output", "BarSeq", "HalfBrains","200umTo200um_Density_Sauron"+feat+'_' + select, dataDir )
+        os.makedirs(savedir,exist_ok=True)
+        top39 = [111,112,3,61,47,51,28,75,64,86,76,65,49,56,76,6,101,1,84,77,43,89,59,97,35,19,54,90,29,26,20,60,88,103,22,16,21,9,33]
+        rtListNew = []
+        for i in top39:
+            rtListNew.append(regionTypeNames[i])
+        regionTypeNames = rtListNew
+        nu_T = nu_T[:,top39] 
+
 d = 3
 dimEff = 3
 labs = nu_T.shape[-1]  # in target
 labS = nu_S.shape[-1]  # template
-sigmaRKHS = [0.019]  # [0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
-sigmaVar = [0.019]  # as of 3/16, should be fraction of total domain of S+T #10.0
+sigmaRKHS = [0.2,0.1,0.05]  # [0.2,0.1,0.05] # as of 3/16, should be fraction of total domain of S+T #[10.0]
+sigmaVar = [0.5,0.2,0.05,0.02]  # as of 3/16, should be fraction of total domain of S+T #10.0
 steps = 150
 beta = None
 res = 1.0
