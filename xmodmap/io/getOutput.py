@@ -285,6 +285,10 @@ def writeVTK(
                 f_out_data.append(
                     "%d %d %d\n" % (polyData[i, 0], polyData[i, 1], polyData[i, 2])
                 )
+            elif c == 5:
+                f_out_data.append("%d %d %d %d %d\n"
+                    % (polyData[i, 0], polyData[i, 1], polyData[i, 2], polyData[i, 3], polyData[i,4])
+                )
     f_out_data.append("POINT_DATA %d\n" % num_pts)
     fInd = 0
     for f in featureNames:
