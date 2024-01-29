@@ -97,7 +97,7 @@ torch.set_printoptions(precision=6)
 
 
 # Data Loading: 8-876; 9-856; 10-836; 11-816; 12-796
-savedir = os.path.join("output", "FanMERFISH", "Cells","AllenToS1R3_2d_csqpi1cS5000")
+savedir = os.path.join("output", "FanMERFISH", "Cells","AllenToS1R3_2d_csqpi1cAcT0.001cS5000")
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/2DSlices/slice876.npz"
 aFile = "/cis/home/kstouff4/Documents/MeshRegistration/Particles/AllenAtlas10um/2DSlices/slice889_ds5.npz"
 tFile = '/cis/home/kstouff4/Documents/SpatialTranscriptomics/MERFISH/cell_S1R1.npz'
@@ -133,8 +133,8 @@ beta = None
 res = 1.0
 kScale = torch.tensor(1.)
 extra = ""
-cA = 1.0 # allow for more rotation and translation than scale?
-cT = 1.0  # original is 0.5
+cA = 0.005 # allow for more rotation and translation than scale?
+cT = 0.005  # original is 0.5
 cS = 5000.0 # less with the diffeomorphism
 Csqpi = 1.0 #10000.0
 Csqlamb = 100.0
