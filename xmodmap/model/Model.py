@@ -20,10 +20,10 @@ class Model:
 
     def get_params(self):
         pass
-    
+
     def get_variables_optimized(self):
         # set gradients to zero before returning
-        self.optimizer.zero_grad() 
+        self.optimizer.zero_grad()
         return self.precond(self.variables)
 
     def init(self, variables, variables_to_optimize, precond=None, savedir=os.path.join(os.getcwd(), "output")):
@@ -58,7 +58,6 @@ class Model:
             self.optimizer.load_state_dict(state)
 
     def set_precond(self, preprecond):
-
         if isinstance(preprecond, dict):  # if preprecond is a dict, should store weights
             # check if the keys of preprecond are in self.variables
             assert preprecond.keys() <= self.variables.keys()
@@ -97,7 +96,6 @@ class Model:
         return loss
 
     def optimize(self, steps=100):
-
         self.steps = steps
 
         print("performing optimization...")
@@ -123,9 +121,9 @@ class Model:
             return 1
 
         # check for convergence
-        if (self.current_step > 0) and torch.allclose(torch.tensor(self.log[-1]),
-                                                      torch.tensor(self.log[-2]),
-                                                      atol=1e-6, rtol=1e-5):
+        if (self.current_step > 0) and torch.allclose(
+            torch.tensor(self.log[-1]), torch.tensor(self.log[-2]), atol=1e-6, rtol=1e-5
+        ):
             print(f"Local minimum reached at iteration {self.current_step}.")
             return 1
 
@@ -134,7 +132,6 @@ class Model:
             return 1
 
         return 0
-
 
     def saveState(self):
         """
@@ -158,7 +155,6 @@ class Model:
         filename = os.path.join(self.savedir, f"checkpoint.pt")
         torch.save(checkpoint, filename)
 
-
     def resume(self, variables, filename):
         print(f"Resuming optimization from {filename}. Loading... ", end="")
 
@@ -180,9 +176,8 @@ class Model:
 
         print("done.")
 
-
     def check_resume(self, checkpoint):
         pass
-    
+
     def print_log(self, logScale=False):
         pass

@@ -54,7 +54,8 @@ class CrossModalityBoundary(Model):
         stop = time.time()
         print("Lambloss time: ", (stop-start))
         
-        print(f"H loss: {hLoss.detach().cpu().numpy()}; "
+        print(f"loss: {hLoss.detach().cpu().numpy() + dLoss.detach().cpu().numpy() + pLoss.detach().cpu().numpy() + lLoss.detach().cpu().numpy()}; "
+              f"H loss: {hLoss.detach().cpu().numpy()}; "
               f"Var loss: {dLoss.detach().cpu().numpy()}; "
               f"Pi loss: {pLoss.detach().cpu().numpy()}; "
               f"Lambda loss: {lLoss.detach().cpu().numpy()}")

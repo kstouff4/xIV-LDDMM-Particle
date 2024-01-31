@@ -29,7 +29,8 @@ class SingleModality(Model):
         dLoss = self.dataLoss.weight * self.dataLoss(qx1, qw1, zeta_S, torch.eye(zeta_S.shape[-1]))
 
 
-        print(f"H loss: {hLoss.detach().cpu().numpy()}; "
+        print(f"loss: {hLoss.detach().cpu().numpy() + dLoss.detach().cpu().numpy()}; "
+              f"H loss: {hLoss.detach().cpu().numpy()}; "
               f"Var loss: {dLoss.detach().cpu().numpy()}; "
               )
 
