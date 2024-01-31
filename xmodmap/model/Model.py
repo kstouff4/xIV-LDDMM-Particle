@@ -4,7 +4,7 @@ import time
 import torch
 
 from xmodmap.optimizer.config import lbfgsConfigDefaults
-
+from xmodmap.optimizer.sLBFGS import sLBFGS
 
 class Model:
     variables = None
@@ -53,7 +53,7 @@ class Model:
         self._savedir = savedir
 
     def set_optimizer(self, state=None):
-        self.optimizer = torch.optim.LBFGS(self.variables_to_optimize.values(), **lbfgsConfigDefaults)
+        self.optimizer = sLBFGS(self.variables_to_optimize.values(), **lbfgsConfigDefaults)
         if state is not None:
             self.optimizer.load_state_dict(state)
 
@@ -86,7 +86,14 @@ class Model:
         loss = sum(losses)
         self.log.append([l.detach().cpu() for l in losses])
 
-        loss.backward()
+        # Prevent to return a nan when too large values are
+        if torch.isnan(loss):
+            loss = torch.inf
+            for v in self.variables_to_optimize.values():
+                v.grad = torch.full_like(v, float("inf"))
+        else:
+            loss.backward()
+
         return loss
 
     def optimize(self, steps=100):
