@@ -2,7 +2,7 @@ import torch
 from functools import reduce
 from torch.optim import Optimizer
 
-__all__ = ['sBFGS']
+__all__ = ['sLBFGS']
 
 def _cubic_interpolate(x1, f1, g1, x2, f2, g2, bounds=None):
     # ported from https://github.com/torch/optim/blob/master/polyinterp.lua
@@ -46,6 +46,7 @@ def _strong_wolfe(obj_func,
                   c2=0.9,
                   tolerance_change=1e-9,
                   max_ls=25):
+    print("Entering line search... ")
     # ported from https://github.com/torch/optim/blob/master/lswolfe.lua
     d_norm = d.abs().max()
     g = g.clone(memory_format=torch.contiguous_format)
@@ -84,9 +85,7 @@ def _strong_wolfe(obj_func,
         # extrapolate 
         min_step = 1.1 * t  
         max_step = t * 4  
-        #min_step = t + 0.01 * (t - t_prev)
-        #max_step = t * 10
-        print("MyLBGS: Extrapolate")
+        print("sLBGS: Extrapolate ...")
         tmp = t
         t = _cubic_interpolate(
             t_prev,
@@ -184,6 +183,8 @@ def _strong_wolfe(obj_func,
     t = bracket[low_pos]
     f_new = bracket_f[low_pos]
     g_new = bracket_g[low_pos]
+
+    print("Line search done.")
     return f_new, g_new, t, ls_func_evals
 
 
@@ -480,3 +481,4 @@ class sLBFGS(Optimizer):
         state['prev_loss'] = prev_loss
 
         return orig_loss
+
