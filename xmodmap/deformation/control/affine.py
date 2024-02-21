@@ -27,15 +27,15 @@ def getATauAlpha(px, qx, pw, qw, cA=1.0, cT=1.0, dimEff=3, single=False):
 
     elif dimEff == 2:
         alpha = ((px[:,:2] * (qx[:,:2] - xc[:,:2])).sum() / 2. + (pw * qw).sum())
-        Alpha = torch.diag(torch.cat((alpha, alpha, torch.zeros(1))))  # always scale Z by 0
+        Alpha = torch.diag(torch.cat((alpha.view(1), alpha.view(1), torch.zeros(1))))  # always scale Z by 0
 
     elif dimEff == 3 and single:
         alpha = ((px * (qx - xc)).sum() / 3. + (pw * qw).sum())
         Alpha = torch.diag(alpha.repeat(3))
 
     else:
-        alpha_xy = (px[:, 0:2] * (qx - xc)[:, 0:2]).sum() / 2. + (pw * qw).sum()
+        alpha_xy = ((px[:, 0:2] * (qx - xc)[:, 0:2]).sum() / 2. + (pw * qw).sum())
         alpha_z = ((px[:, -1] * (qx - xc)[:, -1]).sum() + (pw * qw).sum())
-        Alpha = torch.diag(torch.cat((alpha_xy, alpha_xy, alpha_z)))
+        Alpha = torch.diag(torch.cat((alpha_xy.view(1), alpha_xy.view(1), alpha_z.view(1))))
 
     return A, tau, Alpha
